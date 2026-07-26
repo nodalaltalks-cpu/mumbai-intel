@@ -1,0 +1,76 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { setPublicSessionCookie } from "@/lib/public-auth/session";
+import { exchangeGoogleCode, fetchGoogleUserInfo } from "@/lib/public-auth/google";
+import { OAUTH_STATE_COOKIE_NAME, sanitizeNextPath } from "../route";
+
+function failure(origin: string, reason: string) {
+  const url = new URL("/login", origin);
+  url.searchParams.set("error", reason);
+  return NextResponse.redirect(url);
+}
+
+export async function GET(request: NextRequest) {
+  const origin = request.nextUrl.origin;
+  const code = request.nextUrl.searchParams.get("code");
+  const returnedState = request.nextUrl.searchParams.get("state");
+  const stateCookie = request.cookies.get(OAUTH_STATE_COOKIE_NAME)?.value;
+
+  if (!code || !returnedState || !stateCookie) return failure(origin, "google_auth_failed");
+
+  let expected: { state: string; next: string };
+  try {
+    expected = JSON.parse(stateCookie);
+  } catch {
+    return failure(origin, "google_auth_failed");
+  }
+  if (expected.state !== returnedState) return failure(origin, "google_auth_failed");
+
+  try {
+    const redirectUri = `${origin}/api/auth/google/callback`;
+    const tokens = await exchangeGoogleCode(code, redirectUri);
+    const profile = await fetchGoogleUserInfo(tokens.access_token);
+    if (!profile.email) return failure(origin, "google_auth_failed");
+
+    let user = await prisma.publicUser.findUnique({ where: { googleId: profile.sub } });
+    if (user) {
+      user = await prisma.publicUser.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+    } else {
+      // A CREDENTIALS account may already own this email — link Google to it
+      // rather than erroring, so the same person can sign in either way.
+      const existingByEmail = await prisma.publicUser.findUnique({ where: { email: profile.email } });
+      if (existingByEmail) {
+        user = await prisma.publicUser.update({
+          where: { id: existingByEmail.id },
+          data: {
+            googleId: profile.sub,
+            image: existingByEmail.image ?? profile.picture,
+            emailVerifiedAt: existingByEmail.emailVerifiedAt ?? new Date(),
+            lastLoginAt: new Date(),
+          },
+        });
+      } else {
+        user = await prisma.publicUser.create({
+          data: {
+            name: profile.name,
+            email: profile.email,
+            googleId: profile.sub,
+            image: profile.picture,
+            provider: "GOOGLE",
+            emailVerifiedAt: profile.email_verified ? new Date() : null,
+            lastLoginAt: new Date(),
+          },
+        });
+      }
+    }
+
+    await setPublicSessionCookie({ userId: user.id, email: user.email, name: user.name, image: user.image });
+
+    const response = NextResponse.redirect(new URL(sanitizeNextPath(expected.next), origin));
+    response.cookies.delete(OAUTH_STATE_COOKIE_NAME);
+    return response;
+  } catch (error) {
+    console.error("Google OAuth callback failed:", error);
+    return failure(origin, "google_auth_failed");
+  }
+}

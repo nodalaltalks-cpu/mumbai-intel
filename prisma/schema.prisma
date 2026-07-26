@@ -1,0 +1,922 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+// ─────────────────────────────────────────────────────────────────────────────
+// MumbaiIntel — Prisma schema
+//
+// Two non-negotiable design laws encoded here:
+//
+//  1. PROVENANCE ON EVERY FACT. Every fact-bearing row carries a `dataSource`
+//     (the source-tag: OFFICIAL_GOVERNMENT / BUILDER_INFORMATION /
+//     MANUALLY_VERIFIED / AI_GENERATED / USER_SUBMITTED) plus lineage fields.
+//     Nothing renders on screen whose origin can't be named.
+//
+//  2. MANUAL NOW, IGR LATER — WITHOUT A SCHEMA CHANGE. A Transaction row is
+//     source-agnostic: a manually-curated transaction and a future
+//     IGR-ingested one are THE SAME ROW SHAPE, differing only in `dataSource`,
+//     `sourceRef`, `ingestBatchId`, and `confidence`. When live IGR integration
+//     lands, it writes to these same tables; manual rows are simply superseded
+//     or coexist, tagged by source. No migration required to switch.
+//
+// Money is stored as BigInt paise (never floats). Areas as Decimal sq ft.
+// Geo hierarchy (Country → State → City → Zone → Locality → MicroMarket) is
+// multi-tenant so Mumbai-only today expands to Maharashtra / India / global
+// by adding rows and flipping flags — never by reshaping tables.
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PROVENANCE — the source-tag system (the product's signature contract)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// The origin class of a data point. Rendered as a visible tag everywhere.
+enum DataSource {
+  OFFICIAL_GOVERNMENT // IGR / MahaRERA / other official registries (future + any verified-official today)
+  BUILDER_INFORMATION // developer-provided: brochures, price lists, amenities
+  MANUALLY_VERIFIED   // curated from domain expertise / network / public sources (MVP PRIMARY)
+  AI_GENERATED        // model outputs: summaries, estimates, scores
+  USER_SUBMITTED      // community-contributed, unverified
+}
+
+/// How confident we are in a resolved/curated fact.
+enum Confidence {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GEO HIERARCHY — multi-tenant from day one (Mumbai-only is data, not schema)
+// ═══════════════════════════════════════════════════════════════════════════
+
+model Country {
+  id        String   @id @default(cuid())
+  name      String   @unique // "India"
+  iso2      String   @unique // "IN"
+  currency  String // "INR" — money stored as minor units (paise); generalizes to cents
+  states    State[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model State {
+  id        String  @id @default(cuid())
+  countryId String
+  country   Country @relation(fields: [countryId], references: [id])
+  name      String // "Maharashtra"
+  code      String // "MH"
+  /// Official RERA portal for the state (MahaRERA) — used by future ingestion.
+  reraPortalUrl String?
+  cities    City[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([countryId, code])
+  @@unique([countryId, name])
+}
+
+model City {
+  id      String @id @default(cuid())
+  stateId String
+  state   State  @relation(fields: [stateId], references: [id])
+  name    String // "Mumbai"
+  slug    String @unique // "mumbai"
+  /// Coverage flag. Drives UI, search scope, sitemaps. Mumbai=true, others=false today.
+  isLive  Boolean @default(false)
+  /// Centroid for map default view. Lat/lng kept as plain floats (no PostGIS dependency in MVP).
+  centroidLat Float?
+  centroidLng Float?
+  zones      Zone[]
+  localities Locality[]
+  projects   Project[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([stateId, name])
+}
+
+model Zone {
+  id     String @id @default(cuid())
+  cityId String
+  city   City   @relation(fields: [cityId], references: [id])
+  name   String // "Western Suburbs", "South Mumbai"
+  slug   String
+  localities Locality[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([cityId, slug])
+}
+
+model Locality {
+  id      String  @id @default(cuid())
+  cityId  String
+  city    City    @relation(fields: [cityId], references: [id])
+  zoneId  String?
+  zone    Zone?   @relation(fields: [zoneId], references: [id])
+  name    String // "Lower Parel", "Bandra West"
+  slug    String // unique per city
+  pincode String?
+  /// Rich-text editorial description (SEO + the public Locality page), same
+  /// HTML convention as Project.description / Builder.description.
+  description String?
+  centroidLat Float?
+  centroidLng Float?
+
+  // ── Market snapshot (curated; same swap-ready pattern as Transaction) ──
+  avgPricePerSqftPaise BigInt?
+  rentalYieldPercent   Decimal? @db.Decimal(5, 2)
+  growthPercentYoy     Decimal? @db.Decimal(5, 2)
+  marketDataSource     DataSource?
+  marketAsOf           DateTime?
+  /// Freeform curated summary of road/highway/transit connectivity — the
+  /// itemised nearby metro/rail/road/etc. list is derived automatically from
+  /// InfraAsset proximity (see getLocalityNearbyInfra), not duplicated here.
+  connectivityNotes    String?
+
+  // ── Media ──
+  coverImageUrl String?
+
+  // ── Flags — same admin-controlled visibility model as Project/Builder ──
+  isPublished Boolean @default(false)
+  isFeatured  Boolean @default(false)
+  isArchived  Boolean @default(false)
+
+  // ── SEO ──
+  metaTitle       String?
+  metaDescription String?
+  canonicalUrl    String?
+  ogImageUrl      String?
+
+  // ── Insights — curated 0-10 scores, current-state (not versioned like
+  // Builder's delivery-record snapshots — these describe the place, not a
+  // track record over time). ──
+  investmentScore Decimal? @db.Decimal(3, 1)
+  endUserScore    Decimal? @db.Decimal(3, 1)
+  luxuryScore     Decimal? @db.Decimal(3, 1)
+  familyScore     Decimal? @db.Decimal(3, 1)
+  advantages      String[] @default([])
+  disadvantages   String[] @default([])
+
+  aliases      LocalityAlias[]
+  microMarkets MicroMarket[]
+  projects     Project[]
+  transactions Transaction[]
+  amenities    LocalityAmenity[]
+  images       LocalityImage[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([cityId, slug])
+  @@index([zoneId])
+  @@index([isPublished])
+  @@index([isArchived])
+}
+
+model LocalityAmenity {
+  id         String   @id @default(cuid())
+  localityId String
+  locality   Locality @relation(fields: [localityId], references: [id], onDelete: Cascade)
+  amenityId  String
+  amenity    Amenity  @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([localityId, amenityId])
+  @@index([amenityId])
+}
+
+model LocalityImage {
+  id         String   @id @default(cuid())
+  localityId String
+  locality   Locality @relation(fields: [localityId], references: [id], onDelete: Cascade)
+  url        String
+  alt        String?
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@index([localityId, sortOrder])
+}
+
+/// Alternate spellings (IGR spellings, colloquial names) — critical for future
+/// automated matching. Populated manually today; grows with ingestion later.
+model LocalityAlias {
+  id         String   @id @default(cuid())
+  localityId String
+  locality   Locality @relation(fields: [localityId], references: [id], onDelete: Cascade)
+  alias      String
+  /// Where this spelling comes from (e.g. "IGR", "colloquial").
+  source     String?
+  createdAt  DateTime @default(now())
+
+  @@index([alias])
+}
+
+/// Finer-than-locality grain (Pali Hill within Bandra West). Mumbai needs this;
+/// the schema has it now so it's an SEO/analytics surface, not a later migration.
+model MicroMarket {
+  id         String   @id @default(cuid())
+  localityId String
+  locality   Locality @relation(fields: [localityId], references: [id], onDelete: Cascade)
+  name       String
+  slug       String
+  projects   Project[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([localityId, slug])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CATALOG — builders & projects
+// ═══════════════════════════════════════════════════════════════════════════
+
+model Builder {
+  id          String  @id @default(cuid())
+  slug        String  @unique
+  name        String // "Lodha Group"
+  /// Subsidiary / SPV legal names resolved to this one economic builder.
+  legalNames  String[] @default([])
+  logoUrl     String?
+  /// Wide banner image for the builder's public profile hero.
+  coverImageUrl String?
+  description String? // rich-text HTML, same convention as Project.description
+  foundedYear Int?
+  headquarters String?
+  websiteUrl  String?
+  reraNumber  String?
+  /// Notable awards/recognitions — simple curated strings, not a taxonomy.
+  awards      String[] @default([])
+  /// Provenance of this builder record.
+  dataSource  DataSource @default(MANUALLY_VERIFIED)
+  confidence  Confidence @default(HIGH)
+
+  // ── Flags — same admin-controlled visibility model as Project ──
+  isPublished Boolean @default(false)
+  isFeatured  Boolean @default(false)
+  isArchived  Boolean @default(false)
+
+  // ── SEO ──
+  metaTitle       String?
+  metaDescription String?
+  ogImageUrl      String?
+
+  projects    Project[]
+  scoreSnapshots BuilderScoreSnapshot[]
+  timeline    BuilderTimelineEvent[]
+  amenities   BuilderAmenity[]
+  images      BuilderImage[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([name])
+  @@index([isPublished])
+  @@index([isArchived])
+}
+
+model BuilderAmenity {
+  id        String   @id @default(cuid())
+  builderId String
+  builder   Builder  @relation(fields: [builderId], references: [id], onDelete: Cascade)
+  amenityId String
+  amenity   Amenity  @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([builderId, amenityId])
+  @@index([amenityId])
+}
+
+/// Company gallery — office, projects showcase, leadership photos — distinct
+/// from the single logo/cover images.
+model BuilderImage {
+  id        String   @id @default(cuid())
+  builderId String
+  builder   Builder  @relation(fields: [builderId], references: [id], onDelete: Cascade)
+  url       String
+  alt       String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([builderId, sortOrder])
+}
+
+/// A single milestone in a builder's history (founding, major delivery,
+/// listing, award…), shown as a timeline on the Builder Intelligence page.
+model BuilderTimelineEvent {
+  id          String   @id @default(cuid())
+  builderId   String
+  builder     Builder  @relation(fields: [builderId], references: [id], onDelete: Cascade)
+  year        Int
+  title       String
+  description String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([builderId, year])
+}
+
+/// Versioned builder score — never overwritten, so history is reproducible.
+model BuilderScoreSnapshot {
+  id                String   @id @default(cuid())
+  builderId         String
+  builder           Builder  @relation(fields: [builderId], references: [id], onDelete: Cascade)
+  asOf              DateTime
+  overallScore      Decimal  @db.Decimal(4, 2) // 0–10
+  onTimeDeliveryPct Decimal? @db.Decimal(5, 2)
+  avgDelayMonths    Decimal? @db.Decimal(5, 1)
+  deliveredProjects Int      @default(0)
+  activeProjects    Int      @default(0)
+  litigationFlags   Int      @default(0)
+  methodologyVersion String
+  dataSource        DataSource @default(AI_GENERATED) // computed score is a derived estimate
+  createdAt         DateTime @default(now())
+
+  @@unique([builderId, asOf])
+}
+
+enum ProjectStatus {
+  ANNOUNCED
+  PRE_LAUNCH
+  UNDER_CONSTRUCTION
+  NEARING_POSSESSION
+  READY_TO_MOVE
+  DELIVERED
+  STALLED
+}
+
+enum PropertyCategory {
+  RESIDENTIAL
+  COMMERCIAL
+  PLOT
+  MIXED_USE
+}
+
+model Project {
+  id            String   @id @default(cuid())
+  slug          String   @unique // "lodha-park"
+  name          String // "Lodha Park"
+  tagline       String?
+  description   String?
+
+  builderId     String?
+  builder       Builder? @relation(fields: [builderId], references: [id])
+  /// Free-text developer group / holding entity when it differs from the
+  /// resolved Builder record (e.g. an SPV name on the RERA filing).
+  developerGroup String?
+
+  cityId        String
+  city          City     @relation(fields: [cityId], references: [id])
+  localityId    String
+  locality      Locality @relation(fields: [localityId], references: [id])
+  microMarketId String?
+  microMarket   MicroMarket? @relation(fields: [microMarketId], references: [id])
+
+  status        ProjectStatus
+  category      PropertyCategory @default(RESIDENTIAL)
+
+  address       String?
+  latitude      Float?
+  longitude     Float?
+
+  // ── Timeline ──
+  launchDate            DateTime?
+  promisedPossession    DateTime? // from builder / RERA filing
+  actualPossession      DateTime? // reality — feeds health & builder score
+  constructionPercent   Int? // 0–100, current progress
+
+  // ── RERA (official when present) ──
+  reraNumber    String?  @unique
+  reraStatus    String?
+
+  // ── Scale ──
+  totalUnits    Int?
+  totalTowers   Int?
+  landAreaAcres Decimal? @db.Decimal(8, 2)
+
+  // ── Pricing band (paise) ──
+  priceMinPaise BigInt?
+  priceMaxPaise BigInt?
+
+  // ── Provenance of the project RECORD itself ──
+  dataSource    DataSource @default(MANUALLY_VERIFIED)
+  confidence    Confidence @default(HIGH)
+  /// Lineage — set now for manual curation, reused verbatim by future ingestion.
+  sourceRef     String? // e.g. "manual:analyst-notes-2026", later "rera:P51900012345"
+  ingestBatchId String?
+
+  // ── Flags ──
+  isPublished   Boolean @default(false) // admin-controlled visibility
+  isFeatured    Boolean @default(false) // admin-curated homepage/spotlight placement
+  isArchived    Boolean @default(false) // soft-removed from admin/public lists, not hard-deleted
+  /// Merchandising tags. Deliberately NOT duplicating `status` — READY_TO_MOVE
+  /// and PRE_LAUNCH ("new launch") are already derivable from `status`; these
+  /// three are independent editorial calls a status enum can't express.
+  isTrending    Boolean @default(false)
+  isLuxury      Boolean @default(false)
+  isAffordable  Boolean @default(false)
+  brochureUrl   String?
+
+  /// Short bullet differentiators ("5 min to metro", "Sea-facing") shown near
+  /// the top of the detail page. Order-preserving list, not a relation — no
+  /// row ever needs its own identity, sort order, or edit history.
+  highlights    String[] @default([])
+
+  // ── Media ──
+  videoUrl      String?
+  tour360Url    String?
+
+  // ── SEO ──
+  metaTitle       String?
+  metaDescription String?
+  ogImageUrl      String?
+
+  // ── Relations ──
+  images        ProjectImage[]
+  configurations Configuration[]
+  amenities     ProjectAmenity[]
+  transactions  Transaction[]
+  priceHistory  PriceHistoryPoint[]
+  infraLinks    ProjectInfra[]
+  metrics       ProjectMetric[]
+  investmentNotes InvestmentNote[]
+  specifications ProjectSpecification[]
+  documents     ProjectDocument[]
+  timelineEvents ProjectTimelineEvent[]
+  faqs          ProjectFaq[]
+  sections      ProjectSection[]
+  savedBy       SavedProject[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([cityId, status])
+  @@index([localityId])
+  @@index([builderId])
+  @@index([isPublished])
+  @@index([isFeatured])
+  @@index([isArchived])
+  /// Default sort for every public project listing (getPublicProjectsPaged).
+  @@index([updatedAt])
+  /// "launch_desc" sort + getLatestLaunches ordering.
+  @@index([launchDate])
+}
+
+/// A single construction/material spec line ("Structure — RCC shear wall
+/// frame"), grouped by `category` for display. Freeform category (not an
+/// enum) — spec sheets vary too much project-to-project for a fixed taxonomy.
+model ProjectSpecification {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  category  String // "Structure", "Flooring", "Doors & Windows", "Kitchen"…
+  detail    String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([projectId, sortOrder])
+}
+
+/// Downloadable PDFs beyond the primary brochure (approvals, legal title,
+/// floor-plan sheets, master-plan sheets…). `kind` is freeform for the same
+/// reason as ProjectSpecification.category.
+model ProjectDocument {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title     String
+  url       String
+  kind      String   @default("document")
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([projectId, sortOrder])
+}
+
+/// Construction-progress milestones shown on the detail page timeline —
+/// distinct from BuilderTimelineEvent, which is the builder's own history.
+model ProjectTimelineEvent {
+  id          String    @id @default(cuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title       String // "Foundation complete", "Possession handed over"
+  description String?
+  eventDate   DateTime?
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  @@index([projectId, sortOrder])
+}
+
+model ProjectFaq {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  question  String
+  answer    String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([projectId, sortOrder])
+}
+
+/// Editorial rich-text blocks beyond the fixed `description` field ("Why
+/// this location", "About the neighbourhood"…) — an open-ended CMS surface
+/// so new narrative sections never require a schema change.
+model ProjectSection {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title     String
+  bodyHtml  String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, sortOrder])
+}
+
+model ProjectImage {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  url       String
+  alt       String?
+  kind      String  @default("hero") // hero | gallery | floorplan | elevation
+  sortOrder Int     @default(0)
+  dataSource DataSource @default(BUILDER_INFORMATION)
+  createdAt DateTime @default(now())
+
+  @@index([projectId, sortOrder])
+}
+
+/// Unit configurations (2BHK / 3BHK …) with carpet area and price band.
+model Configuration {
+  id            String   @id @default(cuid())
+  projectId     String
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  label         String // "2 BHK", "3 BHK", "4 BHK Duplex"
+  bedrooms      Decimal  @db.Decimal(3, 1) // 1, 1.5, 2, 2.5 …
+  carpetSqft    Decimal? @db.Decimal(9, 2)
+  builtUpSqft   Decimal? @db.Decimal(9, 2)
+  priceMinPaise BigInt?
+  priceMaxPaise BigInt?
+  dataSource    DataSource @default(BUILDER_INFORMATION)
+  confidence    Confidence @default(MEDIUM)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([projectId, sortOrder])
+}
+
+enum AmenityCategory {
+  RECREATION
+  SAFETY
+  CONVENIENCE
+  WELLNESS
+  UTILITIES
+  OUTDOOR
+}
+
+/// Master amenity list (Swimming Pool, Clubhouse, 24x7 Security…). A shared
+/// table rather than a free-text array so amenities are filterable/searchable
+/// consistently across every project — the DXB-Interact-style filter bar this
+/// schema is built toward needs a fixed vocabulary, not per-project spelling.
+model Amenity {
+  id       String   @id @default(cuid())
+  slug     String   @unique
+  name     String
+  icon     String? // icon key resolved client-side, no binary asset stored
+  category AmenityCategory @default(CONVENIENCE)
+  projects ProjectAmenity[]
+  builders BuilderAmenity[]
+  localities LocalityAmenity[]
+  createdAt DateTime @default(now())
+
+  @@index([category])
+}
+
+model ProjectAmenity {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  amenityId String
+  amenity   Amenity  @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, amenityId])
+  @@index([amenityId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MARKET DATA — the transaction (source-agnostic: manual now, IGR later)
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum TransactionType {
+  SALE
+  RESALE
+  LEASE
+}
+
+enum BuyerType {
+  INDIVIDUAL
+  COMPANY
+}
+
+/// A single registered/recorded transaction.
+///
+/// THE SWAP-READY MODEL. Today rows are `MANUALLY_VERIFIED` (curated). When
+/// live IGR integration lands it writes rows of THIS EXACT SHAPE tagged
+/// `OFFICIAL_GOVERNMENT`, with `sourceRef` = registry doc number and
+/// `ingestBatchId` set. The application, API, and UI never change — they read
+/// the same fields and render the source tag. `@@unique([dataSource, sourceRef])`
+/// makes future ingestion idempotent without touching manual rows.
+model Transaction {
+  id              String   @id @default(cuid())
+  projectId       String?
+  project         Project? @relation(fields: [projectId], references: [id])
+  localityId      String
+  locality        Locality @relation(fields: [localityId], references: [id])
+
+  type            TransactionType @default(SALE)
+  registrationDate DateTime
+
+  // ── The facts (money in paise, area in sqft) ──
+  valuePaise      BigInt
+  carpetSqft      Decimal? @db.Decimal(10, 2)
+  builtUpSqft     Decimal? @db.Decimal(10, 2)
+  pricePerSqftPaise BigInt? // derived + stored for query speed
+  bedrooms        Decimal? @db.Decimal(3, 1)
+  floor           Int?
+  tower           String?
+  unitLabel       String? // "A-1204"
+  buyerType       BuyerType?
+
+  // ── Provenance & lineage (the swap contract) ──
+  dataSource      DataSource @default(MANUALLY_VERIFIED)
+  confidence      Confidence @default(MEDIUM)
+  /// For manual: a note/reference. For IGR: the registry document number.
+  sourceRef       String?
+  ingestBatchId   String?
+  /// Free-text note on where a manual figure came from (network, deal sheet…).
+  sourceNote      String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Idempotency key: same (source, ref) never duplicates. NULL sourceRef allowed
+  // for manual rows without a formal reference; those are dedupe-exempt.
+  @@unique([dataSource, sourceRef])
+  @@index([projectId, registrationDate])
+  @@index([localityId, registrationDate])
+  @@index([registrationDate])
+  /// "price_desc"/"price_asc" sort + price range filters on /transactions.
+  @@index([valuePaise])
+  /// "ppsf_desc" sort on /transactions.
+  @@index([pricePerSqftPaise])
+}
+
+/// Monthly price series per project (observed / curated). Same swap logic:
+/// manual points today, IGR-derived points later, all tagged.
+model PriceHistoryPoint {
+  id                String   @id @default(cuid())
+  projectId         String
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  month             DateTime // first of month
+  avgPricePerSqftPaise BigInt
+  sampleSize        Int      @default(0) // # transactions behind the point (0 = curated estimate)
+  dataSource        DataSource @default(MANUALLY_VERIFIED)
+  confidence        Confidence @default(MEDIUM)
+  createdAt         DateTime @default(now())
+
+  @@unique([projectId, month])
+  @@index([projectId, month])
+}
+
+/// Pre-computed / curated project-level metrics that power the Intelligence
+/// Page (demand score, health score, market-trend %, avg ppsf…). Each metric
+/// is a named row so new metrics are new rows, not new columns.
+model ProjectMetric {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  key         String // "demand_score" | "health_score" | "market_trend_pct" | "avg_ppsf_paise"
+  /// Numeric value. Interpretation depends on `key` (documented in code).
+  valueNumeric Decimal? @db.Decimal(18, 2)
+  /// Optional string value / band (e.g. health band "A", trend label).
+  valueText   String?
+  unit        String? // "score_0_100" | "bps" | "paise" | "percent"
+  dataSource  DataSource @default(AI_GENERATED)
+  confidence  Confidence @default(MEDIUM)
+  methodologyVersion String?
+  asOf        DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([projectId, key])
+  @@index([projectId])
+}
+
+/// AI Investment Summary + pros/cons, stored so it's cached and inspectable.
+model InvestmentNote {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  kind        String // "summary" | "pro" | "con"
+  body        String
+  dataSource  DataSource @default(AI_GENERATED)
+  confidence  Confidence @default(MEDIUM)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([projectId, kind, sortOrder])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INFRASTRUCTURE — metro, schools, hospitals, malls, connectivity
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum InfraType {
+  METRO_STATION
+  RAILWAY_STATION
+  SCHOOL
+  HOSPITAL
+  MALL
+  AIRPORT
+  ROAD
+  BUSINESS_DISTRICT
+  PARK
+  RESTAURANT
+}
+
+model InfraAsset {
+  id        String    @id @default(cuid())
+  cityId    String
+  type      InfraType
+  name      String
+  latitude  Float?
+  longitude Float?
+  /// e.g. metro line name, hospital speciality, mall anchor.
+  detail    String?
+  status    String    @default("operational") // operational | under_construction | planned
+  dataSource DataSource @default(OFFICIAL_GOVERNMENT)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  projectLinks ProjectInfra[]
+
+  @@index([cityId, type])
+}
+
+/// Precomputed proximity of an infra asset to a project (distance + walk time).
+model ProjectInfra {
+  id          String     @id @default(cuid())
+  projectId   String
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  infraId     String
+  infra       InfraAsset @relation(fields: [infraId], references: [id], onDelete: Cascade)
+  distanceMeters Int
+  walkMinutes Int?
+  dataSource  DataSource @default(MANUALLY_VERIFIED)
+  createdAt   DateTime   @default(now())
+
+  @@unique([projectId, infraId])
+  @@index([projectId, distanceMeters])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// IDENTITY — admin auth for manual data management (MVP)
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum UserRole {
+  ADMIN
+  EDITOR // can manage data, cannot manage users
+  VIEWER
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  role         UserRole @default(EDITOR)
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  auditLogs    AuditLog[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+/// Every admin mutation is recorded — provenance discipline applies to the
+/// people maintaining the data too.
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id])
+  action     String // "project.create", "transaction.update", "project.publish"…
+  entityType String
+  entityId   String
+  before     Json?
+  after      Json?
+  at         DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([at])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PUBLIC AUTHENTICATION — completely separate from the Founder Admin `User`/
+// `UserRole` models above. Public visitors authenticate as `PublicUser`, never
+// touch `/admin`, and an admin `User` never touches `/login`. Sharing a table
+// would conflate "can edit the catalog" with "browses the public site."
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// CREDENTIALS and GOOGLE today; MOBILE_OTP is designed for but not built —
+/// adding it later is a new enum value + a new lib/public-auth/otp.ts, not a
+/// schema change (`phone` already exists, `passwordHash` is already nullable).
+enum AuthProvider {
+  CREDENTIALS
+  GOOGLE
+}
+
+model PublicUser {
+  id            String       @id @default(cuid())
+  name          String?
+  email         String       @unique
+  phone         String?      @unique
+  /// Null for OAuth-only accounts (e.g. Google sign-up with no password set).
+  passwordHash  String?
+  provider      AuthProvider @default(CREDENTIALS)
+  /// Google's `sub` claim — null until the account is linked to Google.
+  googleId      String?      @unique
+  /// Google's profile photo URL — the only current source of an avatar; null for credentials-only accounts (Navbar falls back to initials).
+  image         String?
+  emailVerifiedAt DateTime?
+  lastLoginAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  resetTokens   PublicPasswordResetToken[]
+  savedProjects SavedProject[]
+
+  @@index([provider])
+}
+
+/// A public user's bookmarked project — the "Saved Projects" list on /account.
+model SavedProject {
+  id            String     @id @default(cuid())
+  publicUserId  String
+  publicUser    PublicUser @relation(fields: [publicUserId], references: [id], onDelete: Cascade)
+  projectId     String
+  project       Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt     DateTime   @default(now())
+
+  @@unique([publicUserId, projectId])
+  @@index([publicUserId])
+}
+
+/// Short-lived, single-use tokens for the forgot-password flow. The token
+/// itself is never stored — only its hash — so a leaked database row can't be
+/// replayed as a live reset link.
+model PublicPasswordResetToken {
+  id        String     @id @default(cuid())
+  userId    String
+  user      PublicUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String     @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime   @default(now())
+
+  @@index([userId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INGESTION SCAFFOLD — dormant today, wired for future automated sources.
+// Present now so switching manual → IGR is configuration + data, not migration.
+// ═══════════════════════════════════════════════════════════════════════════
+
+model IngestBatch {
+  id             String   @id @default(cuid())
+  sourceKey      String // "igr-maharashtra" | "maharera" | "manual-import"
+  startedAt      DateTime @default(now())
+  finishedAt     DateTime?
+  status         String   @default("pending") // pending | running | success | failed
+  recordsWritten Int      @default(0)
+  note           String?
+
+  @@index([sourceKey, startedAt])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// END OF SCHEMA
+// If this comment is missing from your copy, the file was truncated during
+// download. Complete file: 10 enums + 36 models, ending with IngestBatch.
+// Verify with:  grep -c '^model ' prisma/schema.prisma   → must print 36
+// ═══════════════════════════════════════════════════════════════════════════

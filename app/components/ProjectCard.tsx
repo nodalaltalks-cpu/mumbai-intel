@@ -1,0 +1,228 @@
+"use client";
+
+import Image from "next/image";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import Button from "@/app/components/ui/Button";
+import { IconClose } from "@/app/components/ui/icons";
+import { formatDate, formatPriceBand, formatPricePerSqft } from "@/lib/format";
+import {
+  SOURCE_CLASS,
+  SOURCE_LABEL,
+  STATUS_CLASS,
+  STATUS_LABEL,
+  type DataSource,
+  type ProjectStatus,
+} from "@/lib/project-meta";
+
+export type { DataSource, ProjectStatus };
+
+export interface ProjectCardData {
+  slug: string;
+  name: string;
+  tagline?: string | null;
+  builderName?: string | null;
+  builderLogoUrl?: string | null;
+  localityName: string;
+  zoneName?: string | null;
+  status: ProjectStatus;
+  configurationSummary?: string | null;
+  priceMinPaise?: number | null;
+  priceMaxPaise?: number | null;
+  pricePerSqftPaise?: number | null;
+  possessionDate?: Date | string | null;
+  constructionPercent?: number | null;
+  dataSource: DataSource;
+  imageUrl?: string | null;
+}
+
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0]?.toUpperCase())
+    .join("");
+}
+
+export default function ProjectCard({ project }: { project: ProjectCardData }) {
+  const [quickViewOpen, setQuickViewOpen] = useState(false);
+
+  return (
+    <>
+      <div className="group relative flex flex-col overflow-hidden rounded-sm border border-border bg-surface transition-[color,background-color,border-color,transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-accent/50 hover:bg-surface-raised hover:shadow-md">
+        <Link href={`/projects/${project.slug}`} className="contents">
+          <div className="relative h-36 w-full shrink-0 overflow-hidden bg-[linear-gradient(135deg,_var(--surface-raised),_var(--background))]">
+            {project.imageUrl ? (
+              <Image src={project.imageUrl} alt={project.name} fill sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw" className="object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center">
+                <span className="font-mono text-3xl font-bold text-border">{initials(project.name)}</span>
+              </div>
+            )}
+            <span
+              className={`absolute left-2 top-2 rounded-sm border px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wide ${STATUS_CLASS[project.status]} bg-background/80 backdrop-blur`}
+            >
+              {STATUS_LABEL[project.status]}
+            </span>
+          </div>
+
+          <div className="flex flex-1 flex-col gap-3 p-4">
+            <div className="flex items-start gap-2">
+              {project.builderLogoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={project.builderLogoUrl} alt="" className="mt-0.5 h-6 w-6 shrink-0 rounded-sm border border-border object-cover" />
+              ) : null}
+              <div className="min-w-0">
+                <h3 className="truncate font-mono text-sm font-semibold text-foreground group-hover:text-accent">
+                  {project.name}
+                </h3>
+                <p className="mt-0.5 truncate text-xs text-muted">
+                  {project.builderName ? `${project.builderName} · ` : ""}
+                  {project.localityName}
+                  {project.zoneName ? ` · ${project.zoneName}` : ""}
+                </p>
+              </div>
+            </div>
+
+            {project.configurationSummary ? (
+              <p className="text-xs text-muted">{project.configurationSummary}</p>
+            ) : project.tagline ? (
+              <p className="line-clamp-2 text-xs text-muted">{project.tagline}</p>
+            ) : null}
+
+            <div className="mt-auto flex items-end justify-between gap-2 border-t border-border pt-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-muted">Price band</p>
+                <p className="font-mono text-sm text-foreground">
+                  {formatPriceBand(project.priceMinPaise, project.priceMaxPaise)}
+                </p>
+                {project.pricePerSqftPaise ? (
+                  <p className="font-mono text-[10px] text-muted">{formatPricePerSqft(project.pricePerSqftPaise)}</p>
+                ) : null}
+              </div>
+              {typeof project.constructionPercent === "number" ? (
+                <div className="text-right">
+                  <p className="text-[10px] uppercase tracking-wide text-muted">Construction</p>
+                  <p className="font-mono text-sm text-foreground">{project.constructionPercent}%</p>
+                </div>
+              ) : project.possessionDate ? (
+                <div className="text-right">
+                  <p className="text-[10px] uppercase tracking-wide text-muted">Possession</p>
+                  <p className="font-mono text-sm text-foreground">{formatDate(project.possessionDate)}</p>
+                </div>
+              ) : null}
+            </div>
+
+            <span
+              className={`w-fit rounded-sm border px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider ${SOURCE_CLASS[project.dataSource]}`}
+            >
+              {SOURCE_LABEL[project.dataSource]}
+            </span>
+          </div>
+        </Link>
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setQuickViewOpen(true);
+          }}
+          className="absolute right-2 top-2 z-10 rounded-sm border border-border bg-background/80 px-2 py-1 text-[9px] font-mono uppercase tracking-wide text-muted opacity-0 backdrop-blur transition-opacity hover:border-accent hover:text-accent group-hover:opacity-100"
+        >
+          Quick view
+        </button>
+      </div>
+
+      {quickViewOpen ? <QuickViewModal project={project} onClose={() => setQuickViewOpen(false)} /> : null}
+    </>
+  );
+}
+
+function QuickViewModal({ project, onClose }: { project: ProjectCardData; onClose: () => void }) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="mi-fade-in fixed inset-0 z-50 flex items-center justify-center bg-background/75 p-4" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${project.name} quick view`}
+        className="mi-pop-in w-full max-w-md overflow-hidden rounded-md border border-border bg-surface shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="relative h-48 w-full bg-[linear-gradient(135deg,_var(--surface-raised),_var(--background))]">
+          {project.imageUrl ? (
+            <Image src={project.imageUrl} alt={project.name} fill sizes="(min-width: 640px) 448px, 100vw" className="object-cover" />
+          ) : null}
+          <Button
+            ref={closeButtonRef}
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={onClose}
+            aria-label="Close quick view"
+            className="!bg-background/80 absolute right-2 top-2 backdrop-blur"
+          >
+            <IconClose className="h-3 w-3" />
+            Close
+          </Button>
+          <span className={`absolute left-2 top-2 rounded-sm border px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wide ${STATUS_CLASS[project.status]} bg-background/80 backdrop-blur`}>
+            {STATUS_LABEL[project.status]}
+          </span>
+        </div>
+        <div className="flex flex-col gap-3 p-4">
+          <div>
+            <h3 className="font-mono text-base font-semibold text-foreground">{project.name}</h3>
+            <p className="mt-0.5 text-xs text-muted">
+              {project.builderName ? `${project.builderName} · ` : ""}
+              {project.localityName}
+              {project.zoneName ? ` · ${project.zoneName}` : ""}
+            </p>
+          </div>
+          {project.tagline ? <p className="text-xs text-muted">{project.tagline}</p> : null}
+          {project.configurationSummary ? <p className="text-xs text-foreground">{project.configurationSummary}</p> : null}
+
+          <div className="grid grid-cols-2 gap-3 border-t border-border pt-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-muted">Price band</p>
+              <p className="font-mono text-sm text-foreground">{formatPriceBand(project.priceMinPaise, project.priceMaxPaise)}</p>
+            </div>
+            {project.pricePerSqftPaise ? (
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-muted">Price/sqft</p>
+                <p className="font-mono text-sm text-foreground">{formatPricePerSqft(project.pricePerSqftPaise)}</p>
+              </div>
+            ) : null}
+            {typeof project.constructionPercent === "number" ? (
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-muted">Construction</p>
+                <p className="font-mono text-sm text-foreground">{project.constructionPercent}%</p>
+              </div>
+            ) : null}
+            {project.possessionDate ? (
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-muted">Possession</p>
+                <p className="font-mono text-sm text-foreground">{formatDate(project.possessionDate)}</p>
+              </div>
+            ) : null}
+          </div>
+
+          <Button href={`/projects/${project.slug}`} size="sm" fullWidth className="mt-1">
+            Open full details
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
