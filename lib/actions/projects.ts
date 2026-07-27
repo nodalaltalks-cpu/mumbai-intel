@@ -11,6 +11,7 @@ import { PRIMARY_CITY_SLUG } from "@/lib/queries";
 import { ensureUniqueSlug, slugify } from "@/lib/slug";
 import { deleteImageByPublicId, publicIdFromUrl } from "@/lib/cloudinary";
 import { logAudit } from "@/lib/audit";
+import { syncProjectNearbyInfra } from "@/lib/infra-linking";
 import { friendlyPrismaError } from "./errors";
 
 const MAX_META_TITLE = 70;
@@ -205,6 +206,7 @@ export async function createProjectAction(
   }
 
   if (amenityIds.length > 0) await syncProjectAmenities(projectId, amenityIds);
+  await syncProjectNearbyInfra(projectId);
 
   await logAudit(session.userId, "project.create", "Project", projectId);
   revalidateProject({ id: projectId, slug });
@@ -290,6 +292,7 @@ export async function updateProjectAction(
   }
 
   await syncProjectAmenities(projectId, amenityIds);
+  await syncProjectNearbyInfra(projectId);
 
   await logAudit(session.userId, "project.update", "Project", projectId);
   revalidateProject({ id: projectId, slug });
