@@ -44,6 +44,7 @@ enum DataSource {
   MANUALLY_VERIFIED   // curated from domain expertise / network / public sources (MVP PRIMARY)
   AI_GENERATED        // model outputs: summaries, estimates, scores
   USER_SUBMITTED      // community-contributed, unverified
+  EXTERNAL_OPEN_DATA  // public open-data feeds we don't control or curate (OSM, Census) — not an official registry, not ours
 }
 
 /// How confident we are in a resolved/curated fact.
@@ -768,6 +769,10 @@ model InfraAsset {
   detail    String?
   status    String    @default("operational") // operational | under_construction | planned
   dataSource DataSource @default(OFFICIAL_GOVERNMENT)
+  /// Idempotency key for ingestion (e.g. "osm:node/123456"). Null for manually
+  /// entered rows — same swap-ready pattern as Transaction.sourceRef.
+  sourceRef     String?   @unique
+  ingestBatchId String?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   projectLinks ProjectInfra[]
@@ -898,25 +903,85 @@ model PublicPasswordResetToken {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// INGESTION SCAFFOLD — dormant today, wired for future automated sources.
-// Present now so switching manual → IGR is configuration + data, not migration.
+// INGESTION — the automated-import pipeline. IngestSource is the registry
+// backing the Admin Sync Dashboard's buttons; every run is an IngestBatch;
+// every record touched gets an IngestLogEntry; anything ambiguous (a possible
+// duplicate, or any change to an existing row) waits in IngestStagingRecord
+// for a human to approve — imports never silently overwrite curated data.
 // ═══════════════════════════════════════════════════════════════════════════
 
+/// One registered connector (e.g. "osm-locality-infra"). Disabled sources are
+/// skipped by the cron sweep but still triggerable manually from the dashboard.
+model IngestSource {
+  id           String    @id @default(cuid())
+  key          String    @unique // "osm-locality-infra" | "igr-maharashtra" | "maharera" | "manual-import"
+  label        String
+  kind         String // "API" | "DATASET_UPLOAD" | "MANUAL"
+  enabled      Boolean   @default(true)
+  scheduleCron String? // informational — the actual schedule lives in vercel.json
+  config       Json?
+  lastRunAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
 model IngestBatch {
-  id             String   @id @default(cuid())
-  sourceKey      String // "igr-maharashtra" | "maharera" | "manual-import"
-  startedAt      DateTime @default(now())
-  finishedAt     DateTime?
-  status         String   @default("pending") // pending | running | success | failed
-  recordsWritten Int      @default(0)
-  note           String?
+  id              String    @id @default(cuid())
+  sourceKey       String // "igr-maharashtra" | "maharera" | "manual-import"
+  trigger         String    @default("manual") // "manual" | "scheduled"
+  triggeredByUserId String?
+  startedAt       DateTime  @default(now())
+  finishedAt      DateTime?
+  status          String    @default("pending") // pending | running | success | failed
+  recordsWritten  Int       @default(0)
+  recordsSkipped  Int       @default(0)
+  recordsFailed   Int       @default(0)
+  note            String?
+
+  logEntries      IngestLogEntry[]
+  stagingRecords  IngestStagingRecord[]
 
   @@index([sourceKey, startedAt])
+}
+
+/// Per-record outcome of a batch — the "View Import Logs" detail view.
+model IngestLogEntry {
+  id         String      @id @default(cuid())
+  batchId    String
+  batch      IngestBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  entityType String // "InfraAsset" | "Project" | "Builder" | "Transaction" …
+  entityId   String?
+  action     String // "CREATED" | "UPDATED" | "SKIPPED_DUPLICATE" | "STAGED" | "FAILED"
+  message    String?
+  createdAt  DateTime    @default(now())
+
+  @@index([batchId])
+}
+
+/// A proposed create/update waiting on admin review — populated when a
+/// connector finds a likely duplicate of an existing row, or when a source's
+/// policy requires human approval before writing at all.
+model IngestStagingRecord {
+  id                String      @id @default(cuid())
+  batchId           String
+  batch             IngestBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  entityType        String
+  /// Null = proposed create. Set = proposed merge into this existing row.
+  targetId          String?
+  payload           Json
+  matchedExistingId String?
+  matchConfidence   Decimal?    @db.Decimal(4, 3)
+  status            String      @default("PENDING") // PENDING | APPROVED | REJECTED
+  reviewedByUserId  String?
+  reviewedAt        DateTime?
+  createdAt         DateTime    @default(now())
+
+  @@index([status, createdAt])
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
 // END OF SCHEMA
 // If this comment is missing from your copy, the file was truncated during
-// download. Complete file: 10 enums + 36 models, ending with IngestBatch.
-// Verify with:  grep -c '^model ' prisma/schema.prisma   → must print 36
+// download. Complete file: 10 enums + 39 models, ending with IngestStagingRecord.
+// Verify with:  grep -c '^model ' prisma/schema.prisma   → must print 39
 // ═══════════════════════════════════════════════════════════════════════════

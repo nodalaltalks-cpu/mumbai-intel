@@ -880,6 +880,44 @@ export async function getLocalityDemandRanking() {
   );
 }
 
+export async function getIngestSources() {
+  return safeQuery("getIngestSources", [], () => prisma.ingestSource.findMany({ orderBy: { label: "asc" } }));
+}
+
+export async function getRecentIngestBatches(limit = 20) {
+  return safeQuery("getRecentIngestBatches", [], () =>
+    prisma.ingestBatch.findMany({
+      orderBy: { startedAt: "desc" },
+      take: limit,
+      include: { _count: { select: { logEntries: true, stagingRecords: true } } },
+    })
+  );
+}
+
+export async function getIngestBatch(id: string) {
+  return safeQuery("getIngestBatch", null, () => prisma.ingestBatch.findUnique({ where: { id } }));
+}
+
+export async function getIngestLogForBatch(batchId: string) {
+  return safeQuery("getIngestLogForBatch", [], () =>
+    prisma.ingestLogEntry.findMany({ where: { batchId }, orderBy: { createdAt: "asc" } })
+  );
+}
+
+export async function getPendingStagingRecords() {
+  return safeQuery("getPendingStagingRecords", [], () =>
+    prisma.ingestStagingRecord.findMany({
+      where: { status: "PENDING" },
+      orderBy: { createdAt: "asc" },
+      include: { batch: { select: { sourceKey: true } } },
+    })
+  );
+}
+
+export async function getInfraAssetById(id: string) {
+  return safeQuery("getInfraAssetById", null, () => prisma.infraAsset.findUnique({ where: { id } }));
+}
+
 export async function getUserForEdit(id: string) {
   return safeQuery("getUserForEdit", null, () =>
     prisma.user.findUnique({ where: { id }, select: { id: true, email: true, name: true, role: true, isActive: true } })

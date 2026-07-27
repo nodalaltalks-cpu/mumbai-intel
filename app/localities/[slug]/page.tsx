@@ -404,6 +404,11 @@ export default async function LocalityDetailPage({
           ) : (
             <p className="mt-3 text-sm text-muted">No nearby infrastructure catalogued yet.</p>
           )}
+          {nearbyInfra.some((item) => item.dataSource === "EXTERNAL_OPEN_DATA") ? (
+            <p className="mt-3 text-[10px] text-muted">
+              Includes data © <a href="https://www.openstreetmap.org/copyright" className="underline hover:text-foreground">OpenStreetMap</a> contributors, ODbL.
+            </p>
+          ) : null}
         </section>
 
         {/* Map */}

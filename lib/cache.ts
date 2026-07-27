@@ -75,3 +75,8 @@ export function revalidateTransaction(ref: EntityRef = {}) {
     ...GLOBAL_PATHS,
   ]);
 }
+
+/** Infra sync/approval affects every locality's nearby-places section, not one slug. */
+export function revalidateInfra() {
+  revalidateMany(["/admin/data-sync", "/localities", "/projects", ...GLOBAL_PATHS]);
+}

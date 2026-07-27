@@ -35,6 +35,13 @@ const NAV_SECTIONS: { label: string; links: { label: string; href: string }[] }[
     links: [{ label: "Analytics", href: "/admin/analytics" }],
   },
   {
+    label: "Data Sync",
+    links: [
+      { label: "Sync Dashboard", href: "/admin/data-sync" },
+      { label: "Review Queue", href: "/admin/data-sync/review" },
+    ],
+  },
+  {
     label: "System",
     links: [
       { label: "Users", href: "/admin/users" },

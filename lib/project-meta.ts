@@ -18,6 +18,7 @@ export const DATA_SOURCES = [
   "MANUALLY_VERIFIED",
   "AI_GENERATED",
   "USER_SUBMITTED",
+  "EXTERNAL_OPEN_DATA",
 ] as const;
 export type DataSource = (typeof DATA_SOURCES)[number];
 
@@ -96,6 +97,7 @@ export const SOURCE_LABEL: Record<DataSource, string> = {
   MANUALLY_VERIFIED: "ANALYST VERIFIED",
   AI_GENERATED: "AI ESTIMATE",
   USER_SUBMITTED: "COMMUNITY",
+  EXTERNAL_OPEN_DATA: "OPEN DATA",
 };
 
 export const SOURCE_CLASS: Record<DataSource, string> = {
@@ -104,6 +106,7 @@ export const SOURCE_CLASS: Record<DataSource, string> = {
   MANUALLY_VERIFIED: "text-accent border-accent/30",
   AI_GENERATED: "text-purple-400 border-purple-400/30",
   USER_SUBMITTED: "text-muted border-border",
+  EXTERNAL_OPEN_DATA: "text-info border-info/30",
 };
 
 export const CONFIDENCE_LABEL: Record<Confidence, string> = {
