@@ -8,6 +8,7 @@ const LAYER_CHIPS: { key: keyof MapLayerVisibility; label: string }[] = [
   { key: "projects", label: "Projects" },
   { key: "localities", label: "Localities" },
   { key: "developers", label: "Developers" },
+  { key: "infra", label: "Infrastructure" },
 ];
 
 export default function MapFilterPanel({

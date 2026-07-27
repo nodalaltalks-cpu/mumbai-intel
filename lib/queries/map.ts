@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { ProjectAnalyticsService, TransactionAnalyticsService } from "@/lib/analytics";
-import type { DeveloperMapMarker, LocalityMapMarker, ProjectMapMarker } from "@/lib/map/types";
+import type { DeveloperMapMarker, InfraMapMarker, LocalityMapMarker, ProjectMapMarker } from "@/lib/map/types";
 import { PRIMARY_CITY_SLUG } from "./shared";
 
 /**
@@ -128,4 +128,25 @@ export async function getDeveloperMapMarkers(): Promise<DeveloperMapMarker[]> {
         position: { lat, lng },
       };
     });
+}
+
+/** Not editorial content (no isPublished flag on InfraAsset — it's reference infrastructure, not curated catalog). */
+export async function getInfraMapMarkers(): Promise<InfraMapMarker[]> {
+  const city = await prisma.city.findUnique({ where: { slug: PRIMARY_CITY_SLUG }, select: { id: true } });
+  if (!city) return [];
+
+  const assets = await prisma.infraAsset.findMany({
+    where: { cityId: city.id, latitude: { not: null }, longitude: { not: null } },
+    select: { id: true, name: true, type: true, detail: true, dataSource: true, latitude: true, longitude: true },
+  });
+
+  return assets.map((a) => ({
+    kind: "infra",
+    id: a.id,
+    name: a.name,
+    type: a.type,
+    detail: a.detail,
+    dataSource: a.dataSource,
+    position: { lat: a.latitude as number, lng: a.longitude as number },
+  }));
 }

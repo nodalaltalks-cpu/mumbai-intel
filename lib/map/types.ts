@@ -1,4 +1,4 @@
-import type { ProjectStatus, PropertyCategory } from "@/lib/project-meta";
+import type { DataSource, InfraTypeValue, ProjectStatus, PropertyCategory } from "@/lib/project-meta";
 
 /**
  * Provider-agnostic map types. Nothing outside `app/components/map/providers/*`
@@ -61,7 +61,17 @@ export interface DeveloperMapMarker {
   position: MapPoint;
 }
 
-export type MapMarker = ProjectMapMarker | LocalityMapMarker | DeveloperMapMarker;
+export interface InfraMapMarker {
+  kind: "infra";
+  id: string;
+  name: string;
+  type: InfraTypeValue;
+  detail: string | null;
+  dataSource: DataSource;
+  position: MapPoint;
+}
+
+export type MapMarker = ProjectMapMarker | LocalityMapMarker | DeveloperMapMarker | InfraMapMarker;
 
 export interface MapFilterState {
   status: ProjectStatus | "";
@@ -88,34 +98,28 @@ export interface MapLayerVisibility {
   projects: boolean;
   localities: boolean;
   developers: boolean;
+  /** Off by default — hundreds of infra points would otherwise swamp the map on first load. */
+  infra: boolean;
 }
 
 export const DEFAULT_LAYER_VISIBILITY: MapLayerVisibility = {
   projects: true,
   localities: true,
   developers: false,
+  infra: false,
 };
 
 /**
  * Layers the architecture is designed to support but does not render yet.
- * Each has a real data source already in the schema (InfraAsset covers metro/
- * school/hospital/mall/airport/park; Locality.centroidLat/Lng is a placeholder
- * for true polygon boundaries once that geometry is captured). Adding one of
- * these later means: (1) a query in lib/queries/map.ts returning the shape
- * below, (2) a render branch in the Leaflet provider — no changes anywhere
- * else, because every consumer only ever sees `MapMarker` / this union.
+ * `Locality.centroidLat/Lng` is a placeholder for true polygon boundaries
+ * once that geometry is captured — everything infra-related (metro/school/
+ * hospital/mall/airport/business) is now live via `InfraMapMarker`/`infra`
+ * above, driven by the automated OSM ingestion connector
+ * (lib/ingestion/connectors/osmLocalityInfra.ts).
  */
-export type FutureMapLayerKind = "heatmap" | "locality-boundaries" | "infra-metro" | "infra-school" | "infra-hospital" | "infra-business" | "transit";
+export type FutureMapLayerKind = "heatmap" | "locality-boundaries";
 
-export const FUTURE_MAP_LAYERS: readonly FutureMapLayerKind[] = [
-  "heatmap",
-  "locality-boundaries",
-  "infra-metro",
-  "infra-school",
-  "infra-hospital",
-  "infra-business",
-  "transit",
-];
+export const FUTURE_MAP_LAYERS: readonly FutureMapLayerKind[] = ["heatmap", "locality-boundaries"];
 
 /** Where the map should fly to — set by search selection or a filter narrowing to one result. */
 export type MapFocusTarget = { point: MapPoint; zoom: number } | { bounds: [MapPoint, MapPoint] };

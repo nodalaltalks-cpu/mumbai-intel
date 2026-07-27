@@ -24,6 +24,26 @@ const CONNECTORS: Record<string, () => Promise<NormalizedInfraCandidate[]>> = {
  */
 const MAX_WRITES_PER_RUN = 150;
 
+// A batch stuck at "running" longer than this was killed mid-flight (serverless
+// timeout, dev-server restart, …) without reaching its own catch/finally —
+// left alone, it would wedge the single-flight guard below forever.
+const STALE_RUNNING_MINUTES = 15;
+
+/** Marks any batch that's been "running" past STALE_RUNNING_MINUTES as failed, so it stops blocking new runs of the same source. */
+async function reapStaleBatches(sourceKey: string): Promise<void> {
+  const staleCutoff = new Date(Date.now() - STALE_RUNNING_MINUTES * 60 * 1000);
+  const stale = await prisma.ingestBatch.findMany({
+    where: { sourceKey, status: "running", startedAt: { lt: staleCutoff } },
+    select: { id: true },
+  });
+  for (const batch of stale) {
+    await prisma.ingestBatch.update({
+      where: { id: batch.id },
+      data: { status: "failed", finishedAt: new Date(), note: `Marked failed: still "running" after ${STALE_RUNNING_MINUTES} minutes — likely killed by a function timeout` },
+    });
+  }
+}
+
 async function logEntry(batchId: string, entityType: string, entityId: string | null, action: string, message: string | null) {
   try {
     await prisma.ingestLogEntry.create({ data: { batchId, entityType, entityId, action, message } });
@@ -45,10 +65,13 @@ export async function runIngestBatch(
   const connector = CONNECTORS[sourceKey];
   if (!connector) throw new Error(`No connector registered for source "${sourceKey}"`);
 
+  await reapStaleBatches(sourceKey);
+
   // Single-flight per source — an admin manually syncing while the scheduled
   // run is still in flight would otherwise race on InfraAsset's sourceRef
   // unique constraint (each run separately decides a candidate is "new"
-  // before either has written it).
+  // before either has written it). Stale (killed) batches were just reaped
+  // above, so this only ever blocks on a genuinely still-running one.
   const alreadyRunning = await prisma.ingestBatch.findFirst({ where: { sourceKey, status: "running" }, select: { id: true } });
   if (alreadyRunning) throw new Error(`A sync for "${sourceKey}" is already running (batch ${alreadyRunning.id})`);
 

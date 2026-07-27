@@ -5,6 +5,7 @@ import {
   DEFAULT_LAYER_VISIBILITY,
   DEFAULT_MAP_FILTERS,
   type DeveloperMapMarker,
+  type InfraMapMarker,
   type LocalityMapMarker,
   type MapFilterState,
   type MapFocusTarget,
@@ -39,15 +40,17 @@ function developerMatches(d: DeveloperMapMarker, f: MapFilterState): boolean {
   return !f.builderId || d.id === f.builderId;
 }
 
-/** Owns all map interaction state — filters, layer visibility, focus and selection — and narrows the three marker datasets purely client-side (no network round-trip per interaction). */
+/** Owns all map interaction state — filters, layer visibility, focus and selection — and narrows the four marker datasets purely client-side (no network round-trip per interaction). */
 export default function MapExplorer({
   projectMarkers,
   localityMarkers,
   developerMarkers,
+  infraMarkers,
 }: {
   projectMarkers: ProjectMapMarker[];
   localityMarkers: LocalityMapMarker[];
   developerMarkers: DeveloperMapMarker[];
+  infraMarkers: InfraMapMarker[];
 }) {
   const [filters, setFilters] = useState<MapFilterState>(DEFAULT_MAP_FILTERS);
   const [layers, setLayers] = useState<MapLayerVisibility>(DEFAULT_LAYER_VISIBILITY);
@@ -66,9 +69,11 @@ export default function MapExplorer({
     () => (layers.developers ? developerMarkers.filter((d) => developerMatches(d, filters)) : []),
     [developerMarkers, filters, layers.developers]
   );
+  // No filter fields apply to infra points — visibility is purely the layer toggle.
+  const visibleInfra = useMemo(() => (layers.infra ? infraMarkers : []), [infraMarkers, layers.infra]);
   const visibleMarkers = useMemo<MapMarker[]>(
-    () => [...visibleProjects, ...visibleLocalities, ...visibleDevelopers],
-    [visibleProjects, visibleLocalities, visibleDevelopers]
+    () => [...visibleProjects, ...visibleLocalities, ...visibleDevelopers, ...visibleInfra],
+    [visibleProjects, visibleLocalities, visibleDevelopers, visibleInfra]
   );
 
   function handleSearchSelect(marker: MapMarker) {

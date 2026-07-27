@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getDeveloperMapMarkers, getLocalityMapMarkers, getProjectMapMarkers } from "@/lib/queries";
+import { getDeveloperMapMarkers, getInfraMapMarkers, getLocalityMapMarkers, getProjectMapMarkers } from "@/lib/queries";
 import Navbar from "@/app/components/Navbar";
 import MapExplorer from "@/app/components/map/MapExplorer";
 
@@ -10,17 +10,23 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function MapPage() {
-  const [projectMarkers, localityMarkers, developerMarkers] = await Promise.all([
+  const [projectMarkers, localityMarkers, developerMarkers, infraMarkers] = await Promise.all([
     getProjectMapMarkers(),
     getLocalityMapMarkers(),
     getDeveloperMapMarkers(),
+    getInfraMapMarkers(),
   ]);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
       <Navbar />
       <main id="main-content" className="min-h-0 flex-1">
-        <MapExplorer projectMarkers={projectMarkers} localityMarkers={localityMarkers} developerMarkers={developerMarkers} />
+        <MapExplorer
+          projectMarkers={projectMarkers}
+          localityMarkers={localityMarkers}
+          developerMarkers={developerMarkers}
+          infraMarkers={infraMarkers}
+        />
       </main>
     </div>
   );

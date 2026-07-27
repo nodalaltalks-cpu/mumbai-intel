@@ -148,6 +148,20 @@ export const INFRA_TYPE_LABEL: Record<InfraTypeValue, string> = {
   RESTAURANT: "Restaurant",
 };
 
+/** Map-marker color per infra type — same --chart-N CSS vars as STATUS_CHART_COLOR. */
+export const INFRA_TYPE_CHART_COLOR: Record<InfraTypeValue, string> = {
+  METRO_STATION: "--chart-1",
+  RAILWAY_STATION: "--chart-6",
+  SCHOOL: "--chart-2",
+  HOSPITAL: "--chart-3",
+  MALL: "--chart-5",
+  AIRPORT: "--chart-7",
+  ROAD: "--muted",
+  BUSINESS_DISTRICT: "--chart-1",
+  PARK: "--chart-4",
+  RESTAURANT: "--chart-5",
+};
+
 export const PROJECT_SORT_OPTIONS = [
   { value: "updated_desc", label: "Recently updated" },
   { value: "price_asc", label: "Price: Low to High" },

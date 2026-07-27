@@ -196,6 +196,11 @@ button:focus-visible,
   background: var(--warning);
   border-radius: 3px;
 }
+.mi-marker--infra {
+  background: var(--marker-color, var(--muted));
+  border-width: 1.5px;
+  opacity: 0.85;
+}
 .mi-marker--selected {
   transform: scale(1.4);
 }
