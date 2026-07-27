@@ -11,6 +11,8 @@ export const config = {
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // /admin/login itself is just a redirect stub (see app/admin/(auth)/login/page.tsx)
+  // kept for old bookmarks — the one real login form lives at /login.
   if (pathname === "/admin/login") {
     return NextResponse.next();
   }
@@ -19,7 +21,7 @@ export function proxy(request: NextRequest) {
   const session = verifySessionToken(token);
 
   if (!session) {
-    const loginUrl = new URL("/admin/login", request.url);
+    const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
   }

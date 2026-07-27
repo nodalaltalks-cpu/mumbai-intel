@@ -5,15 +5,21 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import { setSessionCookie } from "@/lib/auth/session";
 import { clearPublicSessionCookie, setPublicSessionCookie } from "@/lib/public-auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/request-ip";
 import { sendPasswordResetEmail } from "@/lib/email";
 
-const RESET_TOKEN_TTL_MINUTES = 60;
+const RESET_TOKEN_TTL_MINUTES = 30;
 
 function hashResetToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+/** Same absolute-URL pattern used for metadata/sitemap elsewhere (app/layout.tsx, app/sitemap.ts, etc.). */
+function getSiteUrl(): string {
+  return process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "http://localhost:3000";
 }
 
 // ── Sign up ─────────────────────────────────────────────────────────────
@@ -61,6 +67,13 @@ const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
+/**
+ * One login form for everyone. Founder/staff accounts (the `User` table) are
+ * checked first, then public accounts (`PublicUser`) — the two systems keep
+ * their own session cookies and tables (see lib/public-auth/token.ts), this
+ * just tries both against the same email/password before giving up. Whichever
+ * table matches decides both the session that gets set and the redirect.
+ */
 export async function loginAction(_prevState: PublicAuthState, formData: FormData): Promise<PublicAuthState> {
   const ip = await getClientIp();
   const limit = checkRateLimit(`login:${ip}`, 10, 60 * 15);
@@ -73,19 +86,23 @@ export async function loginAction(_prevState: PublicAuthState, formData: FormDat
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const { email, password } = parsed.data;
 
+  const admin = await prisma.user.findUnique({ where: { email } });
+  if (admin && admin.isActive && (await verifyPassword(password, admin.passwordHash))) {
+    await prisma.user.update({ where: { id: admin.id }, data: { lastLoginAt: new Date() } });
+    await setSessionCookie({ userId: admin.id, email: admin.email, name: admin.name, role: admin.role });
+    redirect("/admin");
+  }
+
   const user = await prisma.publicUser.findUnique({ where: { email } });
-  if (!user || !user.passwordHash) {
-    // Same generic message whether the account doesn't exist or is Google-only —
-    // never let a login form reveal which.
+  if (!user || !user.passwordHash || !(await verifyPassword(password, user.passwordHash))) {
+    // Same generic message whether the account doesn't exist, is Google-only, is an
+    // inactive admin, or the password is wrong — never let a login form reveal which.
     return { error: "Invalid email or password" };
   }
 
-  const valid = await verifyPassword(password, user.passwordHash);
-  if (!valid) return { error: "Invalid email or password" };
-
   await prisma.publicUser.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
   await setPublicSessionCookie({ userId: user.id, email: user.email, name: user.name, image: user.image });
-  redirect("/");
+  redirect("/account");
 }
 
 export async function logoutAction(): Promise<void> {
@@ -101,14 +118,19 @@ const forgotPasswordSchema = z.object({
 
 export async function requestPasswordResetAction(_prevState: PublicAuthState, formData: FormData): Promise<PublicAuthState> {
   const ip = await getClientIp();
-  const limit = checkRateLimit(`reset-request:${ip}`, 5, 60 * 15);
-  if (!limit.allowed) return { error: "Too many attempts. Please try again in a few minutes." };
+  const ipLimit = checkRateLimit(`reset-request:${ip}`, 5, 60 * 15);
+  if (!ipLimit.allowed) return { error: "Too many attempts. Please try again in a few minutes." };
 
   const parsed = forgotPasswordSchema.safeParse({ email: formData.get("email") });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const { email } = parsed.data;
 
   const successState: PublicAuthState = { success: "If an account exists for that email, we've sent a password reset link." };
+
+  // Keyed on the submitted email (in addition to IP above) so distributing requests
+  // across many IPs can't be used to spam a single target's inbox.
+  const emailLimit = checkRateLimit(`reset-request-email:${email}`, 5, 60 * 15);
+  if (!emailLimit.allowed) return successState; // same generic response — a limit hit here must not reveal anything either
 
   const user = await prisma.publicUser.findUnique({ where: { email } });
   if (!user || !user.passwordHash) return successState; // never reveal existence, or offer to "reset" an OAuth-only account
@@ -122,8 +144,8 @@ export async function requestPasswordResetAction(_prevState: PublicAuthState, fo
     },
   });
 
-  const resetUrl = `/reset-password?token=${token}`;
-  await sendPasswordResetEmail(email, resetUrl);
+  const resetUrl = `${getSiteUrl()}/reset-password?token=${token}`;
+  await sendPasswordResetEmail(email, resetUrl, RESET_TOKEN_TTL_MINUTES);
 
   return successState;
 }
