@@ -103,3 +103,55 @@ export function findPossibleDuplicateProject(
   }
   return best;
 }
+
+export interface ExistingBuilderCandidate {
+  id: string;
+  name: string;
+  reraNumber: string | null;
+}
+
+/**
+ * Flags a likely-duplicate existing Builder. An exact RERA number match is
+ * decisive. Otherwise falls back to name similarity — no locality
+ * partitioning (builders aren't locality-scoped), with a high threshold
+ * since builder names are highly distinctive ("Lodha Group", "Godrej
+ * Properties") and a false-positive merge here is worse than a missed one.
+ */
+export function findPossibleDuplicateBuilder(
+  existingBuilders: ExistingBuilderCandidate[],
+  candidate: { name: string; reraNumber?: string }
+): DuplicateMatch | null {
+  if (candidate.reraNumber) {
+    const exact = existingBuilders.find(
+      (b) => b.reraNumber && b.reraNumber.trim().toUpperCase() === candidate.reraNumber!.trim().toUpperCase()
+    );
+    if (exact) return { existingId: exact.id, confidence: 1 };
+  }
+
+  let best: DuplicateMatch | null = null;
+  for (const existing of existingBuilders) {
+    const similarity = nameSimilarity(candidate.name, existing.name);
+    if (similarity < 0.6) continue;
+    if (!best || similarity > best.confidence) best = { existingId: existing.id, confidence: similarity };
+  }
+  return best;
+}
+
+export interface ExistingLocalityCandidate {
+  id: string;
+  name: string;
+}
+
+/** Flags a likely-duplicate existing Locality by name similarity within the same city (callers pre-filter to one city). */
+export function findPossibleDuplicateLocality(
+  existingLocalities: ExistingLocalityCandidate[],
+  candidateName: string
+): DuplicateMatch | null {
+  let best: DuplicateMatch | null = null;
+  for (const existing of existingLocalities) {
+    const similarity = nameSimilarity(candidateName, existing.name);
+    if (similarity < 0.6) continue;
+    if (!best || similarity > best.confidence) best = { existingId: existing.id, confidence: similarity };
+  }
+  return best;
+}

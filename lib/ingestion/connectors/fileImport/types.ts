@@ -30,3 +30,45 @@ export interface ProjectImportPayload {
   /** RERA number when present (a real external identifier), else a synthetic "sourceKey:row-N" traceability tag. */
   sourceRef: string;
 }
+
+/** What gets stored as IngestStagingRecord.payload for a Builder file-import candidate. */
+export interface BuilderImportPayload {
+  name: string;
+  headquarters?: string;
+  foundedYear?: number;
+  websiteUrl?: string;
+  reraNumber?: string;
+  description?: string;
+  logoUrl?: string;
+  dataSource: DataSource;
+  sourceRef: string;
+}
+
+/** What gets stored as IngestStagingRecord.payload for a Locality file-import candidate. */
+export interface LocalityImportPayload {
+  name: string;
+  pincode?: string;
+  description?: string;
+  centroidLat?: number;
+  centroidLng?: number;
+  avgPriceRupeesPerSqft?: number;
+  rentalYieldPercent?: number;
+  connectivityNotes?: string;
+  dataSource: DataSource;
+  sourceRef: string;
+}
+
+/** What gets stored as IngestStagingRecord.payload for a Transaction file-import candidate — localityId/projectId are already resolved from the row's locality/project name at staging time, the same way ProjectImportPayload.builderId is resolved. */
+export interface TransactionImportPayload {
+  localityId: string;
+  projectId?: string;
+  type: "SALE" | "RESALE" | "LEASE";
+  registrationDateIso: string;
+  valueRupees: number;
+  carpetSqft?: number;
+  bedrooms?: number;
+  tower?: string;
+  unitLabel?: string;
+  dataSource: DataSource;
+  sourceRef: string;
+}

@@ -899,6 +899,24 @@ export async function getRecentIngestBatches(limit = 20) {
   );
 }
 
+/** Failed batches only, with the source's `kind` attached so the UI can only offer Retry for connector-based (API) sources — a file-based batch's original upload isn't retained, so retrying it isn't meaningful. */
+export async function getFailedIngestBatches(limit = 20) {
+  return safeQuery("getFailedIngestBatches", [], async () => {
+    const batches = await prisma.ingestBatch.findMany({
+      where: { status: "failed" },
+      orderBy: { startedAt: "desc" },
+      take: limit,
+      include: { _count: { select: { logEntries: true, stagingRecords: true } } },
+    });
+    const sourceKeys = [...new Set(batches.map((b) => b.sourceKey))];
+    const sources = sourceKeys.length
+      ? await prisma.ingestSource.findMany({ where: { key: { in: sourceKeys } }, select: { key: true, kind: true } })
+      : [];
+    const kindByKey = new Map(sources.map((s) => [s.key, s.kind]));
+    return batches.map((b) => ({ ...b, sourceKind: kindByKey.get(b.sourceKey) ?? null }));
+  });
+}
+
 export async function getIngestBatch(id: string) {
   return safeQuery("getIngestBatch", null, () => prisma.ingestBatch.findUnique({ where: { id } }));
 }

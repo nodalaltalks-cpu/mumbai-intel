@@ -39,6 +39,9 @@ on("TransactionImported", async () => {
 on("ReviewApproved", async (p) => {
   if (p.entityType === "Project") revalidateProject();
   else if (p.entityType === "InfraAsset") revalidateInfra();
+  else if (p.entityType === "Builder") revalidateBuilder();
+  else if (p.entityType === "Locality") revalidateLocality();
+  else if (p.entityType === "Transaction") revalidateTransaction();
 });
 
 on("MediaUploaded", async (p) => {

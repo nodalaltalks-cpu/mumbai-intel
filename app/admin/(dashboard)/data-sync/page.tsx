@@ -1,8 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { requireSession } from "@/lib/auth/guard";
-import { getIngestSources, getRecentIngestBatches, getPendingStagingRecords } from "@/lib/admin-queries";
-import { triggerSyncAction, toggleIngestSourceEnabledAction } from "@/lib/actions/ingestion";
+import { getIngestSources, getRecentIngestBatches, getPendingStagingRecords, getFailedIngestBatches } from "@/lib/admin-queries";
+import { triggerSyncAction, toggleIngestSourceEnabledAction, retryFailedBatchAction } from "@/lib/actions/ingestion";
 import { formatDate } from "@/lib/format";
 import ConfirmButton from "@/app/admin/components/ConfirmButton";
 
@@ -18,10 +18,11 @@ const STATUS_STYLES: Record<string, string> = {
 
 export default async function DataSyncPage() {
   const session = await requireSession();
-  const [sources, batches, pending] = await Promise.all([
+  const [sources, batches, pending, failedBatches] = await Promise.all([
     getIngestSources(),
     getRecentIngestBatches(15),
     getPendingStagingRecords(),
+    getFailedIngestBatches(10),
   ]);
 
   return (
@@ -153,6 +154,47 @@ export default async function DataSyncPage() {
           </table>
         </div>
       </section>
+
+      {failedBatches.length > 0 ? (
+        <section className="rounded-sm border border-negative/40">
+          <div className="border-b border-negative/40 bg-negative/5 px-3 py-2">
+            <h2 className="font-mono text-xs font-semibold uppercase tracking-wide text-negative">Failed imports</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] border-collapse text-left text-xs">
+              <thead>
+                <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted">
+                  <th className="px-3 py-2 font-medium">Source</th>
+                  <th className="px-3 py-2 font-medium">Started</th>
+                  <th className="px-3 py-2 font-medium">Reason</th>
+                  <th className="px-3 py-2 font-medium text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {failedBatches.map((batch) => (
+                  <tr key={batch.id} className="border-b border-border last:border-b-0 hover:bg-surface-raised">
+                    <td className="px-3 py-2 font-mono text-foreground">{batch.sourceKey}</td>
+                    <td className="px-3 py-2 text-muted">{formatDate(batch.startedAt)}</td>
+                    <td className="px-3 py-2 text-negative">{batch.note ?? "Unknown error"}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center justify-end gap-2">
+                        <Link href={`/admin/data-sync/batches/${batch.id}`} className="font-mono text-accent hover:underline">
+                          View log
+                        </Link>
+                        {batch.sourceKind === "API" ? (
+                          <ConfirmButton action={retryFailedBatchAction.bind(null, batch.id)} label="Retry" confirmLabel="Retry sync?" />
+                        ) : (
+                          <span className="text-[10px] uppercase text-muted">Re-upload file to retry</span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

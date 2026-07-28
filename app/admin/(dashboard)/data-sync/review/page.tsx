@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { getPendingStagingRecords } from "@/lib/admin-queries";
 import { prisma } from "@/lib/prisma";
-import { formatPriceBand } from "@/lib/format";
-import { STATUS_LABEL, CATEGORY_LABEL, type ProjectStatus, type PropertyCategory } from "@/lib/project-meta";
-import type { ProjectImportPayload } from "@/lib/ingestion/connectors/fileImport/types";
+import { formatDate, formatPaise, formatPriceBand } from "@/lib/format";
+import { STATUS_LABEL, CATEGORY_LABEL, TRANSACTION_TYPE_LABEL, type ProjectStatus, type PropertyCategory, type TransactionType } from "@/lib/project-meta";
+import type { BuilderImportPayload, LocalityImportPayload, ProjectImportPayload, TransactionImportPayload } from "@/lib/ingestion/connectors/fileImport/types";
 import ReviewQueueList, { type ReviewRecord } from "@/app/admin/components/ReviewQueueList";
 import EmptyState from "@/app/components/ui/EmptyState";
 
@@ -24,6 +24,9 @@ export default async function DataSyncReviewPage() {
 
   const infraRecords = records.filter((r) => r.entityType === "InfraAsset");
   const projectRecords = records.filter((r) => r.entityType === "Project");
+  const builderRecords = records.filter((r) => r.entityType === "Builder");
+  const localityRecords = records.filter((r) => r.entityType === "Locality");
+  const transactionRecords = records.filter((r) => r.entityType === "Transaction");
 
   const matchedInfraIds = infraRecords.map((r) => r.matchedExistingId).filter((id): id is string => Boolean(id));
   const matchedInfra = matchedInfraIds.length
@@ -37,7 +40,24 @@ export default async function DataSyncReviewPage() {
     : [];
   const matchedProjectById = new Map(matchedProjects.map((p) => [p.id, p]));
 
-  const localityIds = [...new Set(projectRecords.map((r) => (r.payload as unknown as ProjectImportPayload).localityId))];
+  const matchedBuilderIds = builderRecords.map((r) => r.matchedExistingId).filter((id): id is string => Boolean(id));
+  const matchedBuilders = matchedBuilderIds.length
+    ? await prisma.builder.findMany({ where: { id: { in: matchedBuilderIds } }, select: { id: true, name: true, headquarters: true } })
+    : [];
+  const matchedBuilderById = new Map(matchedBuilders.map((b) => [b.id, b]));
+
+  const matchedLocalityIds = localityRecords.map((r) => r.matchedExistingId).filter((id): id is string => Boolean(id));
+  const matchedLocalities = matchedLocalityIds.length
+    ? await prisma.locality.findMany({ where: { id: { in: matchedLocalityIds } }, select: { id: true, name: true, pincode: true } })
+    : [];
+  const matchedLocalityById = new Map(matchedLocalities.map((l) => [l.id, l]));
+
+  const localityIds = [
+    ...new Set([
+      ...projectRecords.map((r) => (r.payload as unknown as ProjectImportPayload).localityId),
+      ...transactionRecords.map((r) => (r.payload as unknown as TransactionImportPayload).localityId),
+    ]),
+  ];
   const localities = localityIds.length ? await prisma.locality.findMany({ where: { id: { in: localityIds } }, select: { id: true, name: true } }) : [];
   const localityNameById = new Map(localities.map((l) => [l.id, l.name]));
 
@@ -51,12 +71,29 @@ export default async function DataSyncReviewPage() {
   const builders = builderIds.length ? await prisma.builder.findMany({ where: { id: { in: builderIds } }, select: { id: true, name: true } }) : [];
   const builderNameById = new Map(builders.map((b) => [b.id, b.name]));
 
+  const transactionProjectIds = [
+    ...new Set(transactionRecords.map((r) => (r.payload as unknown as TransactionImportPayload).projectId).filter((id): id is string => Boolean(id))),
+  ];
+  const transactionProjects = transactionProjectIds.length
+    ? await prisma.project.findMany({ where: { id: { in: transactionProjectIds } }, select: { id: true, name: true } })
+    : [];
+  const transactionProjectNameById = new Map(transactionProjects.map((p) => [p.id, p.name]));
+
   const reviewRecords: ReviewRecord[] = records.map((record) => {
     const isProject = record.entityType === "Project";
-    const infraPayload = !isProject ? (record.payload as unknown as InfraStagingPayload) : null;
+    const isBuilder = record.entityType === "Builder";
+    const isLocality = record.entityType === "Locality";
+    const isTransaction = record.entityType === "Transaction";
+    const infraPayload = record.entityType === "InfraAsset" ? (record.payload as unknown as InfraStagingPayload) : null;
     const projectPayload = isProject ? (record.payload as unknown as ProjectImportPayload) : null;
+    const builderPayload = isBuilder ? (record.payload as unknown as BuilderImportPayload) : null;
+    const localityPayload = isLocality ? (record.payload as unknown as LocalityImportPayload) : null;
+    const transactionPayload = isTransaction ? (record.payload as unknown as TransactionImportPayload) : null;
+
     const matchedInfraAsset = infraPayload && record.matchedExistingId ? matchedInfraById.get(record.matchedExistingId) : null;
     const matchedProject = projectPayload && record.matchedExistingId ? matchedProjectById.get(record.matchedExistingId) : null;
+    const matchedBuilder = builderPayload && record.matchedExistingId ? matchedBuilderById.get(record.matchedExistingId) : null;
+    const matchedLocality = localityPayload && record.matchedExistingId ? matchedLocalityById.get(record.matchedExistingId) : null;
 
     const proposedLines: string[] = [];
     let proposedTitle = "";
@@ -84,6 +121,24 @@ export default async function DataSyncReviewPage() {
       proposedTitle = infraPayload.name;
       proposedLines.push(`${infraPayload.type} · ${infraPayload.latitude.toFixed(5)}, ${infraPayload.longitude.toFixed(5)}`);
       proposedLines.push(infraPayload.sourceRef);
+    } else if (builderPayload) {
+      proposedTitle = builderPayload.name;
+      proposedLines.push([builderPayload.headquarters, builderPayload.foundedYear ? `est. ${builderPayload.foundedYear}` : null].filter(Boolean).join(" · "));
+      if (builderPayload.reraNumber) proposedLines.push(`RERA ${builderPayload.reraNumber}`);
+    } else if (localityPayload) {
+      proposedTitle = localityPayload.name;
+      proposedLines.push([localityPayload.pincode, localityPayload.avgPriceRupeesPerSqft ? `₹${localityPayload.avgPriceRupeesPerSqft}/sqft` : null].filter(Boolean).join(" · "));
+    } else if (transactionPayload) {
+      proposedTitle = `${TRANSACTION_TYPE_LABEL[transactionPayload.type as TransactionType]} · ${formatPaise(BigInt(Math.round(transactionPayload.valueRupees * 100)))}`;
+      proposedLines.push(
+        [
+          localityNameById.get(transactionPayload.localityId) ?? "Unknown locality",
+          transactionPayload.projectId ? transactionProjectNameById.get(transactionPayload.projectId) ?? "Unknown project" : null,
+          formatDate(new Date(transactionPayload.registrationDateIso)),
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      );
     }
 
     let matchTitle: string | null = null;
@@ -99,7 +154,27 @@ export default async function DataSyncReviewPage() {
       matchTitle = matchedInfraAsset.name;
       matchLines.push(`${matchedInfraAsset.type} · ${matchedInfraAsset.latitude?.toFixed(5)}, ${matchedInfraAsset.longitude?.toFixed(5)}`);
       if (record.matchConfidence !== null) matchLines.push(`confidence ${Number(record.matchConfidence).toFixed(2)}`);
+    } else if (matchedBuilder) {
+      matchLabel = "Possible match (existing builder)";
+      matchTitle = matchedBuilder.name;
+      if (matchedBuilder.headquarters) matchLines.push(matchedBuilder.headquarters);
+      if (record.matchConfidence !== null) matchLines.push(`confidence ${Number(record.matchConfidence).toFixed(2)}`);
+    } else if (matchedLocality) {
+      matchLabel = "Possible match (existing locality)";
+      matchTitle = matchedLocality.name;
+      if (matchedLocality.pincode) matchLines.push(matchedLocality.pincode);
+      if (record.matchConfidence !== null) matchLines.push(`confidence ${Number(record.matchConfidence).toFixed(2)}`);
     }
+
+    const noMatchNote = isProject
+      ? "Will be created as a new, unpublished project."
+      : isBuilder
+        ? "Will be created as a new, unpublished builder."
+        : isLocality
+          ? "Will be created as a new, unpublished locality."
+          : isTransaction
+            ? "Will be created as a new transaction record."
+            : "Staged for review by source policy.";
 
     return {
       id: record.id,
@@ -111,7 +186,7 @@ export default async function DataSyncReviewPage() {
       matchLabel,
       matchTitle,
       matchLines,
-      noMatchNote: isProject ? "Will be created as a new, unpublished project." : "Staged for review by source policy.",
+      noMatchNote,
     };
   });
 

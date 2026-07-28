@@ -5,7 +5,15 @@ import { prisma } from "@/lib/prisma";
 import { PRIMARY_CITY_SLUG } from "@/lib/queries";
 import { runIngestBatch } from "@/lib/ingestion/runner";
 import { runProjectFileImport, type FileFormat } from "@/lib/ingestion/fileImportRunner";
-import type { ProjectImportPayload } from "@/lib/ingestion/connectors/fileImport/types";
+import { runBuilderFileImport } from "@/lib/ingestion/builderFileImportRunner";
+import { runLocalityFileImport } from "@/lib/ingestion/localityFileImportRunner";
+import { runTransactionFileImport } from "@/lib/ingestion/transactionFileImportRunner";
+import type {
+  BuilderImportPayload,
+  LocalityImportPayload,
+  ProjectImportPayload,
+  TransactionImportPayload,
+} from "@/lib/ingestion/connectors/fileImport/types";
 import { buildProjectData, type ProjectSchemaInput } from "@/lib/project-data";
 import { ensureUniqueSlug } from "@/lib/slug";
 import { logAudit } from "@/lib/audit";
@@ -67,6 +75,93 @@ export async function importProjectsFileAction(_prevState: IngestActionResult, f
     });
     await logAudit(session.userId, "ingest.file-import", "IngestSource", "csv-upload-projects");
     revalidateInfra();
+    return { summary };
+  } catch (error) {
+    return { error: friendlyPrismaError(error) };
+  }
+}
+
+/** Uploads and stages a CSV/JSON Builder file — the Builder counterpart to importProjectsFileAction. */
+export async function importBuildersFileAction(_prevState: IngestActionResult, formData: FormData): Promise<IngestActionResult> {
+  const session = await requireMutateSession();
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { error: "Choose a CSV or JSON file to upload" };
+
+  const dataSourceRaw = formData.get("dataSource");
+  const dataSource = DATA_SOURCES.find((d) => d === dataSourceRaw) as DataSource | undefined;
+  if (!dataSource) return { error: "Choose the source of this file (builder, official, etc.)" };
+
+  const fileFormat: FileFormat = file.name.toLowerCase().endsWith(".json") ? "json" : "csv";
+
+  try {
+    const fileText = await file.text();
+    const summary = await runBuilderFileImport({
+      sourceKey: "csv-upload-builders",
+      fileText,
+      fileFormat,
+      dataSource,
+      triggeredByUserId: session.userId,
+    });
+    await logAudit(session.userId, "ingest.file-import", "IngestSource", "csv-upload-builders");
+    return { summary };
+  } catch (error) {
+    return { error: friendlyPrismaError(error) };
+  }
+}
+
+/** Uploads and stages a CSV/JSON Locality file — the Locality counterpart to importProjectsFileAction. */
+export async function importLocalitiesFileAction(_prevState: IngestActionResult, formData: FormData): Promise<IngestActionResult> {
+  const session = await requireMutateSession();
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { error: "Choose a CSV or JSON file to upload" };
+
+  const dataSourceRaw = formData.get("dataSource");
+  const dataSource = DATA_SOURCES.find((d) => d === dataSourceRaw) as DataSource | undefined;
+  if (!dataSource) return { error: "Choose the source of this file (builder, official, etc.)" };
+
+  const fileFormat: FileFormat = file.name.toLowerCase().endsWith(".json") ? "json" : "csv";
+
+  try {
+    const fileText = await file.text();
+    const summary = await runLocalityFileImport({
+      sourceKey: "csv-upload-localities",
+      fileText,
+      fileFormat,
+      dataSource,
+      triggeredByUserId: session.userId,
+    });
+    await logAudit(session.userId, "ingest.file-import", "IngestSource", "csv-upload-localities");
+    return { summary };
+  } catch (error) {
+    return { error: friendlyPrismaError(error) };
+  }
+}
+
+/** Uploads and stages a CSV/JSON Transaction file — the Transaction counterpart to importProjectsFileAction. */
+export async function importTransactionsFileAction(_prevState: IngestActionResult, formData: FormData): Promise<IngestActionResult> {
+  const session = await requireMutateSession();
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { error: "Choose a CSV or JSON file to upload" };
+
+  const dataSourceRaw = formData.get("dataSource");
+  const dataSource = DATA_SOURCES.find((d) => d === dataSourceRaw) as DataSource | undefined;
+  if (!dataSource) return { error: "Choose the source of this file (builder, official, etc.)" };
+
+  const fileFormat: FileFormat = file.name.toLowerCase().endsWith(".json") ? "json" : "csv";
+
+  try {
+    const fileText = await file.text();
+    const summary = await runTransactionFileImport({
+      sourceKey: "csv-upload-transactions",
+      fileText,
+      fileFormat,
+      dataSource,
+      triggeredByUserId: session.userId,
+    });
+    await logAudit(session.userId, "ingest.file-import", "IngestSource", "csv-upload-transactions");
     return { summary };
   } catch (error) {
     return { error: friendlyPrismaError(error) };
@@ -164,6 +259,101 @@ async function applyProjectApproval(record: { targetId: string | null; payload: 
   return created.id;
 }
 
+/**
+ * Applies an approved Builder staging record — create or merge, per
+ * targetId. Mirrors applyProjectApproval's shape but maps fields inline
+ * (Builder has no shared buildBuilderData()-style helper the way Project
+ * does, and the frozen lib/actions/builders.ts is not touched by this
+ * module) rather than duplicating validation the admin form doesn't share.
+ */
+async function applyBuilderApproval(record: { targetId: string | null; payload: unknown }): Promise<string> {
+  const payload = record.payload as unknown as BuilderImportPayload;
+
+  const data = {
+    name: payload.name,
+    headquarters: payload.headquarters ?? null,
+    foundedYear: payload.foundedYear ?? null,
+    websiteUrl: payload.websiteUrl ?? null,
+    reraNumber: payload.reraNumber ?? null,
+    description: payload.description ?? null,
+    logoUrl: payload.logoUrl ?? null,
+    dataSource: payload.dataSource,
+  };
+
+  if (record.targetId) {
+    await prisma.builder.update({ where: { id: record.targetId }, data });
+    return record.targetId;
+  }
+  const slug = await ensureUniqueSlug(payload.name, async (candidate) => {
+    const existing = await prisma.builder.findUnique({ where: { slug: candidate } });
+    return Boolean(existing);
+  });
+  const created = await prisma.builder.create({
+    data: { slug, ...data, isPublished: false, isFeatured: false },
+    select: { id: true },
+  });
+  return created.id;
+}
+
+/** Applies an approved Locality staging record — create or merge, per targetId. Same inline-mapping rationale as applyBuilderApproval. */
+async function applyLocalityApproval(record: { targetId: string | null; payload: unknown }): Promise<string> {
+  const payload = record.payload as unknown as LocalityImportPayload;
+  const hasMarketData = payload.avgPriceRupeesPerSqft !== undefined || payload.rentalYieldPercent !== undefined;
+
+  const data = {
+    name: payload.name,
+    pincode: payload.pincode ?? null,
+    description: payload.description ?? null,
+    centroidLat: payload.centroidLat ?? null,
+    centroidLng: payload.centroidLng ?? null,
+    avgPricePerSqftPaise: payload.avgPriceRupeesPerSqft !== undefined ? BigInt(Math.round(payload.avgPriceRupeesPerSqft * 100)) : null,
+    rentalYieldPercent: payload.rentalYieldPercent ?? null,
+    marketDataSource: hasMarketData ? payload.dataSource : null,
+    marketAsOf: hasMarketData ? new Date() : null,
+    connectivityNotes: payload.connectivityNotes ?? null,
+  };
+
+  if (record.targetId) {
+    await prisma.locality.update({ where: { id: record.targetId }, data });
+    return record.targetId;
+  }
+  const city = await prisma.city.findUnique({ where: { slug: PRIMARY_CITY_SLUG }, select: { id: true } });
+  if (!city) throw new Error(`Primary city "${PRIMARY_CITY_SLUG}" is not seeded`);
+  const slug = await ensureUniqueSlug(payload.name, async (candidate) => {
+    const existing = await prisma.locality.findFirst({ where: { cityId: city.id, slug: candidate } });
+    return Boolean(existing);
+  });
+  const created = await prisma.locality.create({
+    data: { cityId: city.id, slug, ...data, isPublished: false, isFeatured: false },
+    select: { id: true },
+  });
+  return created.id;
+}
+
+/** Applies an approved Transaction staging record — always a create (Transaction has no merge/targetId concept, per the runner). */
+async function applyTransactionApproval(record: { payload: unknown }): Promise<string> {
+  const payload = record.payload as unknown as TransactionImportPayload;
+
+  const created = await prisma.transaction.create({
+    data: {
+      localityId: payload.localityId,
+      projectId: payload.projectId ?? null,
+      type: payload.type,
+      registrationDate: new Date(payload.registrationDateIso),
+      valuePaise: BigInt(Math.round(payload.valueRupees * 100)),
+      carpetSqft: payload.carpetSqft ?? null,
+      bedrooms: payload.bedrooms ?? null,
+      tower: payload.tower ?? null,
+      unitLabel: payload.unitLabel ?? null,
+      dataSource: payload.dataSource,
+      confidence: "MEDIUM",
+      sourceRef: payload.sourceRef,
+    },
+    select: { id: true },
+  });
+  return created.id;
+}
+
 /** Approves a pending IngestStagingRecord — creates or merges, per the record's entityType. */
 export async function approveStagingRecordAction(id: string): Promise<IngestActionResult> {
   const session = await requireMutateSession();
@@ -178,6 +368,12 @@ export async function approveStagingRecordAction(id: string): Promise<IngestActi
       entityId = await applyInfraAssetApproval(record);
     } else if (record.entityType === "Project") {
       entityId = await applyProjectApproval(record);
+    } else if (record.entityType === "Builder") {
+      entityId = await applyBuilderApproval(record);
+    } else if (record.entityType === "Locality") {
+      entityId = await applyLocalityApproval(record);
+    } else if (record.entityType === "Transaction") {
+      entityId = await applyTransactionApproval(record);
     } else {
       return { error: `Unsupported entity type "${record.entityType}"` };
     }
@@ -187,6 +383,9 @@ export async function approveStagingRecordAction(id: string): Promise<IngestActi
       data: { status: "APPROVED", reviewedByUserId: session.userId, reviewedAt: new Date() },
     });
     await emit("ReviewApproved", { stagingRecordId: id, entityType: record.entityType, entityId, actorId: session.userId });
+    if (record.entityType === "Transaction") {
+      await emit("TransactionImported", { transactionId: entityId, batchId: record.batchId, actorId: session.userId });
+    }
     return {};
   } catch (error) {
     return { error: friendlyPrismaError(error) };
@@ -244,6 +443,33 @@ export async function toggleIngestSourceEnabledAction(key: string, enabled: bool
     await logAudit(session.userId, enabled ? "ingest.source.enable" : "ingest.source.disable", "IngestSource", key);
     revalidateInfra();
     return {};
+  } catch (error) {
+    return { error: friendlyPrismaError(error) };
+  }
+}
+
+/**
+ * Re-runs a failed batch's connector. Only meaningful for API-based sources
+ * (e.g. the OSM connector) — a file-upload batch's original bytes aren't
+ * retained, so a failed file import must be re-uploaded, not "retried".
+ */
+export async function retryFailedBatchAction(batchId: string): Promise<IngestActionResult> {
+  const session = await requireMutateSession();
+
+  const batch = await prisma.ingestBatch.findUnique({ where: { id: batchId }, select: { sourceKey: true, status: true } });
+  if (!batch) return { error: "Batch not found" };
+  if (batch.status !== "failed") return { error: "Only failed batches can be retried" };
+
+  const source = await prisma.ingestSource.findUnique({ where: { key: batch.sourceKey }, select: { kind: true } });
+  if (!source || source.kind !== "API") {
+    return { error: "This batch's source can't be retried automatically — re-upload the file instead" };
+  }
+
+  try {
+    const summary = await runIngestBatch(batch.sourceKey, "manual", session.userId);
+    await logAudit(session.userId, "ingest.retry", "IngestSource", batch.sourceKey);
+    revalidateInfra();
+    return { summary };
   } catch (error) {
     return { error: friendlyPrismaError(error) };
   }

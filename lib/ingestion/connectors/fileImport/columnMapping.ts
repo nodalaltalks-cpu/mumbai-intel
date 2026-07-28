@@ -28,8 +28,8 @@ function normalizeHeader(header: string): string {
   return header.trim().toLowerCase().replace(/[_\s]+/g, " ");
 }
 
-/** Accepts CSV rows (all-string values) or JSON rows (mixed types) — every value is coerced to a trimmed string for uniform downstream parsing, same z.coerce convention already used by every admin form schema in this codebase. */
-export function mapRowToProjectFields(row: Record<string, unknown>): Record<string, string> {
+/** Shared by every entity's mapRowToXFields — coerces raw CSV/JSON values to trimmed strings, normalizes header spellings, and resolves the first matching alias per field. */
+function mapRow(row: Record<string, unknown>, aliasTable: Record<string, string[]>): Record<string, string> {
   const normalizedRow = new Map<string, string>();
   for (const [key, value] of Object.entries(row)) {
     if (value === null || value === undefined) continue;
@@ -37,7 +37,7 @@ export function mapRowToProjectFields(row: Record<string, unknown>): Record<stri
   }
 
   const mapped: Record<string, string> = {};
-  for (const [field, aliases] of Object.entries(PROJECT_COLUMN_ALIASES)) {
+  for (const [field, aliases] of Object.entries(aliasTable)) {
     for (const alias of aliases) {
       const value = normalizedRow.get(normalizeHeader(alias));
       if (value) {
@@ -47,4 +47,57 @@ export function mapRowToProjectFields(row: Record<string, unknown>): Record<stri
     }
   }
   return mapped;
+}
+
+/** Accepts CSV rows (all-string values) or JSON rows (mixed types) — every value is coerced to a trimmed string for uniform downstream parsing, same z.coerce convention already used by every admin form schema in this codebase. */
+export function mapRowToProjectFields(row: Record<string, unknown>): Record<string, string> {
+  return mapRow(row, PROJECT_COLUMN_ALIASES);
+}
+
+/** Header-alias table for Builders — same one-line-per-source-spelling convention as Projects. */
+export const BUILDER_COLUMN_ALIASES: Record<string, string[]> = {
+  name: ["name", "builder name", "builder", "developer", "developer name"],
+  headquarters: ["headquarters", "hq", "head office", "city"],
+  foundedYear: ["founded year", "founded", "year founded", "established"],
+  websiteUrl: ["website", "website url", "url"],
+  reraNumber: ["rera number", "rera no", "rera"],
+  description: ["description", "about", "overview"],
+  logoUrl: ["logo url", "logo", "logo link"],
+};
+
+export function mapRowToBuilderFields(row: Record<string, unknown>): Record<string, string> {
+  return mapRow(row, BUILDER_COLUMN_ALIASES);
+}
+
+/** Header-alias table for Localities. */
+export const LOCALITY_COLUMN_ALIASES: Record<string, string[]> = {
+  name: ["name", "locality name", "locality", "area", "neighbourhood", "neighborhood"],
+  pincode: ["pincode", "pin code", "zip", "postal code"],
+  description: ["description", "about", "overview"],
+  centroidLat: ["latitude", "lat", "centroid lat"],
+  centroidLng: ["longitude", "lng", "long", "centroid lng"],
+  avgPriceRupeesPerSqft: ["avg price per sqft", "average price per sqft", "price per sqft", "avg ppsf"],
+  rentalYieldPercent: ["rental yield", "rental yield percent", "rental yield %"],
+  connectivityNotes: ["connectivity", "connectivity notes"],
+};
+
+export function mapRowToLocalityFields(row: Record<string, unknown>): Record<string, string> {
+  return mapRow(row, LOCALITY_COLUMN_ALIASES);
+}
+
+/** Header-alias table for Transactions. */
+export const TRANSACTION_COLUMN_ALIASES: Record<string, string[]> = {
+  localityName: ["locality", "locality name", "area"],
+  projectName: ["project", "project name"],
+  type: ["type", "transaction type", "deal type"],
+  registrationDate: ["registration date", "date", "reg date", "transaction date"],
+  valueRupees: ["value", "transaction value", "price", "sale value", "amount"],
+  carpetSqft: ["carpet sqft", "carpet area", "area sqft", "sqft"],
+  bedrooms: ["bedrooms", "bhk", "configuration"],
+  tower: ["tower", "building", "wing"],
+  unitLabel: ["unit", "unit label", "flat no", "unit number"],
+};
+
+export function mapRowToTransactionFields(row: Record<string, unknown>): Record<string, string> {
+  return mapRow(row, TRANSACTION_COLUMN_ALIASES);
 }
