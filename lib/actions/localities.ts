@@ -9,6 +9,7 @@ import { PRIMARY_CITY_SLUG } from "@/lib/queries";
 import { slugify } from "@/lib/slug";
 import { deleteImageByPublicId, publicIdFromUrl } from "@/lib/cloudinary";
 import { logAudit } from "@/lib/audit";
+import { emit } from "@/lib/events";
 import { friendlyPrismaError } from "./errors";
 
 const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefined ? undefined : v);
@@ -133,7 +134,8 @@ async function fetchLocalityMediaRefs(localityId: string) {
  */
 async function deleteLocalityMediaAssets(
   localityId: string,
-  refs: { coverImageUrl: string | null; galleryUrls: string[] }
+  refs: { coverImageUrl: string | null; galleryUrls: string[] },
+  actorId: string | null
 ): Promise<void> {
   const urls = [refs.coverImageUrl, ...refs.galleryUrls].filter((url): url is string => Boolean(url));
   for (const url of urls) {
@@ -141,6 +143,7 @@ async function deleteLocalityMediaAssets(
     if (!publicId) continue;
     try {
       await deleteImageByPublicId(publicId);
+      await emit("MediaDeleted", { entityType: "Locality", entityId: localityId, url, actorId });
     } catch (error) {
       console.error(`[localities] failed to delete Cloudinary asset "${publicId}" for locality ${localityId}:`, error);
     }
@@ -329,7 +332,7 @@ export async function permanentlyDeleteLocalityAction(localityId: string): Promi
 
   await prisma.locality.delete({ where: { id: localityId } });
 
-  await deleteLocalityMediaAssets(localityId, mediaRefs);
+  await deleteLocalityMediaAssets(localityId, mediaRefs, session.userId);
 
   await logAudit(session.userId, "locality.permanent-delete", "Locality", localityId);
   revalidateLocality({ id: localityId, slug: existing.slug });
@@ -354,7 +357,7 @@ export async function emptyLocalityTrashAction(): Promise<{ error?: string; affe
 
   for (const id of ids) {
     const refs = mediaRefsById.get(id);
-    if (refs) await deleteLocalityMediaAssets(id, refs);
+    if (refs) await deleteLocalityMediaAssets(id, refs, session.userId);
   }
 
   await logAudit(session.userId, "locality.trash.empty", "Locality", ids.join(","));
@@ -480,7 +483,7 @@ export async function bulkLocalityAction(
 
       for (const id of deletable) {
         const refs = mediaRefsById.get(id);
-        if (refs) await deleteLocalityMediaAssets(id, refs);
+        if (refs) await deleteLocalityMediaAssets(id, refs, session.userId);
       }
 
       affected = result.count;

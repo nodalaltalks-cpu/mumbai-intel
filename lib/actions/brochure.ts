@@ -1,9 +1,9 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { requireMutateSession } from "@/lib/auth/guard";
 import { deleteDocumentByPublicId, documentPublicIdFromUrl, uploadDocumentFile } from "@/lib/cloudinary";
 import { prisma } from "@/lib/prisma";
+import { emit } from "@/lib/events";
 
 export interface BrochureActionState {
   error?: string;
@@ -15,7 +15,7 @@ export async function uploadProjectBrochureAction(
   _prevState: BrochureActionState,
   formData: FormData
 ): Promise<BrochureActionState> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
 
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
@@ -43,19 +43,19 @@ export async function uploadProjectBrochureAction(
     if (oldPublicId) {
       try {
         await deleteDocumentByPublicId(oldPublicId);
+        await emit("MediaDeleted", { entityType: "Project", entityId: projectId, url: previousUrl, actorId: session.userId });
       } catch {
         // Best-effort — the DB row already points at the new file.
       }
     }
   }
 
-  revalidatePath(`/admin/projects/${projectId}/edit`);
-  revalidatePath("/");
+  await emit("MediaUploaded", { entityType: "Project", entityId: projectId, url: uploaded.url, kind: "brochure", actorId: session.userId });
   return { success: true };
 }
 
 export async function removeProjectBrochureAction(projectId: string): Promise<{ error?: string }> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -76,7 +76,8 @@ export async function removeProjectBrochureAction(projectId: string): Promise<{ 
 
   await prisma.project.update({ where: { id: projectId }, data: { brochureUrl: null } });
 
-  revalidatePath(`/admin/projects/${projectId}/edit`);
-  revalidatePath("/");
+  if (project.brochureUrl) {
+    await emit("MediaDeleted", { entityType: "Project", entityId: projectId, url: project.brochureUrl, actorId: session.userId });
+  }
   return {};
 }

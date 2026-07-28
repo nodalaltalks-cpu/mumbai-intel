@@ -1,9 +1,9 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { requireMutateSession } from "@/lib/auth/guard";
 import { deleteDocumentByPublicId, documentPublicIdFromUrl, uploadDocumentFile } from "@/lib/cloudinary";
 import { prisma } from "@/lib/prisma";
+import { emit } from "@/lib/events";
 
 export interface DocumentActionState {
   error?: string;
@@ -15,7 +15,7 @@ export async function addProjectDocumentAction(
   _prevState: DocumentActionState,
   formData: FormData
 ): Promise<DocumentActionState> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
 
   const title = String(formData.get("title") ?? "").trim();
   if (!title) return { error: "Title is required" };
@@ -49,12 +49,12 @@ export async function addProjectDocumentAction(
     },
   });
 
-  revalidatePath(`/admin/projects/${projectId}/edit`);
+  await emit("MediaUploaded", { entityType: "Project", entityId: projectId, url: uploaded.url, kind: "document", actorId: session.userId });
   return { success: true };
 }
 
 export async function deleteProjectDocumentAction(documentId: string): Promise<{ error?: string }> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
 
   const doc = await prisma.projectDocument.findUnique({ where: { id: documentId } });
   if (!doc) return { error: "Document not found" };
@@ -69,6 +69,6 @@ export async function deleteProjectDocumentAction(documentId: string): Promise<{
   }
 
   await prisma.projectDocument.delete({ where: { id: documentId } });
-  revalidatePath(`/admin/projects/${doc.projectId}/edit`);
+  await emit("MediaDeleted", { entityType: "Project", entityId: doc.projectId, url: doc.url, actorId: session.userId });
   return {};
 }

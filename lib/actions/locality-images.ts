@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireMutateSession } from "@/lib/auth/guard";
 import { deleteImageByPublicId, publicIdFromUrl, uploadImageFile } from "@/lib/cloudinary";
 import { prisma } from "@/lib/prisma";
+import { emit } from "@/lib/events";
 
 export interface LocalityImageActionState {
   error?: string;
@@ -16,7 +17,7 @@ export async function addLocalityImageAction(
   _prevState: LocalityImageActionState,
   formData: FormData
 ): Promise<LocalityImageActionState> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
 
   const files = formData.getAll("file").filter((f): f is File => f instanceof File && f.size > 0);
   if (files.length === 0) return { error: "Choose at least one image file to upload" };
@@ -40,13 +41,11 @@ export async function addLocalityImageAction(
       });
       nextSortOrder += 1;
       uploadedCount += 1;
+      await emit("MediaUploaded", { entityType: "Locality", entityId: locality.id, url: uploaded.url, kind: "gallery", actorId: session.userId });
     } catch (error) {
       errors.push(error instanceof Error ? error.message : "Upload failed");
     }
   }
-
-  revalidatePath(`/admin/localities/${locality.id}/edit`);
-  revalidatePath("/");
 
   if (uploadedCount === 0) return { error: errors[0] ?? "Upload failed" };
   if (errors.length > 0) return { success: true, uploadedCount, error: `${errors.length} file(s) failed to upload` };
@@ -54,7 +53,7 @@ export async function addLocalityImageAction(
 }
 
 export async function deleteLocalityImageAction(imageId: string): Promise<{ error?: string }> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
 
   const image = await prisma.localityImage.findUnique({ where: { id: imageId } });
   if (!image) return { error: "Image not found" };
@@ -69,7 +68,7 @@ export async function deleteLocalityImageAction(imageId: string): Promise<{ erro
   }
 
   await prisma.localityImage.delete({ where: { id: imageId } });
-  revalidatePath(`/admin/localities/${image.localityId}/edit`);
+  await emit("MediaDeleted", { entityType: "Locality", entityId: image.localityId, url: image.url, actorId: session.userId });
   return {};
 }
 

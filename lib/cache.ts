@@ -17,7 +17,11 @@ import { revalidatePath } from "next/cache";
  * ever added to a route, this is the one place that needs to stay correct.
  */
 
-const GLOBAL_PATHS = ["/", "/market-data", "/insights"] as const;
+// "/sitemap.xml" is a statically-generated route with a 1h ISR `revalidate`
+// (app/sitemap.ts) — without this, a publish/unpublish/trash wouldn't be
+// reflected there for up to an hour. Including it here means every catalog
+// mutation regenerates it immediately, the same as every other public page.
+const GLOBAL_PATHS = ["/", "/market-data", "/insights", "/sitemap.xml"] as const;
 
 function revalidateMany(paths: string[]) {
   for (const path of paths) revalidatePath(path);

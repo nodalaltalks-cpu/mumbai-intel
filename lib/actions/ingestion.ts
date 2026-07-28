@@ -9,7 +9,8 @@ import type { ProjectImportPayload } from "@/lib/ingestion/connectors/fileImport
 import { buildProjectData, type ProjectSchemaInput } from "@/lib/project-data";
 import { ensureUniqueSlug } from "@/lib/slug";
 import { logAudit } from "@/lib/audit";
-import { revalidateInfra, revalidateProject } from "@/lib/cache";
+import { revalidateInfra } from "@/lib/cache";
+import { emit } from "@/lib/events";
 import { friendlyPrismaError } from "./errors";
 import { DATA_SOURCES } from "@/lib/project-meta";
 import type { DataSource } from "@prisma/client";
@@ -72,17 +73,17 @@ export async function importProjectsFileAction(_prevState: IngestActionResult, f
   }
 }
 
-async function applyInfraAssetApproval(record: { targetId: string | null; payload: unknown; batchId: string }): Promise<void> {
+async function applyInfraAssetApproval(record: { targetId: string | null; payload: unknown; batchId: string }): Promise<string> {
   const payload = record.payload as unknown as InfraStagingPayload;
   if (record.targetId) {
     // Likely duplicate of an existing manually-curated row: link the sourceRef so future
     // syncs recognize it, without touching the curated fields an admin already verified.
     await prisma.infraAsset.update({ where: { id: record.targetId }, data: { sourceRef: payload.sourceRef } });
-    return;
+    return record.targetId;
   }
   const city = await prisma.city.findUnique({ where: { slug: PRIMARY_CITY_SLUG }, select: { id: true } });
   if (!city) throw new Error(`Primary city "${PRIMARY_CITY_SLUG}" is not seeded`);
-  await prisma.infraAsset.create({
+  const created = await prisma.infraAsset.create({
     data: {
       cityId: city.id,
       type: payload.type,
@@ -94,7 +95,9 @@ async function applyInfraAssetApproval(record: { targetId: string | null; payloa
       sourceRef: payload.sourceRef,
       ingestBatchId: record.batchId,
     },
+    select: { id: true },
   });
+  return created.id;
 }
 
 /** Builds the exact shape buildProjectData() (lib/actions/projects.ts) expects, from a stored ProjectImportPayload. */
@@ -143,13 +146,13 @@ function toProjectSchemaInput(payload: ProjectImportPayload): ProjectSchemaInput
   };
 }
 
-async function applyProjectApproval(record: { targetId: string | null; payload: unknown }): Promise<void> {
+async function applyProjectApproval(record: { targetId: string | null; payload: unknown }): Promise<string> {
   const payload = record.payload as unknown as ProjectImportPayload;
   const schemaInput = toProjectSchemaInput(payload);
 
   if (record.targetId) {
     await prisma.project.update({ where: { id: record.targetId }, data: buildProjectData(schemaInput) });
-    return;
+    return record.targetId;
   }
   const city = await prisma.city.findUnique({ where: { slug: PRIMARY_CITY_SLUG }, select: { id: true } });
   if (!city) throw new Error(`Primary city "${PRIMARY_CITY_SLUG}" is not seeded`);
@@ -157,7 +160,8 @@ async function applyProjectApproval(record: { targetId: string | null; payload: 
     const existing = await prisma.project.findUnique({ where: { slug: candidate } });
     return Boolean(existing);
   });
-  await prisma.project.create({ data: { slug, cityId: city.id, ...buildProjectData(schemaInput) } });
+  const created = await prisma.project.create({ data: { slug, cityId: city.id, ...buildProjectData(schemaInput) }, select: { id: true } });
+  return created.id;
 }
 
 /** Approves a pending IngestStagingRecord — creates or merges, per the record's entityType. */
@@ -169,10 +173,11 @@ export async function approveStagingRecordAction(id: string): Promise<IngestActi
   if (record.status !== "PENDING") return { error: "This record has already been reviewed" };
 
   try {
+    let entityId: string;
     if (record.entityType === "InfraAsset") {
-      await applyInfraAssetApproval(record);
+      entityId = await applyInfraAssetApproval(record);
     } else if (record.entityType === "Project") {
-      await applyProjectApproval(record);
+      entityId = await applyProjectApproval(record);
     } else {
       return { error: `Unsupported entity type "${record.entityType}"` };
     }
@@ -181,9 +186,7 @@ export async function approveStagingRecordAction(id: string): Promise<IngestActi
       where: { id },
       data: { status: "APPROVED", reviewedByUserId: session.userId, reviewedAt: new Date() },
     });
-    await logAudit(session.userId, "ingest.approve", "IngestStagingRecord", id);
-    revalidateInfra();
-    if (record.entityType === "Project") revalidateProject();
+    await emit("ReviewApproved", { stagingRecordId: id, entityType: record.entityType, entityId, actorId: session.userId });
     return {};
   } catch (error) {
     return { error: friendlyPrismaError(error) };
@@ -202,8 +205,7 @@ export async function rejectStagingRecordAction(id: string): Promise<IngestActio
     where: { id },
     data: { status: "REJECTED", reviewedByUserId: session.userId, reviewedAt: new Date() },
   });
-  await logAudit(session.userId, "ingest.reject", "IngestStagingRecord", id);
-  revalidateInfra();
+  await emit("ReviewRejected", { stagingRecordId: id, entityType: record.entityType, actorId: session.userId });
   return {};
 }
 

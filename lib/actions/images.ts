@@ -6,6 +6,7 @@ import { requireMutateSession } from "@/lib/auth/guard";
 import { deleteImageByPublicId, publicIdFromUrl, uploadImageFile } from "@/lib/cloudinary";
 import { prisma } from "@/lib/prisma";
 import { IMAGE_KINDS } from "@/lib/project-meta";
+import { emit } from "@/lib/events";
 
 export interface ImageActionState {
   error?: string;
@@ -23,7 +24,7 @@ export async function addProjectImageAction(
   _prevState: ImageActionState,
   formData: FormData
 ): Promise<ImageActionState> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
 
   const parsed = addImageSchema.safeParse({
     projectId: formData.get("projectId"),
@@ -67,14 +68,11 @@ export async function addProjectImageAction(
       });
       nextSortOrder += 1;
       uploadedCount += 1;
+      await emit("MediaUploaded", { entityType: "Project", entityId: project.id, url: uploaded.url, kind: parsed.data.kind, actorId: session.userId });
     } catch (error) {
       errors.push(error instanceof Error ? error.message : "Upload failed");
     }
   }
-
-  revalidatePath(`/admin/projects/${project.id}/edit`);
-  revalidatePath("/admin/images");
-  revalidatePath("/");
 
   if (uploadedCount === 0) return { error: errors[0] ?? "Upload failed" };
   if (errors.length > 0) return { success: true, uploadedCount, error: `${errors.length} file(s) failed to upload` };
@@ -113,7 +111,7 @@ export async function reorderProjectImageAction(
 }
 
 export async function deleteProjectImageAction(imageId: string): Promise<{ error?: string }> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
 
   const image = await prisma.projectImage.findUnique({
     where: { id: imageId },
@@ -132,8 +130,6 @@ export async function deleteProjectImageAction(imageId: string): Promise<{ error
 
   await prisma.projectImage.delete({ where: { id: imageId } });
 
-  revalidatePath(`/admin/projects/${image.project.id}/edit`);
-  revalidatePath("/admin/images");
-  revalidatePath("/");
+  await emit("MediaDeleted", { entityType: "Project", entityId: image.project.id, url: image.url, actorId: session.userId });
   return {};
 }

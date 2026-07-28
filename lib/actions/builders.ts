@@ -9,6 +9,7 @@ import { CONFIDENCE_LEVELS, DATA_SOURCES } from "@/lib/project-meta";
 import { ensureUniqueSlug, slugify } from "@/lib/slug";
 import { deleteImageByPublicId, publicIdFromUrl } from "@/lib/cloudinary";
 import { logAudit } from "@/lib/audit";
+import { emit } from "@/lib/events";
 import { friendlyPrismaError } from "./errors";
 
 const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefined ? undefined : v);
@@ -96,7 +97,8 @@ async function deleteBuilderMediaAssets(
   builderId: string,
   logoUrl: string | null,
   coverImageUrl: string | null,
-  galleryUrls: string[]
+  galleryUrls: string[],
+  actorId: string | null
 ): Promise<void> {
   const urls = [logoUrl, coverImageUrl, ...galleryUrls].filter((url): url is string => Boolean(url));
   for (const url of urls) {
@@ -104,6 +106,7 @@ async function deleteBuilderMediaAssets(
     if (!publicId) continue;
     try {
       await deleteImageByPublicId(publicId);
+      await emit("MediaDeleted", { entityType: "Builder", entityId: builderId, url, actorId });
     } catch (error) {
       console.error(`[builders] failed to delete Cloudinary asset "${publicId}" for builder ${builderId}:`, error);
     }
@@ -219,8 +222,7 @@ export async function updateBuilderAction(
 
   await syncBuilderAmenities(builderId, amenityIds);
 
-  await logAudit(session.userId, "builder.update", "Builder", builderId, { before: existing, after: nextData });
-  revalidateBuilder({ id: builderId, slug });
+  await emit("BuilderUpdated", { builderId, slug, actorId: session.userId, before: existing, after: nextData });
   redirect("/admin/builders?saved=1");
 }
 
@@ -274,7 +276,7 @@ export async function permanentlyDeleteBuilderAction(builderId: string): Promise
     return { error: friendlyPrismaError(error) };
   }
 
-  await deleteBuilderMediaAssets(builderId, existing.logoUrl, existing.coverImageUrl, existing.images.map((i) => i.url));
+  await deleteBuilderMediaAssets(builderId, existing.logoUrl, existing.coverImageUrl, existing.images.map((i) => i.url), session.userId);
 
   await logAudit(session.userId, "builder.permanent-delete", "Builder", builderId);
   revalidateBuilder();
@@ -292,7 +294,7 @@ export async function emptyBuilderTrashAction(): Promise<{ error?: string; affec
   const result = await prisma.builder.deleteMany({ where: { deletedAt: { not: null } } });
 
   for (const b of trashed) {
-    await deleteBuilderMediaAssets(b.id, b.logoUrl, b.coverImageUrl, b.images.map((i) => i.url));
+    await deleteBuilderMediaAssets(b.id, b.logoUrl, b.coverImageUrl, b.images.map((i) => i.url), session.userId);
   }
 
   await logAudit(session.userId, "builder.trash.empty", "Builder", "*");
@@ -410,7 +412,7 @@ export async function bulkBuilderAction(
       });
       for (const b of trashed) {
         await prisma.builder.delete({ where: { id: b.id } });
-        await deleteBuilderMediaAssets(b.id, b.logoUrl, b.coverImageUrl, b.images.map((i) => i.url));
+        await deleteBuilderMediaAssets(b.id, b.logoUrl, b.coverImageUrl, b.images.map((i) => i.url), session.userId);
       }
       affected = trashed.length;
     }

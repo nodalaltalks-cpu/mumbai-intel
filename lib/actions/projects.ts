@@ -10,6 +10,7 @@ import { PRIMARY_CITY_SLUG } from "@/lib/queries";
 import { ensureUniqueSlug, slugify } from "@/lib/slug";
 import { deleteDocumentByPublicId, deleteImageByPublicId, documentPublicIdFromUrl, publicIdFromUrl } from "@/lib/cloudinary";
 import { logAudit } from "@/lib/audit";
+import { emit } from "@/lib/events";
 import { syncProjectNearbyInfra } from "@/lib/infra-linking";
 import { buildProjectData, parseHighlights, parseProjectForm, toPaise } from "@/lib/project-data";
 import { friendlyPrismaError } from "./errors";
@@ -61,13 +62,15 @@ async function fetchProjectMediaRefs(projectId: string) {
  */
 async function deleteProjectMediaAssets(
   projectId: string,
-  refs: { imageUrls: string[]; documentUrls: string[]; brochureUrl: string | null }
+  refs: { imageUrls: string[]; documentUrls: string[]; brochureUrl: string | null },
+  actorId: string | null
 ): Promise<void> {
   for (const url of refs.imageUrls) {
     const publicId = publicIdFromUrl(url);
     if (!publicId) continue;
     try {
       await deleteImageByPublicId(publicId);
+      await emit("MediaDeleted", { entityType: "Project", entityId: projectId, url, actorId });
     } catch (error) {
       console.error(`[projects] failed to delete Cloudinary image "${publicId}" for project ${projectId}:`, error);
     }
@@ -79,6 +82,7 @@ async function deleteProjectMediaAssets(
     if (!publicId) continue;
     try {
       await deleteDocumentByPublicId(publicId);
+      await emit("MediaDeleted", { entityType: "Project", entityId: projectId, url, actorId });
     } catch (error) {
       console.error(`[projects] failed to delete Cloudinary document "${publicId}" for project ${projectId}:`, error);
     }
@@ -120,8 +124,7 @@ export async function createProjectAction(
   if (amenityIds.length > 0) await syncProjectAmenities(projectId, amenityIds);
   await syncProjectNearbyInfra(projectId);
 
-  await logAudit(session.userId, "project.create", "Project", projectId);
-  revalidateProject({ id: projectId, slug });
+  await emit("ProjectCreated", { projectId, slug, actorId: session.userId });
   redirect(`/admin/projects/${projectId}/edit?created=1`);
 }
 
@@ -168,8 +171,7 @@ export async function updateProjectAction(
   await syncProjectAmenities(projectId, amenityIds);
   await syncProjectNearbyInfra(projectId);
 
-  await logAudit(session.userId, "project.update", "Project", projectId, { before: existing, after: nextData });
-  revalidateProject({ id: projectId, slug });
+  await emit("ProjectUpdated", { projectId, slug, actorId: session.userId, before: existing, after: nextData });
   redirect(`/admin/projects/${projectId}/edit?saved=1`);
 }
 
@@ -237,8 +239,12 @@ export async function autosaveProjectAction(projectId: string, formData: FormDat
 export async function togglePublishAction(projectId: string, nextValue: boolean): Promise<void> {
   const session = await requireAdminSession();
   const updated = await prisma.project.update({ where: { id: projectId }, data: { isPublished: nextValue }, select: { slug: true } });
-  await logAudit(session.userId, nextValue ? "project.publish" : "project.unpublish", "Project", projectId);
-  revalidateProject({ id: projectId, slug: updated.slug });
+  if (nextValue) {
+    await emit("ProjectPublished", { projectId, slug: updated.slug, actorId: session.userId });
+  } else {
+    await logAudit(session.userId, "project.unpublish", "Project", projectId);
+    revalidateProject({ id: projectId, slug: updated.slug });
+  }
 }
 
 export async function toggleFeaturedAction(projectId: string, nextValue: boolean): Promise<void> {
@@ -376,8 +382,7 @@ export async function deleteProjectAction(projectId: string): Promise<{ error?: 
     return { error: friendlyPrismaError(error) };
   }
 
-  await logAudit(session.userId, "project.trash", "Project", projectId);
-  revalidateProject({ id: projectId, slug: existing.slug });
+  await emit("ProjectDeleted", { projectId, slug: existing.slug, actorId: session.userId });
   return {};
 }
 
@@ -416,7 +421,7 @@ export async function permanentlyDeleteProjectAction(projectId: string): Promise
     return { error: friendlyPrismaError(error) };
   }
 
-  await deleteProjectMediaAssets(projectId, mediaRefs);
+  await deleteProjectMediaAssets(projectId, mediaRefs, session.userId);
 
   await logAudit(session.userId, "project.permanent-delete", "Project", projectId);
   revalidateProject();
@@ -466,7 +471,7 @@ export async function bulkProjectAction(
       for (const p of trashed) {
         const mediaRefs = await fetchProjectMediaRefs(p.id);
         await prisma.project.delete({ where: { id: p.id } });
-        await deleteProjectMediaAssets(p.id, mediaRefs);
+        await deleteProjectMediaAssets(p.id, mediaRefs, session.userId);
       }
       affected = trashed.length;
     }
@@ -487,7 +492,7 @@ export async function emptyProjectTrashAction(): Promise<{ error?: string; affec
   for (const p of trashed) {
     const mediaRefs = await fetchProjectMediaRefs(p.id);
     await prisma.project.delete({ where: { id: p.id } });
-    await deleteProjectMediaAssets(p.id, mediaRefs);
+    await deleteProjectMediaAssets(p.id, mediaRefs, session.userId);
   }
 
   await logAudit(session.userId, "project.trash.empty", "Project", "*");
