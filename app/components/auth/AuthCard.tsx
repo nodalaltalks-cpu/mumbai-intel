@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 /**
  * The public auth pages are deliberately light and refined — a clean,
  * customer-facing sign-in experience that sits comfortably inside the same
- * premium Mumbai Intel design system as the rest of the application.
+ * premium NoDalalTalks design system as the rest of the application.
  */
 export default function AuthCard({
   eyebrow,

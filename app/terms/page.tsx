@@ -3,8 +3,8 @@ import LegalPageShell from "@/app/components/LegalPageShell";
 import { formatDate } from "@/lib/format";
 
 export const metadata: Metadata = {
-  title: "Terms of Service — Mumbai Intel",
-  description: "The terms governing use of the Mumbai Intel real estate market intelligence platform.",
+  title: "Terms of Service — NoDalalTalks",
+  description: "The terms governing use of the NoDalalTalks real estate market intelligence platform.",
 };
 
 export default function TermsPage() {
@@ -12,13 +12,13 @@ export default function TermsPage() {
     <LegalPageShell title="Terms of Service" subtitle={`Last updated ${formatDate(new Date("2026-07-01"))}`}>
       <h2>1. Acceptance of terms</h2>
       <p>
-        By accessing or using Mumbai Intel (the &quot;Service&quot;), you agree to be bound by these Terms of Service. If
+        By accessing or using NoDalalTalks (the &quot;Service&quot;), you agree to be bound by these Terms of Service. If
         you do not agree, do not use the Service.
       </p>
 
       <h2>2. What the Service is</h2>
       <p>
-        Mumbai Intel is an informational real estate market intelligence platform. It provides data and analysis on
+        NoDalalTalks is an informational real estate market intelligence platform. It provides data and analysis on
         residential and commercial projects, builders, localities and property transactions in Mumbai. It is{" "}
         <strong>not</strong> a real estate brokerage, listing marketplace, or transaction facilitator, and it does not
         arrange, negotiate, or execute property transactions.
@@ -63,7 +63,7 @@ export default function TermsPage() {
       <h2>8. Disclaimer of warranties &amp; limitation of liability</h2>
       <p>
         The Service is provided &quot;as is&quot; without warranties of any kind, express or implied. To the maximum
-        extent permitted by law, Mumbai Intel is not liable for any indirect, incidental, or consequential damages
+        extent permitted by law, NoDalalTalks is not liable for any indirect, incidental, or consequential damages
         arising from use of the Service or reliance on its data.
       </p>
 

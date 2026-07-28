@@ -3,7 +3,7 @@ import Link from "next/link";
 import AuthCard from "@/app/components/auth/AuthCard";
 import LoginForm from "./LoginForm";
 
-export const metadata: Metadata = { title: "Sign in — Mumbai Intel" };
+export const metadata: Metadata = { title: "Sign in — NoDalalTalks" };
 export const dynamic = "force-dynamic";
 
 const GOOGLE_ERROR_MESSAGES: Record<string, string> = {

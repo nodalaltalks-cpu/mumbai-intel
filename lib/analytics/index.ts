@@ -1,6 +1,6 @@
 /**
  * The Analytics Engine — the ONLY place statistics, scores and rankings are
- * calculated anywhere in Mumbai Intel. Pages and query functions fetch rows
+ * calculated anywhere in NoDalalTalks. Pages and query functions fetch rows
  * from Postgres (the repository concern) and pass them here (the business
  * logic concern); nothing ever computes a median, average, or score inline.
  */

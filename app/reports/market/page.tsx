@@ -27,7 +27,7 @@ import { recordRecentViewAction } from "@/lib/actions/recent-views";
 import { MARKET_REPORT_ENTITY_ID } from "@/lib/queries/dashboard";
 
 export const metadata: Metadata = {
-  title: "Market Report — Mumbai Intel",
+  title: "Market Report — NoDalalTalks",
   description: "City-wide Mumbai real estate KPIs, price trends, and trending-area rankings.",
 };
 export const dynamic = "force-dynamic";

@@ -31,9 +31,9 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const builder = await getPublicBuilderBySlug(slug);
-  if (!builder) return { title: "Developer report not found — Mumbai Intel" };
+  if (!builder) return { title: "Developer report not found — NoDalalTalks" };
   return {
-    title: `${builder.name} Developer Report — Mumbai Intel`,
+    title: `${builder.name} Developer Report — NoDalalTalks`,
     description: `Portfolio breakdown, delivery track record and market presence for ${builder.name}.`,
     alternates: { canonical: `/builders/${builder.slug}` },
   };

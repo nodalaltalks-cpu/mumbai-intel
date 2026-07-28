@@ -3,8 +3,8 @@ import LegalPageShell from "@/app/components/LegalPageShell";
 import { formatDate } from "@/lib/format";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — Mumbai Intel",
-  description: "How Mumbai Intel collects, uses, and protects your account data.",
+  title: "Privacy Policy — NoDalalTalks",
+  description: "How NoDalalTalks collects, uses, and protects your account data.",
 };
 
 export default function PrivacyPage() {

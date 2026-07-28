@@ -3,8 +3,8 @@ import LegalPageShell from "@/app/components/LegalPageShell";
 import { formatDate } from "@/lib/format";
 
 export const metadata: Metadata = {
-  title: "Disclaimer — Mumbai Intel",
-  description: "Mumbai Intel provides real estate market information for informational purposes only — not financial, legal, or investment advice.",
+  title: "Disclaimer — NoDalalTalks",
+  description: "NoDalalTalks provides real estate market information for informational purposes only — not financial, legal, or investment advice.",
 };
 
 export default function DisclaimerPage() {
@@ -12,7 +12,7 @@ export default function DisclaimerPage() {
     <LegalPageShell title="Disclaimer" subtitle={`Last updated ${formatDate(new Date("2026-07-01"))}`}>
       <h2>Not financial, legal or investment advice</h2>
       <p>
-        Mumbai Intel provides real estate market information — pricing, project status, transaction history, and
+        NoDalalTalks provides real estate market information — pricing, project status, transaction history, and
         derived analytics — for general informational purposes only. Nothing on this platform constitutes financial,
         legal, tax, or investment advice, and it should not be relied upon as the sole basis for any property
         transaction or investment decision.
@@ -40,7 +40,7 @@ export default function DisclaimerPage() {
 
       <h2>No liability</h2>
       <p>
-        To the maximum extent permitted by law, Mumbai Intel and its operators are not liable for any loss or damage
+        To the maximum extent permitted by law, NoDalalTalks and its operators are not liable for any loss or damage
         arising from reliance on information provided through the Service.
       </p>
     </LegalPageShell>

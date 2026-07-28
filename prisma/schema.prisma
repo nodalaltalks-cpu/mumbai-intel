@@ -450,7 +450,19 @@ model Project {
   isTrending    Boolean @default(false)
   isLuxury      Boolean @default(false)
   isAffordable  Boolean @default(false)
-  brochureUrl   String?
+  /// Current brochure — mirrors the latest row in `brochureVersions` for
+  /// cheap reads on the public project page (no join needed to show/hide the
+  /// Download Brochure button or its filename). `brochureVersions` is the
+  /// source of truth for history; these fields are a denormalized "current
+  /// pointer" onto it, updated together on every upload/replace/delete.
+  brochureUrl        String?
+  brochureFileName   String?
+  brochureFileSize   Int?
+  brochureMimeType   String?
+  brochureUploadedAt DateTime?
+  brochureUploadedBy String?
+  brochureVersion    Int      @default(0)
+  brochureVersions   ProjectBrochureVersion[]
 
   /// Short bullet differentiators ("5 min to metro", "Sea-facing") shown near
   /// the top of the detail page. Order-preserving list, not a relation — no
@@ -527,6 +539,28 @@ model ProjectDocument {
   createdAt DateTime @default(now())
 
   @@index([projectId, sortOrder])
+}
+
+/// Brochure version history — a lightweight change-log (view-only, same
+/// pattern as AuditLog's before/after diffs used elsewhere), NOT a rollback
+/// mechanism. Each upload/replace creates a new row here; the Cloudinary
+/// asset a row points to is never deleted on replace (only an explicit
+/// "Delete brochure" removes the current file), so older rows keep working
+/// download links even after the current brochure changes.
+model ProjectBrochureVersion {
+  id               String   @id @default(cuid())
+  projectId        String
+  project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version          Int
+  url              String
+  fileName         String
+  fileSize         Int
+  mimeType         String
+  uploadedAt       DateTime @default(now())
+  uploadedByUserId String?
+
+  @@unique([projectId, version])
+  @@index([projectId, version])
 }
 
 /// Construction-progress milestones shown on the detail page timeline —
@@ -1134,6 +1168,6 @@ model NotificationPreferences {
 // ═══════════════════════════════════════════════════════════════════════════
 // END OF SCHEMA
 // If this comment is missing from your copy, the file was truncated during
-// download. Complete file: 10 enums + 45 models, ending with NotificationPreferences.
-// Verify with:  grep -c '^model ' prisma/schema.prisma   → must print 45
+// download. Complete file: 10 enums + 46 models, ending with NotificationPreferences.
+// Verify with:  grep -c '^model ' prisma/schema.prisma   → must print 46
 // ═══════════════════════════════════════════════════════════════════════════

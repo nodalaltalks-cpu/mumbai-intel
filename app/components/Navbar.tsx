@@ -35,7 +35,7 @@ export default async function Navbar() {
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
         <Link href="/" className="flex items-center gap-2">
           <span className="font-mono text-sm font-bold tracking-widest text-foreground">
-            MUMBAI<span className="text-accent">INTEL</span>
+            NODALAL<span className="text-accent">TALKS</span>
           </span>
           <span className="hidden items-center gap-1 rounded-sm border border-positive/30 px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wide text-positive sm:flex">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-positive" />

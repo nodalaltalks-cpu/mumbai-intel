@@ -4,13 +4,13 @@ import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 
 export const metadata: Metadata = {
-  title: "FAQ — Mumbai Intel",
-  description: "Answers to common questions about Mumbai Intel's data sources, accounts, and how to use the platform.",
+  title: "FAQ — NoDalalTalks",
+  description: "Answers to common questions about NoDalalTalks's data sources, accounts, and how to use the platform.",
 };
 
 const FAQS: { question: string; answer: string }[] = [
   {
-    question: "What is Mumbai Intel?",
+    question: "What is NoDalalTalks?",
     answer:
       "A real estate market intelligence platform for Mumbai — project, builder and locality profiles, a registered-transaction database, and market analytics — where every figure is tagged with where it came from.",
   },
@@ -25,9 +25,9 @@ const FAQS: { question: string; answer: string }[] = [
       "Today, transaction records are curated manually by our analysts from available public records and deal information. The platform is built to later ingest data automatically from official government registries without changing how existing records look or work.",
   },
   {
-    question: "Is Mumbai Intel a brokerage or does it facilitate transactions?",
+    question: "Is NoDalalTalks a brokerage or does it facilitate transactions?",
     answer:
-      "No. Mumbai Intel is an information and analytics platform only. We don't list properties for sale, broker deals, or take commissions. See our Disclaimer for details.",
+      "No. NoDalalTalks is an information and analytics platform only. We don't list properties for sale, broker deals, or take commissions. See our Disclaimer for details.",
   },
   {
     question: "Do I need an account to browse the site?",

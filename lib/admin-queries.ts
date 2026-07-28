@@ -1087,6 +1087,45 @@ export async function getAuditHistory(entityType: string, entityId: string, limi
   );
 }
 
+export interface BrochureVersionItem {
+  id: string;
+  version: number;
+  fileName: string;
+  fileSize: number;
+  uploadedAt: Date;
+  uploadedByName: string | null;
+  url: string;
+  isCurrent: boolean;
+}
+
+/** Brochure version history for the admin edit page — same "view-only change-log" shape as getAuditHistory. */
+export async function getBrochureVersions(projectId: string): Promise<BrochureVersionItem[]> {
+  return safeQuery("getBrochureVersions", [], async () => {
+    const [versions, project] = await Promise.all([
+      prisma.projectBrochureVersion.findMany({ where: { projectId }, orderBy: { version: "desc" } }),
+      prisma.project.findUnique({ where: { id: projectId }, select: { brochureVersion: true } }),
+    ]);
+    if (versions.length === 0) return [];
+
+    const uploaderIds = [...new Set(versions.map((v) => v.uploadedByUserId).filter((id): id is string => id !== null))];
+    const uploaders = uploaderIds.length
+      ? await prisma.user.findMany({ where: { id: { in: uploaderIds } }, select: { id: true, name: true, email: true } })
+      : [];
+    const uploaderById = new Map(uploaders.map((u) => [u.id, u.name ?? u.email]));
+
+    return versions.map((v) => ({
+      id: v.id,
+      version: v.version,
+      fileName: v.fileName,
+      fileSize: v.fileSize,
+      uploadedAt: v.uploadedAt,
+      uploadedByName: v.uploadedByUserId ? (uploaderById.get(v.uploadedByUserId) ?? null) : null,
+      url: v.url,
+      isCurrent: v.version === project?.brochureVersion,
+    }));
+  });
+}
+
 export async function getUserForEdit(id: string) {
   return safeQuery("getUserForEdit", null, () =>
     prisma.user.findUnique({ where: { id }, select: { id: true, email: true, name: true, role: true, isActive: true } })

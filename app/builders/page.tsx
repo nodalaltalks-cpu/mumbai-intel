@@ -8,7 +8,7 @@ import Pagination from "@/app/admin/components/Pagination";
 import EmptyState from "@/app/components/ui/EmptyState";
 
 export const metadata: Metadata = {
-  title: "Developers — Mumbai Intel",
+  title: "Developers — NoDalalTalks",
   description: "Browse Mumbai real estate developers with track record, portfolio and trust-score data.",
   alternates: { canonical: "/builders" },
 };

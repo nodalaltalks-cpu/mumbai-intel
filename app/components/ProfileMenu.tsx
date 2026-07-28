@@ -46,7 +46,7 @@ export default function ProfileMenu({ user }: { user: NavbarPublicUser }) {
       {open ? (
         <div className="mi-pop-in absolute right-0 top-full z-50 mt-2 w-56 origin-top-right overflow-hidden rounded-sm border border-border bg-surface shadow-2xl">
           <div className="border-b border-border px-3 py-2.5">
-            <p className="truncate text-xs font-semibold text-foreground">{user.name ?? "Mumbai Intel user"}</p>
+            <p className="truncate text-xs font-semibold text-foreground">{user.name ?? "NoDalalTalks user"}</p>
             <p className="truncate text-[11px] text-muted">{user.email}</p>
           </div>
           <div className="flex flex-col p-1.5">

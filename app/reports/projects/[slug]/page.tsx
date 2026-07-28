@@ -35,9 +35,9 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const project = await getPublicProjectBySlug(slug);
-  if (!project) return { title: "Project report not found — Mumbai Intel" };
+  if (!project) return { title: "Project report not found — NoDalalTalks" };
   return {
-    title: `${project.name} Project Report — Mumbai Intel`,
+    title: `${project.name} Project Report — NoDalalTalks`,
     description: `KPIs, price trends and transaction analysis for ${project.name}.`,
     alternates: { canonical: `/projects/${project.slug}` },
   };

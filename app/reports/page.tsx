@@ -7,7 +7,7 @@ import Footer from "@/app/components/Footer";
 import SectionHeading from "@/app/components/ui/SectionHeading";
 
 export const metadata: Metadata = {
-  title: "Reports — Mumbai Intel",
+  title: "Reports — NoDalalTalks",
   description: "Market and transaction reports covering Mumbai real estate activity, pricing and trends.",
 };
 export const dynamic = "force-dynamic";

@@ -2,22 +2,31 @@ import type { Metadata } from "next";
 import LegalPageShell from "@/app/components/LegalPageShell";
 
 export const metadata: Metadata = {
-  title: "About — Mumbai Intel",
-  description: "Mumbai Intel is a real estate market intelligence platform for Mumbai — every price, project and locality figure tagged with its data source and confidence level.",
+  title: "About — NoDalalTalks",
+  description: "NoDalalTalks is a real estate research intelligence platform for Mumbai — zero spam calls, zero brokerage, every price, project and locality figure tagged with its data source and confidence level.",
 };
 
 export default function AboutPage() {
   return (
-    <LegalPageShell title="About Mumbai Intel" subtitle="Real estate market intelligence for Mumbai, built on provenance.">
+    <LegalPageShell title="About NoDalalTalks" subtitle="Real estate research intelligence for Mumbai — no brokerage, no spam calls.">
       <p>
-        Mumbai Intel is a real estate market intelligence platform covering Mumbai&apos;s residential and commercial
-        project landscape — developers, localities, live inventory, and registered transactions, all in one place.
+        NoDalalTalks is a real estate research intelligence platform covering Mumbai&apos;s residential and commercial
+        project landscape — developers, localities, live inventory, and registered transactions, all in one place, so
+        you can research a project before anyone tries to sell it to you.
+      </p>
+
+      <h2>What we are — and what we&apos;re not</h2>
+      <p>
+        We do not sell properties. We do not operate as brokers. We do not spam users with sales calls or share your
+        number with developers. NoDalalTalks exists to help buyers research projects — verified pricing, builder
+        track records, locality data and registered transactions — before making a decision, not to generate leads
+        for anyone.
       </p>
 
       <h2>Why provenance is the whole point</h2>
       <p>
         Most property listing sites blend verified facts, builder marketing copy, and rough estimates into a single
-        undifferentiated feed. Mumbai Intel doesn&apos;t. Every figure on this platform — a price, a possession date, a
+        undifferentiated feed. NoDalalTalks doesn&apos;t. Every figure on this platform — a price, a possession date, a
         builder&apos;s track record, a locality&apos;s growth rate — carries a visible data source (government records,
         builder-supplied information, analyst verification, AI estimate, or community submission) and a confidence
         level. Nothing renders on screen whose origin can&apos;t be named.

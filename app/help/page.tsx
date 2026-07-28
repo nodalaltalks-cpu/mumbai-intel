@@ -3,13 +3,13 @@ import Link from "next/link";
 import LegalPageShell from "@/app/components/LegalPageShell";
 
 export const metadata: Metadata = {
-  title: "Help Center — Mumbai Intel",
-  description: "Guides for searching, filtering, reading data-source tags, and getting the most out of Mumbai Intel.",
+  title: "Help Center — NoDalalTalks",
+  description: "Guides for searching, filtering, reading data-source tags, and getting the most out of NoDalalTalks.",
 };
 
 export default function HelpCenterPage() {
   return (
-    <LegalPageShell title="Help Center" subtitle="Guides for getting the most out of Mumbai Intel.">
+    <LegalPageShell title="Help Center" subtitle="Guides for getting the most out of NoDalalTalks.">
       <h2>Finding a project, builder or locality</h2>
       <p>
         Use the search bar in the navigation to jump straight to a project, builder or locality by name. To browse and

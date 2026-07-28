@@ -12,7 +12,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
     <html lang="en">
       <body style={{ background: "#fafafa", color: "#18181b", fontFamily: "sans-serif" }}>
         <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, textAlign: "center", padding: 16 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 600 }}>Mumbai Intel is temporarily unavailable</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 600 }}>NoDalalTalks is temporarily unavailable</h1>
           <p style={{ maxWidth: 360, fontSize: 14, color: "#71717a" }}>Something went wrong loading the application. Please try again.</p>
           <button
             type="button"

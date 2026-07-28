@@ -66,18 +66,19 @@ export async function deleteImageByPublicId(publicId: string): Promise<void> {
 const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024; // 15MB
 const ALLOWED_DOCUMENT_TYPES = new Set(["application/pdf"]);
 
-/** Uploads a PDF (brochure, floor-plan sheet, …) as a Cloudinary raw asset. */
+/** Uploads a PDF (brochure, floor-plan sheet, …) as a Cloudinary raw asset. `maxBytes` lets callers (e.g. brochure uploads) enforce their own configurable limit instead of the 15MB default. */
 export async function uploadDocumentFile(
   file: File,
-  folder: string
+  folder: string,
+  maxBytes: number = MAX_DOCUMENT_BYTES
 ): Promise<{ url: string; publicId: string; bytes: number }> {
   ensureConfigured();
 
   if (!ALLOWED_DOCUMENT_TYPES.has(file.type)) {
     throw new Error(`Unsupported document type "${file.type}". Only PDF is allowed.`);
   }
-  if (file.size > MAX_DOCUMENT_BYTES) {
-    throw new Error("Document is too large. Maximum size is 15MB.");
+  if (file.size > maxBytes) {
+    throw new Error(`Document is too large. Maximum size is ${Math.round(maxBytes / (1024 * 1024))}MB.`);
   }
 
   const arrayBuffer = await file.arrayBuffer();
@@ -118,4 +119,16 @@ export function publicIdFromUrl(url: string): string | null {
 export function documentPublicIdFromUrl(url: string): string | null {
   const match = url.match(/\/upload\/(?:v\d+\/)?(.+)$/);
   return match ? match[1] : null;
+}
+
+/**
+ * Inserts Cloudinary's `fl_attachment` delivery flag so the browser performs
+ * a real file download (Content-Disposition: attachment) instead of
+ * navigating to/rendering the PDF inline — used for the public "Download
+ * Brochure" button. Falls back to the original URL if it doesn't match the
+ * expected `/upload/` shape (still works, just opens inline instead).
+ */
+export function toDocumentDownloadUrl(url: string, downloadFileName?: string): string {
+  const flag = downloadFileName ? `fl_attachment:${encodeURIComponent(downloadFileName.replace(/\.[^.]+$/, ""))}` : "fl_attachment";
+  return url.replace("/upload/", `/upload/${flag}/`);
 }

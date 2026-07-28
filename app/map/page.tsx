@@ -4,7 +4,7 @@ import Navbar from "@/app/components/Navbar";
 import MapExplorer from "@/app/components/map/MapExplorer";
 
 export const metadata: Metadata = {
-  title: "Map — Mumbai Intel",
+  title: "Map — NoDalalTalks",
   description: "Explore Mumbai real estate projects, builders and localities on an interactive map with price, status and location filters.",
 };
 export const dynamic = "force-dynamic";

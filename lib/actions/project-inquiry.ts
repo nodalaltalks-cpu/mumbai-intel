@@ -19,7 +19,7 @@ export interface ProjectInquiryFormState {
   success?: string;
 }
 
-/** "Contact Developer" — routed to Mumbai Intel's own inbox (CONTACT_EMAIL), not the builder directly, since no verified builder email/phone is on file in the schema today. Same rate-limit pattern as submitContactMessageAction. */
+/** "Contact Developer" — routed to NoDalalTalks's own inbox (CONTACT_EMAIL), not the builder directly, since no verified builder email/phone is on file in the schema today. Same rate-limit pattern as submitContactMessageAction. */
 export async function submitProjectInquiryAction(_prevState: ProjectInquiryFormState, formData: FormData): Promise<ProjectInquiryFormState> {
   const ip = await getClientIp();
   const limit = checkRateLimit(`project-inquiry:${ip}`, 5, 60 * 15);

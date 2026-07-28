@@ -3,7 +3,7 @@ import Link from "next/link";
 import AuthCard from "@/app/components/auth/AuthCard";
 import SignupForm from "./SignupForm";
 
-export const metadata: Metadata = { title: "Create your account — Mumbai Intel" };
+export const metadata: Metadata = { title: "Create your account — NoDalalTalks" };
 export const dynamic = "force-dynamic";
 
 export default function SignupPage() {

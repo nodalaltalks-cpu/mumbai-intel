@@ -4,8 +4,8 @@ import Footer from "@/app/components/Footer";
 import ContactForm from "./ContactForm";
 
 export const metadata: Metadata = {
-  title: "Contact — Mumbai Intel",
-  description: "Get in touch with Mumbai Intel — questions, data corrections, and partnership inquiries.",
+  title: "Contact — NoDalalTalks",
+  description: "Get in touch with NoDalalTalks — questions, data corrections, and partnership inquiries.",
 };
 
 export default function ContactPage() {

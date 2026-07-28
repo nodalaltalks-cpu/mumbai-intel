@@ -8,7 +8,7 @@ export default async function NewestDevelopers() {
 
   return (
     <section className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
-      <SectionHeading title="Newest Developers" subtitle="Most recently added to Mumbai Intel" viewAllHref="/builders?sort=updated_desc" />
+      <SectionHeading title="Newest Developers" subtitle="Most recently added to NoDalalTalks" viewAllHref="/builders?sort=updated_desc" />
 
       {builders.length === 0 ? (
         <EmptyState title="No developers added yet" message="Newly added developers will appear here." />

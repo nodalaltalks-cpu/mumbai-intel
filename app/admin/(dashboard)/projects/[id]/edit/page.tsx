@@ -1,7 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getAmenities, getAuditHistory, getBuildersForSelect, getInfraAssetsForCity, getLocalitiesForSelect, getProjectForEdit } from "@/lib/admin-queries";
+import { getAmenities, getAuditHistory, getBrochureVersions, getBuildersForSelect, getInfraAssetsForCity, getLocalitiesForSelect, getProjectForEdit } from "@/lib/admin-queries";
+import { requireSession } from "@/lib/auth/guard";
 import AuditHistory from "@/app/admin/components/AuditHistory";
 import BrochureUploader from "@/app/admin/components/BrochureUploader";
 import FlashMessage from "@/app/admin/components/FlashMessage";
@@ -28,14 +29,16 @@ export default async function EditProjectPage({
 }) {
   const { id } = await params;
   const query = await searchParams;
+  const session = await requireSession();
 
-  const [project, localities, builders, amenities, infraOptions, history] = await Promise.all([
+  const [project, localities, builders, amenities, infraOptions, history, brochureVersions] = await Promise.all([
     getProjectForEdit(id),
     getLocalitiesForSelect(),
     getBuildersForSelect(),
     getAmenities(),
     getInfraAssetsForCity(),
     getAuditHistory("Project", id),
+    getBrochureVersions(id),
   ]);
 
   if (!project) notFound();
@@ -73,7 +76,16 @@ export default async function EditProjectPage({
 
       <DocumentsManager projectId={project.id} documents={project.documents} />
 
-      <BrochureUploader projectId={project.id} brochureUrl={project.brochureUrl} />
+      <BrochureUploader
+        projectId={project.id}
+        brochureUrl={project.brochureUrl}
+        brochureFileName={project.brochureFileName}
+        brochureFileSize={project.brochureFileSize}
+        brochureUploadedAt={project.brochureUploadedAt}
+        versions={brochureVersions}
+        isAdmin={session.role === "ADMIN"}
+        maxSizeMB={Math.round(Number(process.env.BROCHURE_MAX_SIZE_MB || 15))}
+      />
 
       <AuditHistory logs={history} />
     </div>

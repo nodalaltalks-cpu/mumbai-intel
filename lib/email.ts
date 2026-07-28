@@ -60,14 +60,14 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string, expir
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;margin:0 auto;">
         <tr>
           <td style="text-align:center;padding-bottom:28px;">
-            <span style="font-size:20px;font-weight:600;letter-spacing:-0.02em;color:#18181b;">Mumbai<span style="color:#4f46e5;">Intel</span></span>
+            <span style="font-size:20px;font-weight:600;letter-spacing:-0.02em;color:#18181b;">NoDalal<span style="color:#4f46e5;">Talks</span></span>
           </td>
         </tr>
         <tr>
           <td style="background:#ffffff;border:1px solid #e4e4e7;border-radius:16px;padding:36px 32px;">
             <h1 style="margin:0 0 12px;font-size:20px;line-height:1.3;font-weight:600;color:#18181b;">Reset your password</h1>
             <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#52525b;">
-              We received a request to reset the password for your Mumbai Intel account. Click the button below to choose a new one.
+              We received a request to reset the password for your NoDalalTalks account. Click the button below to choose a new one.
             </p>
             <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
               <tr>
@@ -89,14 +89,14 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string, expir
         </tr>
         <tr>
           <td style="text-align:center;padding-top:24px;font-size:12px;color:#a1a1aa;">
-            Mumbai Intel — Real Estate Intelligence
+            NoDalalTalks — Real Estate Intelligence
           </td>
         </tr>
       </table>
     </div>
   `;
 
-  await sendEmail({ to, subject: "Reset your Mumbai Intel password", html });
+  await sendEmail({ to, subject: "Reset your NoDalalTalks password", html });
 }
 
 /** Newsletter signups aren't persisted to a table today — this forwards the address the same way the contact form does, to the site's own inbox, so a real person adds it to the actual mailing list. */
@@ -108,7 +108,7 @@ export async function sendNewsletterSignupEmail(email: string): Promise<void> {
   }
   await sendEmail({
     to,
-    subject: "Mumbai Intel newsletter signup",
+    subject: "NoDalalTalks newsletter signup",
     html: `<p><strong>New newsletter signup:</strong> ${escapeHtml(email)}</p>`,
     replyTo: email,
   });
@@ -174,7 +174,7 @@ export async function sendContactMessageEmail(params: { name: string; email: str
   }
   await sendEmail({
     to,
-    subject: `Mumbai Intel contact form — ${params.name}`,
+    subject: `NoDalalTalks contact form — ${params.name}`,
     html: `
       <p><strong>From:</strong> ${escapeHtml(params.name)} (${escapeHtml(params.email)})</p>
       <p><strong>Message:</strong></p>

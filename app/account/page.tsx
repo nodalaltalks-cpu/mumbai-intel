@@ -32,7 +32,7 @@ import ClearAllButton from "@/app/components/ClearAllButton";
 import PreferencesForm from "./PreferencesForm";
 import NotificationPreferencesForm from "./NotificationPreferencesForm";
 
-export const metadata: Metadata = { title: "My Dashboard — Mumbai Intel" };
+export const metadata: Metadata = { title: "My Dashboard — NoDalalTalks" };
 export const dynamic = "force-dynamic";
 
 const TABS = [

@@ -9,7 +9,7 @@ import Pagination from "@/app/admin/components/Pagination";
 import EmptyState from "@/app/components/ui/EmptyState";
 
 export const metadata: Metadata = {
-  title: "Projects — Mumbai Intel",
+  title: "Projects — NoDalalTalks",
   description: "Browse residential and commercial real estate projects across Mumbai with source-tagged pricing, status and configuration data.",
   alternates: { canonical: "/projects" },
 };

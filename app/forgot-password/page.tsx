@@ -3,7 +3,7 @@ import Link from "next/link";
 import AuthCard from "@/app/components/auth/AuthCard";
 import ForgotPasswordForm from "./ForgotPasswordForm";
 
-export const metadata: Metadata = { title: "Reset your password — Mumbai Intel" };
+export const metadata: Metadata = { title: "Reset your password — NoDalalTalks" };
 export const dynamic = "force-dynamic";
 
 export default function ForgotPasswordPage() {

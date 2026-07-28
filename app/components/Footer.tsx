@@ -61,7 +61,7 @@ const MARKET_INTELLIGENCE: FooterColumn = {
 const COMPANY: FooterColumn = {
   title: "Company",
   links: [
-    { label: "About Mumbai Intel", href: "/about" },
+    { label: "About NoDalalTalks", href: "/about" },
     { label: "Our Mission", href: "/about" },
     { label: "Our Vision", href: "/about" },
     { label: "Our Methodology", href: "/about" },
@@ -208,14 +208,14 @@ export default async function Footer() {
       <div className="mx-auto grid w-full max-w-6xl grid-cols-2 gap-x-8 gap-y-10 px-4 py-12 sm:px-6 md:grid-cols-6 lg:grid-cols-7">
         <div className="col-span-2 md:col-span-2 lg:col-span-2">
           <span className="font-mono text-sm font-bold tracking-widest text-foreground">
-            MUMBAI<span className="text-accent">INTEL</span>
+            NODALAL<span className="text-accent">TALKS</span>
           </span>
           <p className="mt-1.5 text-[11px] font-semibold uppercase tracking-wide text-accent">
-            India&apos;s Real Estate Intelligence Platform
+            Zero Spam Calls. Zero Brokerage. Research First.
           </p>
           <p className="mt-2 max-w-[22rem] text-xs leading-relaxed text-muted">
-            Verified project intelligence, transaction insights, builder research and locality analytics for smarter
-            property decisions.
+            Verified project intelligence, transaction insights, builder research and locality analytics — so you can
+            research a property before anyone tries to sell you one.
           </p>
 
           {/* Real company social accounts not created yet — icons are placeholders, not fabricated links. The
@@ -298,8 +298,8 @@ export default async function Footer() {
 
           <div className="flex flex-col items-start justify-between gap-2 border-t border-border pt-3 sm:flex-row sm:items-center">
             <div>
-              <p>&copy; {new Date().getFullYear()} Mumbai Intel. All Rights Reserved.</p>
-              <p className="mt-0.5">Built to bring transparency to India&apos;s real estate market.</p>
+              <p>&copy; {new Date().getFullYear()} NoDalalTalks. All Rights Reserved.</p>
+              <p className="mt-0.5">No brokerage. No spam calls. Just better property decisions.</p>
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] uppercase tracking-wide">
               <span>v{APP_VERSION}</span>

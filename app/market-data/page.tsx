@@ -8,7 +8,7 @@ import SectionHeading from "@/app/components/ui/SectionHeading";
 import EmptyState from "@/app/components/ui/EmptyState";
 
 export const metadata: Metadata = {
-  title: "Market Data — Mumbai Intel",
+  title: "Market Data — NoDalalTalks",
   description: "Citywide price trends, locality market snapshots and builder activity across Mumbai's residential and commercial real estate.",
 };
 export const dynamic = "force-dynamic";

@@ -10,10 +10,13 @@ export default function Dialog({
   title,
   onClose,
   children,
+  maxWidth = "max-w-md",
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  /** Tailwind max-width class — defaults to the original compact size; wider content (e.g. a PDF preview) can pass "max-w-3xl". */
+  maxWidth?: string;
 }) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -32,7 +35,7 @@ export default function Dialog({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="mi-pop-in w-full max-w-md overflow-hidden rounded-md border border-border bg-surface shadow-2xl"
+        className={`mi-pop-in w-full ${maxWidth} overflow-hidden rounded-md border border-border bg-surface shadow-2xl`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-3">

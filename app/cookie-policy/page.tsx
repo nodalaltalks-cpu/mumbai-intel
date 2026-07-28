@@ -3,15 +3,15 @@ import LegalPageShell from "@/app/components/LegalPageShell";
 import { formatDate } from "@/lib/format";
 
 export const metadata: Metadata = {
-  title: "Cookie Policy — Mumbai Intel",
-  description: "The essential cookies Mumbai Intel uses to keep you signed in — no third-party tracking or advertising cookies.",
+  title: "Cookie Policy — NoDalalTalks",
+  description: "The essential cookies NoDalalTalks uses to keep you signed in — no third-party tracking or advertising cookies.",
 };
 
 export default function CookiePolicyPage() {
   return (
     <LegalPageShell title="Cookie Policy" subtitle={`Last updated ${formatDate(new Date("2026-07-01"))}`}>
       <p>
-        Mumbai Intel uses a minimal set of cookies — no third-party tracking or advertising cookies are used anywhere
+        NoDalalTalks uses a minimal set of cookies — no third-party tracking or advertising cookies are used anywhere
         on the Service.
       </p>
 

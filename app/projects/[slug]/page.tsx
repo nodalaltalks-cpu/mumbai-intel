@@ -15,6 +15,7 @@ import {
   getTransactionStats,
 } from "@/lib/queries";
 import { formatDate, formatMonth, formatPaise, formatPriceBand, formatPricePerSqft } from "@/lib/format";
+import { toDocumentDownloadUrl } from "@/lib/cloudinary";
 import {
   AMENITY_CATEGORY_LABEL,
   CATEGORY_LABEL,
@@ -57,8 +58,8 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const project = await getPublicProjectBySlug(slug);
-  if (!project) return { title: "Project not found — Mumbai Intel" };
-  const title = project.metaTitle || `${project.name} — Mumbai Intel`;
+  if (!project) return { title: "Project not found — NoDalalTalks" };
+  const title = project.metaTitle || `${project.name} — NoDalalTalks`;
   const description = project.metaDescription || project.tagline || undefined;
   const image = project.images[0]?.url;
   return {
@@ -217,7 +218,7 @@ export default async function ProjectDetailPage({
             ) : null}
             <SaveProjectButton projectId={project.id} initialSaved={isSaved} />
             <CompareToggleButton slug={project.slug} />
-            <ShareButton title={project.name} text={`Check out ${project.name} on Mumbai Intel`} />
+            <ShareButton title={project.name} text={`Check out ${project.name} on NoDalalTalks`} />
             <ContactDeveloperButton
               projectName={project.name}
               defaultName={publicSession?.name}
@@ -756,8 +757,12 @@ export default async function ProjectDetailPage({
             <ul className="mt-3 flex flex-col gap-1.5">
               {project.brochureUrl ? (
                 <li>
-                  <a href={project.brochureUrl} target="_blank" rel="noreferrer" className="text-sm text-accent hover:underline">
-                    Brochure (PDF)
+                  <a
+                    href={toDocumentDownloadUrl(project.brochureUrl, project.brochureFileName ?? `${project.slug}-brochure.pdf`)}
+                    rel="noopener noreferrer"
+                    className="text-sm text-accent hover:underline"
+                  >
+                    Download Brochure
                   </a>
                 </li>
               ) : null}

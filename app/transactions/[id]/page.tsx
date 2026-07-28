@@ -27,11 +27,11 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
   const tx = await getPublicTransactionById(id);
-  if (!tx) return { title: "Transaction not found — Mumbai Intel" };
+  if (!tx) return { title: "Transaction not found — NoDalalTalks" };
   const title = tx.projectName ? `${tx.projectName} transaction` : `${tx.localityName} transaction`;
   return {
-    title: `${title} — Mumbai Intel`,
-    description: `Registered transaction record in ${tx.localityName}${tx.projectName ? ` at ${tx.projectName}` : ""} — Mumbai Intel.`,
+    title: `${title} — NoDalalTalks`,
+    description: `Registered transaction record in ${tx.localityName}${tx.projectName ? ` at ${tx.projectName}` : ""} — NoDalalTalks.`,
     // Individual transaction records are thin, near-duplicate content at scale;
     // kept crawlable via internal links (follow) but excluded from indexing.
     robots: { index: false, follow: true },

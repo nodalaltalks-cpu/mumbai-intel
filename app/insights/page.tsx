@@ -8,8 +8,8 @@ import SectionHeading from "@/app/components/ui/SectionHeading";
 import EmptyState from "@/app/components/ui/EmptyState";
 
 export const metadata: Metadata = {
-  title: "Insights — Mumbai Intel",
-  description: "How Mumbai Intel sources and verifies its data, plus the top-performing localities by market activity.",
+  title: "Insights — NoDalalTalks",
+  description: "How NoDalalTalks sources and verifies its data, plus the top-performing localities by market activity.",
 };
 export const dynamic = "force-dynamic";
 
@@ -47,7 +47,7 @@ export default async function InsightsPage() {
         <div>
           <h1 className="font-mono text-2xl font-bold text-foreground">Real Estate Insights</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted">
-            Every fact on Mumbai Intel is tagged with where it came from. No number is presented without a source you
+            Every fact on NoDalalTalks is tagged with where it came from. No number is presented without a source you
             can check.
           </p>
         </div>

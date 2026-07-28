@@ -3,7 +3,7 @@ import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 import CompareView from "./CompareView";
 
-export const metadata: Metadata = { title: "Compare Projects — Mumbai Intel" };
+export const metadata: Metadata = { title: "Compare Projects — NoDalalTalks" };
 
 export default function ComparePage() {
   return (

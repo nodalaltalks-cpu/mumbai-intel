@@ -32,8 +32,8 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const builder = await getPublicBuilderBySlug(slug);
-  if (!builder) return { title: "Developer not found — Mumbai Intel" };
-  const title = builder.metaTitle || `${builder.name} — Mumbai Intel`;
+  if (!builder) return { title: "Developer not found — NoDalalTalks" };
+  const title = builder.metaTitle || `${builder.name} — NoDalalTalks`;
   const description = builder.metaDescription || undefined;
   const image = builder.ogImageUrl || builder.coverImageUrl || undefined;
   return {
@@ -109,7 +109,7 @@ export default async function BuilderDetailPage({ params }: { params: Promise<{ 
                 {SOURCE_LABEL[builder.dataSource]}
               </span>
               <WishlistButton entityType="Builder" entityId={builder.id} initialSaved={isSaved} />
-              <ShareButton title={builder.name} text={`Check out ${builder.name} on Mumbai Intel`} />
+              <ShareButton title={builder.name} text={`Check out ${builder.name} on NoDalalTalks`} />
             </div>
             <h1 className="mt-2 font-mono text-2xl font-bold text-foreground">{builder.name}</h1>
             <p className="mt-1 text-sm text-muted">

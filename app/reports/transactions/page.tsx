@@ -28,7 +28,7 @@ import HistoricalTable from "@/app/components/reports/HistoricalTable";
 import RelatedSection from "@/app/components/reports/RelatedSection";
 
 export const metadata: Metadata = {
-  title: "Transaction Report — Mumbai Intel",
+  title: "Transaction Report — NoDalalTalks",
   description: "Aggregate registered-transaction activity, pricing distribution and configuration mix across Mumbai.",
 };
 export const dynamic = "force-dynamic";

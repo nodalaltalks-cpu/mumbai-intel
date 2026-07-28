@@ -17,7 +17,7 @@ import Pagination from "@/app/admin/components/Pagination";
 import EmptyState from "@/app/components/ui/EmptyState";
 
 export const metadata: Metadata = {
-  title: "Transactions — Mumbai Intel",
+  title: "Transactions — NoDalalTalks",
   description: "Registered Mumbai real estate sale, resale and lease transactions with price and configuration filters.",
   alternates: { canonical: "/transactions" },
 };

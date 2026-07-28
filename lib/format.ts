@@ -30,6 +30,13 @@ export function formatSqft(sqft: number | null | undefined): string {
   return `${Math.round(sqft).toLocaleString("en-IN")} sqft`;
 }
 
+export function formatBytes(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined) return "--";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function formatCompactCount(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
   return `${n}`;

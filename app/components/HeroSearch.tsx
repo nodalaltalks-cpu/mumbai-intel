@@ -12,11 +12,11 @@ export default async function HeroSearch() {
           Mumbai Real Estate Intelligence
         </span>
         <h1 className="mt-4 max-w-2xl font-mono text-3xl font-semibold leading-tight text-foreground sm:text-4xl">
-          Every project. Every price. Every source, named.
+          Research Properties. Not Sales Calls.
         </h1>
         <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted">
-          Search live listings, transaction history, and builder track records across Mumbai
-          — with provenance on every fact.
+          Search projects, transaction history, and builder track records across Mumbai — zero spam calls, zero
+          brokerage, with provenance on every fact.
         </p>
         <div className="mt-8 max-w-2xl">
           <SearchBar

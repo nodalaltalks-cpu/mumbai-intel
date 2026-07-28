@@ -44,9 +44,9 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const locality = await getPublicLocalityBySlug(slug);
-  if (!locality) return { title: "Locality not found — Mumbai Intel" };
+  if (!locality) return { title: "Locality not found — NoDalalTalks" };
   return {
-    title: locality.metaTitle || `${locality.name} — Mumbai Intel`,
+    title: locality.metaTitle || `${locality.name} — NoDalalTalks`,
     description: locality.metaDescription || undefined,
     alternates: locality.canonicalUrl ? { canonical: locality.canonicalUrl } : undefined,
     openGraph: locality.ogImageUrl || locality.coverImageUrl ? { images: [locality.ogImageUrl || locality.coverImageUrl!] } : undefined,
@@ -165,7 +165,7 @@ export default async function LocalityDetailPage({
               <span className="rounded-sm border border-accent/40 bg-accent/10 px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-accent">Featured</span>
             ) : null}
             <WishlistButton entityType="Locality" entityId={locality.id} initialSaved={isSaved} />
-            <ShareButton title={locality.name} text={`Check out ${locality.name} on Mumbai Intel`} />
+            <ShareButton title={locality.name} text={`Check out ${locality.name} on NoDalalTalks`} />
           </div>
           <h1 className="mt-2 font-mono text-2xl font-bold text-foreground sm:text-3xl">{locality.name}</h1>
           <p className="mt-1 text-sm text-muted">

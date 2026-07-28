@@ -37,7 +37,7 @@ export default function ContactDeveloperButton({
             <input type="hidden" name="projectName" value={projectName} />
             <input type="hidden" name="projectUrl" value={typeof window !== "undefined" ? window.location.href : ""} />
             <p className="text-xs text-muted">
-              This goes to Mumbai Intel, who&apos;ll connect you with the developer team for {projectName}.
+              This goes to NoDalalTalks, who&apos;ll connect you with the developer team for {projectName}.
             </p>
             <AuthField label="Name" name="name" type="text" required maxLength={120} defaultValue={defaultName ?? ""} />
             <AuthField label="Email" name="email" type="email" required defaultValue={defaultEmail ?? ""} />

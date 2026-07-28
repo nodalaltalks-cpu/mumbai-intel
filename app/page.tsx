@@ -29,8 +29,8 @@ export const dynamic = "force-dynamic";
 const ORGANIZATION_SCHEMA = {
   "@context": "https://schema.org",
   "@type": "Organization",
-  name: "Mumbai Intel",
-  description: "Real estate market intelligence for Mumbai — projects, developers, localities and registered transactions.",
+  name: "NoDalalTalks",
+  description: "Real estate research intelligence for Mumbai — verified projects, developers, localities and registered transactions. Zero spam calls, zero brokerage.",
   url: process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "http://localhost:3000",
 };
 

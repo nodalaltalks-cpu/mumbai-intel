@@ -8,7 +8,7 @@ import PublicSearchBar from "@/app/components/PublicSearchBar";
 import EmptyState from "@/app/components/ui/EmptyState";
 
 export const metadata: Metadata = {
-  title: "Localities — Mumbai Intel",
+  title: "Localities — NoDalalTalks",
   description: "Explore Mumbai localities with market snapshots, price trends and investment scores.",
   alternates: { canonical: "/localities" },
 };
