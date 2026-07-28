@@ -2,10 +2,11 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireMutateSession } from "@/lib/auth/guard";
+import { requireAdminSession, requireMutateSession } from "@/lib/auth/guard";
 import { prisma } from "@/lib/prisma";
 import { revalidateTransaction } from "@/lib/cache";
 import { BUYER_TYPES, CONFIDENCE_LEVELS, DATA_SOURCES, TRANSACTION_TYPES } from "@/lib/project-meta";
+import { logAudit } from "@/lib/audit";
 import { friendlyPrismaError } from "./errors";
 
 const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefined ? undefined : v);
@@ -91,7 +92,7 @@ export async function createTransactionAction(
   _prevState: TransactionFormState,
   formData: FormData
 ): Promise<TransactionFormState> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
 
   const parsed = parseTransactionForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -103,6 +104,7 @@ export async function createTransactionAction(
     return { error: friendlyPrismaError(error) };
   }
 
+  await logAudit(session.userId, "transaction.create", "Transaction", created.id);
   revalidateTransaction({ id: created.id });
   redirect("/admin/transactions?created=1");
 }
@@ -112,31 +114,103 @@ export async function updateTransactionAction(
   _prevState: TransactionFormState,
   formData: FormData
 ): Promise<TransactionFormState> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
 
   const parsed = parseTransactionForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 
+  const existing = await prisma.transaction.findUnique({ where: { id: transactionId } });
+  if (!existing) return { error: "Transaction not found" };
+
+  const nextData = buildTransactionData(parsed.data);
+
   try {
-    await prisma.transaction.update({
-      where: { id: transactionId },
-      data: buildTransactionData(parsed.data),
-    });
+    await prisma.transaction.update({ where: { id: transactionId }, data: nextData });
   } catch (error) {
     return { error: friendlyPrismaError(error) };
   }
 
+  await logAudit(session.userId, "transaction.update", "Transaction", transactionId, { before: existing, after: nextData });
   revalidateTransaction({ id: transactionId });
   redirect("/admin/transactions?saved=1");
 }
 
 export async function deleteTransactionAction(transactionId: string): Promise<{ error?: string }> {
-  await requireMutateSession();
-  try {
-    await prisma.transaction.delete({ where: { id: transactionId } });
-  } catch (error) {
-    return { error: friendlyPrismaError(error) };
-  }
+  const session = await requireAdminSession();
+
+  const existing = await prisma.transaction.findUnique({ where: { id: transactionId }, select: { id: true } });
+  if (!existing) return { error: "Transaction not found" };
+
+  await prisma.transaction.update({
+    where: { id: transactionId },
+    data: { deletedAt: new Date(), deletedByUserId: session.userId },
+  });
+  await logAudit(session.userId, "transaction.trash", "Transaction", transactionId);
   revalidateTransaction({ id: transactionId });
   return {};
+}
+
+export async function restoreTransactionAction(transactionId: string): Promise<{ error?: string }> {
+  const session = await requireAdminSession();
+
+  const existing = await prisma.transaction.findUnique({ where: { id: transactionId }, select: { id: true } });
+  if (!existing) return { error: "Transaction not found" };
+
+  await prisma.transaction.update({ where: { id: transactionId }, data: { deletedAt: null, deletedByUserId: null } });
+  await logAudit(session.userId, "transaction.restore", "Transaction", transactionId);
+  revalidateTransaction({ id: transactionId });
+  return {};
+}
+
+export async function permanentlyDeleteTransactionAction(transactionId: string): Promise<{ error?: string }> {
+  const session = await requireAdminSession();
+
+  const existing = await prisma.transaction.findUnique({ where: { id: transactionId }, select: { deletedAt: true } });
+  if (!existing) return { error: "Transaction not found" };
+  if (!existing.deletedAt) return { error: "Move this transaction to Trash before permanently deleting it" };
+
+  await prisma.transaction.delete({ where: { id: transactionId } });
+  await logAudit(session.userId, "transaction.permanent-delete", "Transaction", transactionId);
+  revalidateTransaction({ id: transactionId });
+  return {};
+}
+
+export async function emptyTransactionTrashAction(): Promise<{ error?: string; affected?: number }> {
+  const session = await requireAdminSession();
+  const result = await prisma.transaction.deleteMany({ where: { deletedAt: { not: null } } });
+  await logAudit(session.userId, "transaction.trash.empty", "Transaction", "bulk");
+  revalidateTransaction();
+  return { affected: result.count };
+}
+
+export type BulkTransactionOperation = "delete" | "restore" | "permanent-delete";
+
+export async function bulkTransactionAction(
+  transactionIds: string[],
+  operation: BulkTransactionOperation
+): Promise<{ error?: string; affected?: number }> {
+  const session = await requireAdminSession();
+  if (transactionIds.length === 0) return { error: "No transactions selected" };
+
+  let affected = 0;
+  if (operation === "delete") {
+    affected = (
+      await prisma.transaction.updateMany({
+        where: { id: { in: transactionIds } },
+        data: { deletedAt: new Date(), deletedByUserId: session.userId },
+      })
+    ).count;
+  } else if (operation === "restore") {
+    affected = (
+      await prisma.transaction.updateMany({ where: { id: { in: transactionIds } }, data: { deletedAt: null, deletedByUserId: null } })
+    ).count;
+  } else if (operation === "permanent-delete") {
+    affected = (
+      await prisma.transaction.deleteMany({ where: { id: { in: transactionIds }, deletedAt: { not: null } } })
+    ).count;
+  }
+
+  await logAudit(session.userId, `transaction.bulk.${operation}`, "Transaction", transactionIds.join(","));
+  revalidateTransaction();
+  return { affected };
 }

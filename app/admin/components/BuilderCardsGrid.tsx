@@ -12,7 +12,7 @@ import {
 import type { BuilderRow } from "./BuildersTable";
 import ConfirmButton from "./ConfirmButton";
 
-export default function BuilderCardsGrid({ builders }: { builders: BuilderRow[] }) {
+export default function BuilderCardsGrid({ builders, isAdmin }: { builders: BuilderRow[]; isAdmin: boolean }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -58,15 +58,21 @@ export default function BuilderCardsGrid({ builders }: { builders: BuilderRow[] 
 
           <div className="flex items-center justify-between border-t border-border pt-2">
             <span className="font-mono text-[11px] text-muted">{builder._count.projects} project(s)</span>
-            <button
-              type="button"
-              onClick={() => toggleBuilderPublishAction(builder.id, !builder.isPublished).then(() => router.refresh())}
-              className={`rounded-sm border px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wide ${
-                builder.isPublished ? "border-positive/40 bg-positive/10 text-positive" : "border-border text-muted"
-              }`}
-            >
-              {builder.isPublished ? "Published" : "Draft"}
-            </button>
+            {isAdmin ? (
+              <button
+                type="button"
+                onClick={() => toggleBuilderPublishAction(builder.id, !builder.isPublished).then(() => router.refresh())}
+                className={`rounded-sm border px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wide ${
+                  builder.isPublished ? "border-positive/40 bg-positive/10 text-positive" : "border-border text-muted"
+                }`}
+              >
+                {builder.isPublished ? "Published" : "Draft"}
+              </button>
+            ) : (
+              <span className={`rounded-sm border px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wide ${builder.isPublished ? "border-positive/40 bg-positive/10 text-positive" : "border-border text-muted"}`}>
+                {builder.isPublished ? "Published" : "Draft"}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center justify-between gap-1 border-t border-border pt-2">
@@ -84,14 +90,18 @@ export default function BuilderCardsGrid({ builders }: { builders: BuilderRow[] 
             >
               Duplicate
             </button>
-            <button
-              type="button"
-              onClick={() => toggleBuilderArchiveAction(builder.id, !builder.isArchived).then(() => router.refresh())}
-              className="rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
-            >
-              {builder.isArchived ? "Unarchive" : "Archive"}
-            </button>
-            <ConfirmButton action={deleteBuilderAction.bind(null, builder.id)} className="px-2 py-1" />
+            {isAdmin ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => toggleBuilderArchiveAction(builder.id, !builder.isArchived).then(() => router.refresh())}
+                  className="rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+                >
+                  {builder.isArchived ? "Unarchive" : "Archive"}
+                </button>
+                <ConfirmButton action={deleteBuilderAction.bind(null, builder.id)} label="Trash" className="px-2 py-1" />
+              </>
+            ) : null}
           </div>
         </div>
       ))}

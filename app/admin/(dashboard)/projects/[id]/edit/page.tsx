@@ -1,7 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getAmenities, getBuildersForSelect, getInfraAssetsForCity, getLocalitiesForSelect, getProjectForEdit } from "@/lib/admin-queries";
+import { getAmenities, getAuditHistory, getBuildersForSelect, getInfraAssetsForCity, getLocalitiesForSelect, getProjectForEdit } from "@/lib/admin-queries";
+import AuditHistory from "@/app/admin/components/AuditHistory";
 import BrochureUploader from "@/app/admin/components/BrochureUploader";
 import FlashMessage from "@/app/admin/components/FlashMessage";
 import ImageUploader from "@/app/admin/components/ImageUploader";
@@ -28,12 +29,13 @@ export default async function EditProjectPage({
   const { id } = await params;
   const query = await searchParams;
 
-  const [project, localities, builders, amenities, infraOptions] = await Promise.all([
+  const [project, localities, builders, amenities, infraOptions, history] = await Promise.all([
     getProjectForEdit(id),
     getLocalitiesForSelect(),
     getBuildersForSelect(),
     getAmenities(),
     getInfraAssetsForCity(),
+    getAuditHistory("Project", id),
   ]);
 
   if (!project) notFound();
@@ -72,6 +74,8 @@ export default async function EditProjectPage({
       <DocumentsManager projectId={project.id} documents={project.documents} />
 
       <BrochureUploader projectId={project.id} brochureUrl={project.brochureUrl} />
+
+      <AuditHistory logs={history} />
     </div>
   );
 }

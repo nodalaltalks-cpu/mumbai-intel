@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireMutateSession } from "@/lib/auth/guard";
+import { requireAdminSession, requireMutateSession } from "@/lib/auth/guard";
 import { prisma } from "@/lib/prisma";
 import { revalidateProject } from "@/lib/cache";
 import { PROJECT_STATUSES } from "@/lib/project-meta";
@@ -28,6 +28,31 @@ async function syncProjectAmenities(projectId: string, amenityIds: string[]) {
   const unique = Array.from(new Set(amenityIds));
   for (const amenityId of unique) {
     await prisma.projectAmenity.create({ data: { projectId, amenityId } });
+  }
+}
+
+/** Deletes a project's remote images/brochure — only ever called for a PERMANENT delete, never a soft one. */
+async function deleteProjectMediaAssets(projectId: string, brochureUrl: string | null) {
+  const images = await prisma.projectImage.findMany({ where: { projectId }, select: { url: true } });
+  for (const image of images) {
+    const publicId = publicIdFromUrl(image.url);
+    if (publicId) {
+      try {
+        await deleteImageByPublicId(publicId);
+      } catch {
+        // Best-effort — DB rows are the source of truth; a stray remote asset isn't fatal.
+      }
+    }
+  }
+  if (brochureUrl) {
+    const publicId = publicIdFromUrl(brochureUrl);
+    if (publicId) {
+      try {
+        await deleteImageByPublicId(publicId);
+      } catch {
+        // best-effort
+      }
+    }
   }
 }
 
@@ -101,10 +126,11 @@ export async function updateProjectAction(
     }
   }
 
+  const nextData = { slug, ...buildProjectData(data) };
   try {
     await prisma.project.update({
       where: { id: projectId },
-      data: { slug, ...buildProjectData(data) },
+      data: nextData,
     });
   } catch (error) {
     return { error: friendlyPrismaError(error) };
@@ -113,7 +139,7 @@ export async function updateProjectAction(
   await syncProjectAmenities(projectId, amenityIds);
   await syncProjectNearbyInfra(projectId);
 
-  await logAudit(session.userId, "project.update", "Project", projectId);
+  await logAudit(session.userId, "project.update", "Project", projectId, { before: existing, after: nextData });
   revalidateProject({ id: projectId, slug });
   redirect(`/admin/projects/${projectId}/edit?saved=1`);
 }
@@ -178,8 +204,9 @@ export async function autosaveProjectAction(projectId: string, formData: FormDat
   return { savedAt: new Date().toISOString() };
 }
 
+/** Publish/unpublish, archive, delete, restore and every bulk action are ADMIN-only — create/edit/duplicate stay open to EDITOR. */
 export async function togglePublishAction(projectId: string, nextValue: boolean): Promise<void> {
-  const session = await requireMutateSession();
+  const session = await requireAdminSession();
   const updated = await prisma.project.update({ where: { id: projectId }, data: { isPublished: nextValue }, select: { slug: true } });
   await logAudit(session.userId, nextValue ? "project.publish" : "project.unpublish", "Project", projectId);
   revalidateProject({ id: projectId, slug: updated.slug });
@@ -193,7 +220,7 @@ export async function toggleFeaturedAction(projectId: string, nextValue: boolean
 }
 
 export async function toggleArchiveAction(projectId: string, nextValue: boolean): Promise<void> {
-  const session = await requireMutateSession();
+  const session = await requireAdminSession();
   const updated = await prisma.project.update({
     where: { id: projectId },
     data: { isArchived: nextValue, isPublished: nextValue ? false : undefined },
@@ -304,26 +331,50 @@ export async function duplicateProjectAction(projectId: string): Promise<{ error
   }
 }
 
+/** Moves a project to Trash — does NOT touch the row's media or the row itself. Forces unpublished+archived so every existing public query already excludes it. */
 export async function deleteProjectAction(projectId: string): Promise<{ error?: string }> {
-  const session = await requireMutateSession();
+  const session = await requireAdminSession();
 
   const existing = await prisma.project.findUnique({ where: { id: projectId }, select: { slug: true } });
+  if (!existing) return { error: "Project not found" };
 
-  const images = await prisma.projectImage.findMany({
-    where: { projectId },
-    select: { url: true },
-  });
-
-  for (const image of images) {
-    const publicId = publicIdFromUrl(image.url);
-    if (publicId) {
-      try {
-        await deleteImageByPublicId(publicId);
-      } catch {
-        // Best-effort — DB rows are the source of truth; a stray remote asset isn't fatal.
-      }
-    }
+  try {
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { deletedAt: new Date(), deletedByUserId: session.userId, isPublished: false, isArchived: true },
+    });
+  } catch (error) {
+    return { error: friendlyPrismaError(error) };
   }
+
+  await logAudit(session.userId, "project.trash", "Project", projectId);
+  revalidateProject({ id: projectId, slug: existing.slug });
+  return {};
+}
+
+/** Pulls a project back out of Trash. Stays unpublished/archived — publishing is a separate, deliberate step. */
+export async function restoreProjectAction(projectId: string): Promise<{ error?: string }> {
+  const session = await requireAdminSession();
+
+  const existing = await prisma.project.findUnique({ where: { id: projectId }, select: { slug: true, deletedAt: true } });
+  if (!existing) return { error: "Project not found" };
+  if (!existing.deletedAt) return { error: "This project isn't in Trash" };
+
+  await prisma.project.update({ where: { id: projectId }, data: { deletedAt: null, deletedByUserId: null } });
+  await logAudit(session.userId, "project.restore", "Project", projectId);
+  revalidateProject({ id: projectId, slug: existing.slug });
+  return {};
+}
+
+/** The actual hard delete — only ever reachable from Trash (requires deletedAt already set). */
+export async function permanentlyDeleteProjectAction(projectId: string): Promise<{ error?: string }> {
+  const session = await requireAdminSession();
+
+  const existing = await prisma.project.findUnique({ where: { id: projectId }, select: { deletedAt: true, brochureUrl: true } });
+  if (!existing) return { error: "Project not found" };
+  if (!existing.deletedAt) return { error: "Move this project to Trash before permanently deleting it" };
+
+  await deleteProjectMediaAssets(projectId, existing.brochureUrl);
 
   try {
     await prisma.project.delete({ where: { id: projectId } });
@@ -331,18 +382,18 @@ export async function deleteProjectAction(projectId: string): Promise<{ error?: 
     return { error: friendlyPrismaError(error) };
   }
 
-  await logAudit(session.userId, "project.delete", "Project", projectId);
-  revalidateProject({ id: projectId, slug: existing?.slug });
+  await logAudit(session.userId, "project.permanent-delete", "Project", projectId);
+  revalidateProject();
   return {};
 }
 
-export type BulkProjectOperation = "publish" | "unpublish" | "archive" | "unarchive" | "delete";
+export type BulkProjectOperation = "publish" | "unpublish" | "archive" | "unarchive" | "delete" | "restore" | "permanent-delete";
 
 export async function bulkProjectAction(
   projectIds: string[],
   operation: BulkProjectOperation
 ): Promise<{ error?: string; affected?: number }> {
-  const session = await requireMutateSession();
+  const session = await requireAdminSession();
   if (projectIds.length === 0) return { error: "No projects selected" };
 
   try {
@@ -360,21 +411,27 @@ export async function bulkProjectAction(
       const result = await prisma.project.updateMany({ where: { id: { in: projectIds } }, data: { isArchived: false } });
       affected = result.count;
     } else if (operation === "delete") {
-      for (const id of projectIds) {
-        const images = await prisma.projectImage.findMany({ where: { projectId: id }, select: { url: true } });
-        for (const image of images) {
-          const publicId = publicIdFromUrl(image.url);
-          if (publicId) {
-            try {
-              await deleteImageByPublicId(publicId);
-            } catch {
-              // best-effort
-            }
-          }
-        }
-      }
-      const result = await prisma.project.deleteMany({ where: { id: { in: projectIds } } });
+      const result = await prisma.project.updateMany({
+        where: { id: { in: projectIds } },
+        data: { deletedAt: new Date(), deletedByUserId: session.userId, isPublished: false, isArchived: true },
+      });
       affected = result.count;
+    } else if (operation === "restore") {
+      const result = await prisma.project.updateMany({
+        where: { id: { in: projectIds }, deletedAt: { not: null } },
+        data: { deletedAt: null, deletedByUserId: null },
+      });
+      affected = result.count;
+    } else if (operation === "permanent-delete") {
+      const trashed = await prisma.project.findMany({
+        where: { id: { in: projectIds }, deletedAt: { not: null } },
+        select: { id: true, brochureUrl: true },
+      });
+      for (const p of trashed) {
+        await deleteProjectMediaAssets(p.id, p.brochureUrl);
+        await prisma.project.delete({ where: { id: p.id } });
+      }
+      affected = trashed.length;
     }
 
     await logAudit(session.userId, `project.bulk.${operation}`, "Project", projectIds.join(","));
@@ -383,4 +440,19 @@ export async function bulkProjectAction(
   } catch (error) {
     return { error: friendlyPrismaError(error) };
   }
+}
+
+/** Permanently deletes everything currently in the Project Trash. */
+export async function emptyProjectTrashAction(): Promise<{ error?: string; affected?: number }> {
+  const session = await requireAdminSession();
+
+  const trashed = await prisma.project.findMany({ where: { deletedAt: { not: null } }, select: { id: true, brochureUrl: true } });
+  for (const p of trashed) {
+    await deleteProjectMediaAssets(p.id, p.brochureUrl);
+    await prisma.project.delete({ where: { id: p.id } });
+  }
+
+  await logAudit(session.userId, "project.trash.empty", "Project", "*");
+  revalidateProject();
+  return { affected: trashed.length };
 }

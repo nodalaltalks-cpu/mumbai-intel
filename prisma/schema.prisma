@@ -151,6 +151,11 @@ model Locality {
   isFeatured  Boolean @default(false)
   isArchived  Boolean @default(false)
 
+  // ── Trash — separate from isArchived: this is "pending permanent deletion",
+  // an admin-only Trash view, not the public/admin-list archive state.
+  deletedAt       DateTime?
+  deletedByUserId String?
+
   // ── SEO ──
   metaTitle       String?
   metaDescription String?
@@ -180,6 +185,7 @@ model Locality {
   @@index([zoneId])
   @@index([isPublished])
   @@index([isArchived])
+  @@index([deletedAt])
 }
 
 model LocalityAmenity {
@@ -264,6 +270,11 @@ model Builder {
   isFeatured  Boolean @default(false)
   isArchived  Boolean @default(false)
 
+  // ── Trash — separate from isArchived: this is "pending permanent deletion",
+  // an admin-only Trash view, not the public/admin-list archive state.
+  deletedAt       DateTime?
+  deletedByUserId String?
+
   // ── SEO ──
   metaTitle       String?
   metaDescription String?
@@ -280,6 +291,7 @@ model Builder {
   @@index([name])
   @@index([isPublished])
   @@index([isArchived])
+  @@index([deletedAt])
 }
 
 model BuilderAmenity {
@@ -416,6 +428,12 @@ model Project {
   isPublished   Boolean @default(false) // admin-controlled visibility
   isFeatured    Boolean @default(false) // admin-curated homepage/spotlight placement
   isArchived    Boolean @default(false) // soft-removed from admin/public lists, not hard-deleted
+  /// Trash — separate from isArchived: "pending permanent deletion" in the
+  /// admin-only Trash view, forced alongside isArchived=true/isPublished=false
+  /// so every existing public query (already filtering on those two) needs
+  /// no changes to exclude trashed projects.
+  deletedAt       DateTime?
+  deletedByUserId String?
   /// Merchandising tags. Deliberately NOT duplicating `status` — READY_TO_MOVE
   /// and PRE_LAUNCH ("new launch") are already derivable from `status`; these
   /// three are independent editorial calls a status enum can't express.
@@ -463,6 +481,7 @@ model Project {
   @@index([isPublished])
   @@index([isFeatured])
   @@index([isArchived])
+  @@index([deletedAt])
   /// Default sort for every public project listing (getPublicProjectsPaged).
   @@index([updatedAt])
   /// "launch_desc" sort + getLatestLaunches ordering.
@@ -669,6 +688,13 @@ model Transaction {
   /// Free-text note on where a manual figure came from (network, deal sheet…).
   sourceNote      String?
 
+  /// Trash — Transaction has no isPublished/isArchived (market data is live
+  /// immediately, no editorial gate), so unlike Project/Builder/Locality this
+  /// DOES require its own explicit `deletedAt: null` filter in every public
+  /// query (lib/queries/index.ts, map.ts, transactions.ts).
+  deletedAt       DateTime?
+  deletedByUserId String?
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -678,6 +704,7 @@ model Transaction {
   @@index([projectId, registrationDate])
   @@index([localityId, registrationDate])
   @@index([registrationDate])
+  @@index([deletedAt])
   /// "price_desc"/"price_asc" sort + price range filters on /transactions.
   @@index([valuePaise])
   /// "ppsf_desc" sort on /transactions.

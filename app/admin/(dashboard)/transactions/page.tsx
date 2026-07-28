@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { requireSession } from "@/lib/auth/guard";
 import { getAllTransactionsAdmin } from "@/lib/admin-queries";
 import { deleteTransactionAction } from "@/lib/actions/transactions";
 import { formatDate, formatPaise, formatPricePerSqft } from "@/lib/format";
@@ -15,6 +16,8 @@ export default async function AdminTransactionsPage({
 }: {
   searchParams: Promise<{ created?: string; saved?: string }>;
 }) {
+  const session = await requireSession();
+  const isAdmin = session.role === "ADMIN";
   const params = await searchParams;
   const transactions = await getAllTransactionsAdmin();
 
@@ -70,7 +73,7 @@ export default async function AdminTransactionsPage({
                       >
                         Edit
                       </Link>
-                      <ConfirmButton action={deleteTransactionAction.bind(null, tx.id)} />
+                      {isAdmin ? <ConfirmButton action={deleteTransactionAction.bind(null, tx.id)} label="Trash" /> : null}
                     </div>
                   </td>
                 </tr>

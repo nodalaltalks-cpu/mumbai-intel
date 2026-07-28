@@ -1,23 +1,25 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getAmenities, getLocalityForEdit, getLocalityNearbyInfra, getZones } from "@/lib/admin-queries";
+import { getAmenities, getAuditHistory, getLocalityForEdit, getLocalityNearbyInfra, getZones } from "@/lib/admin-queries";
 import LocalityForm from "@/app/admin/components/LocalityForm";
 import NearbyInfraPanel from "@/app/admin/components/NearbyInfraPanel";
 import CatalogueInfraAssetForm from "@/app/admin/components/CatalogueInfraAssetForm";
 import MicroMarketManager from "@/app/admin/components/MicroMarketManager";
 import LocalityGalleryUploader from "@/app/admin/components/LocalityGalleryUploader";
+import AuditHistory from "@/app/admin/components/AuditHistory";
 
 export const metadata: Metadata = { title: "Edit Locality — Mumbai Intel Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function EditLocalityPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [locality, zones, amenities, nearbyInfra] = await Promise.all([
+  const [locality, zones, amenities, nearbyInfra, history] = await Promise.all([
     getLocalityForEdit(id),
     getZones(),
     getAmenities(),
     getLocalityNearbyInfra(id),
+    getAuditHistory("Locality", id),
   ]);
   if (!locality) notFound();
 
@@ -77,6 +79,8 @@ export default async function EditLocalityPage({ params }: { params: Promise<{ i
       <CatalogueInfraAssetForm cityId={locality.cityId} />
 
       <LocalityGalleryUploader localityId={locality.id} images={locality.images} />
+
+      <AuditHistory logs={history} />
     </div>
   );
 }

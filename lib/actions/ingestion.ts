@@ -207,6 +207,32 @@ export async function rejectStagingRecordAction(id: string): Promise<IngestActio
   return {};
 }
 
+/** Bulk-approves pending staging records — loops the single-record approval so each row still gets its own audit entry. */
+export async function bulkApproveStagingRecordsAction(ids: string[]): Promise<{ error?: string; approved?: number; failed?: number }> {
+  if (ids.length === 0) return { error: "No records selected" };
+  let approved = 0;
+  let failed = 0;
+  for (const id of ids) {
+    const result = await approveStagingRecordAction(id);
+    if (result.error) failed += 1;
+    else approved += 1;
+  }
+  return { approved, failed };
+}
+
+/** Bulk-rejects pending staging records — loops the single-record rejection so each row still gets its own audit entry. */
+export async function bulkRejectStagingRecordsAction(ids: string[]): Promise<{ error?: string; rejected?: number; failed?: number }> {
+  if (ids.length === 0) return { error: "No records selected" };
+  let rejected = 0;
+  let failed = 0;
+  for (const id of ids) {
+    const result = await rejectStagingRecordAction(id);
+    if (result.error) failed += 1;
+    else rejected += 1;
+  }
+  return { rejected, failed };
+}
+
 /** Enables/disables a connector for the scheduled cron sweep — system configuration, ADMIN only. */
 export async function toggleIngestSourceEnabledAction(key: string, enabled: boolean): Promise<IngestActionResult> {
   const session = await requireAdminSession();

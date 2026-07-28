@@ -98,6 +98,7 @@ function transactionBedroomsFilter(bedrooms: string | undefined) {
 function buildTransactionWhere(filters: PublicTransactionFilters): Prisma.TransactionWhereInput {
   const where: Prisma.TransactionWhereInput = {
     locality: { city: { slug: PRIMARY_CITY_SLUG } },
+    deletedAt: null,
   };
   if (filters.q) {
     where.OR = [
@@ -230,7 +231,7 @@ export async function getTransactionPropertyTypeDistribution(filters: PublicTran
 /** cache()-wrapped: generateMetadata and the page component both fetch this per request — dedupe to one query. */
 export const getPublicTransactionById = cache(async (id: string): Promise<PublicTransaction | null> => {
   const tx = await prisma.transaction.findFirst({
-    where: { id, locality: { city: { slug: PRIMARY_CITY_SLUG } } },
+    where: { id, locality: { city: { slug: PRIMARY_CITY_SLUG } }, deletedAt: null },
     include: PUBLIC_TRANSACTION_INCLUDE,
   });
   return tx ? mapPublicTransaction(tx) : null;
@@ -243,7 +244,7 @@ export async function getRelatedTransactions(
   const [history, similar] = await Promise.all([
     tx.projectId
       ? prisma.transaction.findMany({
-          where: { projectId: tx.projectId, id: { not: tx.id } },
+          where: { projectId: tx.projectId, id: { not: tx.id }, deletedAt: null },
           orderBy: { registrationDate: "desc" },
           take: limit,
           include: PUBLIC_TRANSACTION_INCLUDE,
@@ -253,6 +254,7 @@ export async function getRelatedTransactions(
       where: {
         localityId: tx.localityId,
         id: { not: tx.id },
+        deletedAt: null,
         ...(tx.bedrooms !== null ? { bedrooms: { gte: tx.bedrooms - 0.5, lte: tx.bedrooms + 0.5 } } : {}),
       },
       orderBy: { registrationDate: "desc" },

@@ -34,7 +34,7 @@ export interface ProjectRow {
   images?: { url: string }[];
 }
 
-export default function ProjectsTable({ projects }: { projects: ProjectRow[] }) {
+export default function ProjectsTable({ projects, isAdmin }: { projects: ProjectRow[]; isAdmin: boolean }) {
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
@@ -84,7 +84,7 @@ export default function ProjectsTable({ projects }: { projects: ProjectRow[] }) 
 
   return (
     <div className="flex flex-col gap-2">
-      {selected.size > 0 ? (
+      {selected.size > 0 && isAdmin ? (
         <div className="flex flex-wrap items-center gap-2 rounded-sm border border-accent/40 bg-accent/5 px-3 py-2">
           <span className="text-xs text-foreground">{selected.size} selected</span>
           <button type="button" disabled={isPending} onClick={() => runBulk("publish")} className="rounded-sm border border-border px-2 py-1 text-[11px] font-mono uppercase text-muted hover:border-positive hover:text-positive">
@@ -103,23 +103,27 @@ export default function ProjectsTable({ projects }: { projects: ProjectRow[] }) 
             type="button"
             disabled={isPending}
             onClick={() => {
-              if (window.confirm(`Delete ${selected.size} project(s)? This cannot be undone.`)) runBulk("delete");
+              if (window.confirm(`Move ${selected.size} project(s) to Trash?`)) runBulk("delete");
             }}
             className="rounded-sm border border-border px-2 py-1 text-[11px] font-mono uppercase text-muted hover:border-negative hover:text-negative"
           >
-            Delete
+            Move to Trash
           </button>
           {bulkError ? <span className="text-[11px] text-negative">{bulkError}</span> : null}
         </div>
+      ) : selected.size > 0 ? (
+        <div className="rounded-sm border border-border bg-surface px-3 py-2 text-xs text-muted">{selected.size} selected — bulk actions are admin-only</div>
       ) : null}
 
       <div className="overflow-x-auto rounded-sm border border-border">
         <table className="w-full min-w-[980px] border-collapse text-left text-xs">
           <thead>
             <tr className="border-b border-border bg-surface text-[10px] uppercase tracking-wide text-muted">
-              <th className="w-8 px-3 py-2">
-                <input type="checkbox" checked={selected.size === projects.length} onChange={toggleAll} className="h-3.5 w-3.5 accent-accent" />
-              </th>
+              {isAdmin ? (
+                <th className="w-8 px-3 py-2">
+                  <input type="checkbox" checked={selected.size === projects.length} onChange={toggleAll} className="h-3.5 w-3.5 accent-accent" />
+                </th>
+              ) : null}
               <th className="px-3 py-2 font-medium">Name</th>
               <th className="px-3 py-2 font-medium">Locality</th>
               <th className="px-3 py-2 font-medium">Status</th>
@@ -133,14 +137,16 @@ export default function ProjectsTable({ projects }: { projects: ProjectRow[] }) 
           <tbody>
             {projects.map((project) => (
               <tr key={project.id} className="border-b border-border last:border-b-0 hover:bg-surface-raised">
-                <td className="px-3 py-2">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(project.id)}
-                    onChange={() => toggleOne(project.id)}
-                    className="h-3.5 w-3.5 accent-accent"
-                  />
-                </td>
+                {isAdmin ? (
+                  <td className="px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(project.id)}
+                      onChange={() => toggleOne(project.id)}
+                      className="h-3.5 w-3.5 accent-accent"
+                    />
+                  </td>
+                ) : null}
                 <td className="px-3 py-2">
                   <Link href={`/admin/projects/${project.id}/edit`} className="font-mono text-foreground hover:text-accent">
                     {project.name}
@@ -161,12 +167,18 @@ export default function ProjectsTable({ projects }: { projects: ProjectRow[] }) 
                 </td>
                 <td className="px-3 py-2 text-muted">{formatDate(project.updatedAt)}</td>
                 <td className="px-3 py-2">
-                  <ToggleButton
-                    active={project.isPublished}
-                    activeLabel="Published"
-                    inactiveLabel="Draft"
-                    onToggle={() => togglePublishAction(project.id, !project.isPublished).then(() => router.refresh())}
-                  />
+                  {isAdmin ? (
+                    <ToggleButton
+                      active={project.isPublished}
+                      activeLabel="Published"
+                      inactiveLabel="Draft"
+                      onToggle={() => togglePublishAction(project.id, !project.isPublished).then(() => router.refresh())}
+                    />
+                  ) : (
+                    <span className={`rounded-sm border px-2 py-1 text-[10px] font-mono uppercase tracking-wide ${project.isPublished ? "border-positive/40 bg-positive/10 text-positive" : "border-border text-muted"}`}>
+                      {project.isPublished ? "Published" : "Draft"}
+                    </span>
+                  )}
                 </td>
                 <td className="px-3 py-2">
                   <ToggleButton
@@ -198,14 +210,18 @@ export default function ProjectsTable({ projects }: { projects: ProjectRow[] }) 
                     >
                       Duplicate
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => toggleArchiveAction(project.id, !project.isArchived).then(() => router.refresh())}
-                      className="rounded-sm border border-border px-2 py-1 text-[11px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
-                    >
-                      {project.isArchived ? "Unarchive" : "Archive"}
-                    </button>
-                    <ConfirmButton action={deleteProjectAction.bind(null, project.id)} />
+                    {isAdmin ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => toggleArchiveAction(project.id, !project.isArchived).then(() => router.refresh())}
+                          className="rounded-sm border border-border px-2 py-1 text-[11px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+                        >
+                          {project.isArchived ? "Unarchive" : "Archive"}
+                        </button>
+                        <ConfirmButton action={deleteProjectAction.bind(null, project.id)} label="Trash" />
+                      </>
+                    ) : null}
                   </div>
                 </td>
               </tr>

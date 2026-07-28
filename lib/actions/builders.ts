@@ -2,11 +2,12 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireMutateSession } from "@/lib/auth/guard";
+import { requireAdminSession, requireMutateSession } from "@/lib/auth/guard";
 import { prisma } from "@/lib/prisma";
 import { revalidateBuilder } from "@/lib/cache";
 import { CONFIDENCE_LEVELS, DATA_SOURCES } from "@/lib/project-meta";
 import { ensureUniqueSlug, slugify } from "@/lib/slug";
+import { deleteImageByPublicId, publicIdFromUrl } from "@/lib/cloudinary";
 import { logAudit } from "@/lib/audit";
 import { friendlyPrismaError } from "./errors";
 
@@ -80,6 +81,32 @@ async function syncBuilderAmenities(builderId: string, amenityIds: string[]) {
   const unique = Array.from(new Set(amenityIds));
   for (const amenityId of unique) {
     await prisma.builderAmenity.create({ data: { builderId, amenityId } });
+  }
+}
+
+/**
+ * Deletes a builder's remote Cloudinary assets — logo, cover image, and every
+ * gallery (BuilderImage) URL. Only ever called AFTER the DB row (and its
+ * cascaded BuilderImage rows) is already gone, so a Cloudinary failure here
+ * can never leave the database inconsistent — the DB is already the source
+ * of truth by the time this runs. Each asset is deleted independently and
+ * failures are logged (never thrown) so one bad asset doesn't block the rest.
+ */
+async function deleteBuilderMediaAssets(
+  builderId: string,
+  logoUrl: string | null,
+  coverImageUrl: string | null,
+  galleryUrls: string[]
+): Promise<void> {
+  const urls = [logoUrl, coverImageUrl, ...galleryUrls].filter((url): url is string => Boolean(url));
+  for (const url of urls) {
+    const publicId = publicIdFromUrl(url);
+    if (!publicId) continue;
+    try {
+      await deleteImageByPublicId(publicId);
+    } catch (error) {
+      console.error(`[builders] failed to delete Cloudinary asset "${publicId}" for builder ${builderId}:`, error);
+    }
   }
 }
 
@@ -164,56 +191,117 @@ export async function updateBuilderAction(
     }
   }
 
+  const nextData = {
+    slug,
+    name: data.name,
+    logoUrl: data.logoUrl ?? null,
+    coverImageUrl: data.coverImageUrl ?? null,
+    description: data.description ?? null,
+    foundedYear: data.foundedYear ?? null,
+    headquarters: data.headquarters ?? null,
+    websiteUrl: data.websiteUrl ?? null,
+    reraNumber: data.reraNumber ?? null,
+    legalNames: parseLines(data.legalNames),
+    awards: parseLines(data.awards),
+    dataSource: data.dataSource,
+    confidence: data.confidence,
+    isPublished: data.isPublished,
+    isFeatured: data.isFeatured,
+    metaTitle: data.metaTitle ?? null,
+    metaDescription: data.metaDescription ?? null,
+    ogImageUrl: data.ogImageUrl ?? null,
+  };
   try {
-    await prisma.builder.update({
-      where: { id: builderId },
-      data: {
-        slug,
-        name: data.name,
-        logoUrl: data.logoUrl ?? null,
-        coverImageUrl: data.coverImageUrl ?? null,
-        description: data.description ?? null,
-        foundedYear: data.foundedYear ?? null,
-        headquarters: data.headquarters ?? null,
-        websiteUrl: data.websiteUrl ?? null,
-        reraNumber: data.reraNumber ?? null,
-        legalNames: parseLines(data.legalNames),
-        awards: parseLines(data.awards),
-        dataSource: data.dataSource,
-        confidence: data.confidence,
-        isPublished: data.isPublished,
-        isFeatured: data.isFeatured,
-        metaTitle: data.metaTitle ?? null,
-        metaDescription: data.metaDescription ?? null,
-        ogImageUrl: data.ogImageUrl ?? null,
-      },
-    });
+    await prisma.builder.update({ where: { id: builderId }, data: nextData });
   } catch (error) {
     return { error: friendlyPrismaError(error) };
   }
 
   await syncBuilderAmenities(builderId, amenityIds);
 
-  await logAudit(session.userId, "builder.update", "Builder", builderId);
+  await logAudit(session.userId, "builder.update", "Builder", builderId, { before: existing, after: nextData });
   revalidateBuilder({ id: builderId, slug });
   redirect("/admin/builders?saved=1");
 }
 
+/** Moves a builder to Trash — forces unpublished+archived so every existing public query already excludes it. ADMIN-only. */
 export async function deleteBuilderAction(builderId: string): Promise<{ error?: string }> {
-  const session = await requireMutateSession();
+  const session = await requireAdminSession();
   const existing = await prisma.builder.findUnique({ where: { id: builderId }, select: { slug: true } });
+  if (!existing) return { error: "Builder not found" };
+  try {
+    await prisma.builder.update({
+      where: { id: builderId },
+      data: { deletedAt: new Date(), deletedByUserId: session.userId, isPublished: false, isArchived: true },
+    });
+  } catch (error) {
+    return { error: friendlyPrismaError(error) };
+  }
+  await logAudit(session.userId, "builder.trash", "Builder", builderId);
+  revalidateBuilder({ id: builderId, slug: existing.slug });
+  return {};
+}
+
+export async function restoreBuilderAction(builderId: string): Promise<{ error?: string }> {
+  const session = await requireAdminSession();
+  const existing = await prisma.builder.findUnique({ where: { id: builderId }, select: { slug: true, deletedAt: true } });
+  if (!existing) return { error: "Builder not found" };
+  if (!existing.deletedAt) return { error: "This builder isn't in Trash" };
+  await prisma.builder.update({ where: { id: builderId }, data: { deletedAt: null, deletedByUserId: null } });
+  await logAudit(session.userId, "builder.restore", "Builder", builderId);
+  revalidateBuilder({ id: builderId, slug: existing.slug });
+  return {};
+}
+
+/**
+ * The actual hard delete — only reachable from Trash. Deletes the DB row
+ * first; only once that succeeds do we touch Cloudinary, so a DB failure
+ * never orphans nothing (media is untouched) and a Cloudinary failure never
+ * leaves the database inconsistent (the row is already gone either way).
+ */
+export async function permanentlyDeleteBuilderAction(builderId: string): Promise<{ error?: string }> {
+  const session = await requireAdminSession();
+  const existing = await prisma.builder.findUnique({
+    where: { id: builderId },
+    select: { deletedAt: true, logoUrl: true, coverImageUrl: true, images: { select: { url: true } } },
+  });
+  if (!existing) return { error: "Builder not found" };
+  if (!existing.deletedAt) return { error: "Move this builder to Trash before permanently deleting it" };
+
   try {
     await prisma.builder.delete({ where: { id: builderId } });
   } catch (error) {
     return { error: friendlyPrismaError(error) };
   }
-  await logAudit(session.userId, "builder.delete", "Builder", builderId);
-  revalidateBuilder({ id: builderId, slug: existing?.slug });
+
+  await deleteBuilderMediaAssets(builderId, existing.logoUrl, existing.coverImageUrl, existing.images.map((i) => i.url));
+
+  await logAudit(session.userId, "builder.permanent-delete", "Builder", builderId);
+  revalidateBuilder();
   return {};
 }
 
+export async function emptyBuilderTrashAction(): Promise<{ error?: string; affected?: number }> {
+  const session = await requireAdminSession();
+
+  const trashed = await prisma.builder.findMany({
+    where: { deletedAt: { not: null } },
+    select: { id: true, logoUrl: true, coverImageUrl: true, images: { select: { url: true } } },
+  });
+
+  const result = await prisma.builder.deleteMany({ where: { deletedAt: { not: null } } });
+
+  for (const b of trashed) {
+    await deleteBuilderMediaAssets(b.id, b.logoUrl, b.coverImageUrl, b.images.map((i) => i.url));
+  }
+
+  await logAudit(session.userId, "builder.trash.empty", "Builder", "*");
+  revalidateBuilder();
+  return { affected: result.count };
+}
+
 export async function toggleBuilderPublishAction(builderId: string, nextValue: boolean): Promise<void> {
-  const session = await requireMutateSession();
+  const session = await requireAdminSession();
   const updated = await prisma.builder.update({ where: { id: builderId }, data: { isPublished: nextValue }, select: { slug: true } });
   await logAudit(session.userId, nextValue ? "builder.publish" : "builder.unpublish", "Builder", builderId);
   revalidateBuilder({ id: builderId, slug: updated.slug });
@@ -227,7 +315,7 @@ export async function toggleBuilderFeaturedAction(builderId: string, nextValue: 
 }
 
 export async function toggleBuilderArchiveAction(builderId: string, nextValue: boolean): Promise<void> {
-  const session = await requireMutateSession();
+  const session = await requireAdminSession();
   const updated = await prisma.builder.update({
     where: { id: builderId },
     data: { isArchived: nextValue, isPublished: nextValue ? false : undefined },
@@ -280,13 +368,13 @@ export async function duplicateBuilderAction(builderId: string): Promise<{ error
   }
 }
 
-export type BulkBuilderOperation = "publish" | "unpublish" | "archive" | "unarchive" | "delete";
+export type BulkBuilderOperation = "publish" | "unpublish" | "archive" | "unarchive" | "delete" | "restore" | "permanent-delete";
 
 export async function bulkBuilderAction(
   builderIds: string[],
   operation: BulkBuilderOperation
 ): Promise<{ error?: string; affected?: number }> {
-  const session = await requireMutateSession();
+  const session = await requireAdminSession();
   if (builderIds.length === 0) return { error: "No builders selected" };
 
   let affected = 0;
@@ -304,8 +392,27 @@ export async function bulkBuilderAction(
       const result = await prisma.builder.updateMany({ where: { id: { in: builderIds } }, data: { isArchived: false } });
       affected = result.count;
     } else if (operation === "delete") {
-      const result = await prisma.builder.deleteMany({ where: { id: { in: builderIds } } });
+      const result = await prisma.builder.updateMany({
+        where: { id: { in: builderIds } },
+        data: { deletedAt: new Date(), deletedByUserId: session.userId, isPublished: false, isArchived: true },
+      });
       affected = result.count;
+    } else if (operation === "restore") {
+      const result = await prisma.builder.updateMany({
+        where: { id: { in: builderIds }, deletedAt: { not: null } },
+        data: { deletedAt: null, deletedByUserId: null },
+      });
+      affected = result.count;
+    } else if (operation === "permanent-delete") {
+      const trashed = await prisma.builder.findMany({
+        where: { id: { in: builderIds }, deletedAt: { not: null } },
+        select: { id: true, logoUrl: true, coverImageUrl: true, images: { select: { url: true } } },
+      });
+      for (const b of trashed) {
+        await prisma.builder.delete({ where: { id: b.id } });
+        await deleteBuilderMediaAssets(b.id, b.logoUrl, b.coverImageUrl, b.images.map((i) => i.url));
+      }
+      affected = trashed.length;
     }
   } catch (error) {
     return { error: friendlyPrismaError(error) };

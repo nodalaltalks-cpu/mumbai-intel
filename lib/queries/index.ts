@@ -81,16 +81,17 @@ export async function getMarketSnapshot(): Promise<MarketSnapshot> {
     }),
     prisma.locality.count({ where: { city: { slug: PRIMARY_CITY_SLUG } } }),
     prisma.transaction.count({
-      where: { locality: { city: { slug: PRIMARY_CITY_SLUG } } },
+      where: { locality: { city: { slug: PRIMARY_CITY_SLUG } }, deletedAt: null },
     }),
     prisma.transaction.count({
       where: {
         locality: { city: { slug: PRIMARY_CITY_SLUG } },
         registrationDate: { gte: ninetyDaysAgo },
+        deletedAt: null,
       },
     }),
     prisma.transaction.aggregate({
-      where: { locality: { city: { slug: PRIMARY_CITY_SLUG } } },
+      where: { locality: { city: { slug: PRIMARY_CITY_SLUG } }, deletedAt: null },
       _avg: { pricePerSqftPaise: true },
     }),
     prisma.builder.count(),
@@ -363,7 +364,7 @@ export async function getNewestDevelopers(limit = 4) {
 export async function getRecentlyActiveDevelopers(limit = 4) {
   const grouped = await prisma.transaction.groupBy({
     by: ["projectId"],
-    where: { project: { isPublished: true, isArchived: false, builderId: { not: null } } },
+    where: { project: { isPublished: true, isArchived: false, builderId: { not: null } }, deletedAt: null },
     _max: { registrationDate: true },
   });
   if (grouped.length === 0) return [];
@@ -402,7 +403,7 @@ export async function getRecentlyActiveDevelopers(limit = 4) {
 
 export async function getLatestTransactions(limit = 8) {
   const transactions = await prisma.transaction.findMany({
-    where: { locality: { city: { slug: PRIMARY_CITY_SLUG } } },
+    where: { locality: { city: { slug: PRIMARY_CITY_SLUG } }, deletedAt: null },
     orderBy: { registrationDate: "desc" },
     take: limit,
     include: { locality: true, project: true },
@@ -747,7 +748,7 @@ export async function getProjectPriceHistory(projectId: string) {
 
 export async function getProjectTransactionHistory(projectId: string, limit = 20) {
   const transactions = await prisma.transaction.findMany({
-    where: { projectId },
+    where: { projectId, deletedAt: null },
     orderBy: { registrationDate: "desc" },
     take: limit,
   });
@@ -1238,7 +1239,7 @@ export async function getLocalityIntelligence(
 ): Promise<LocalityIntelligence> {
   const [recentTx, priorTx, projects] = await Promise.all([
     prisma.transaction.count({
-      where: { localityId, registrationDate: { gte: new Date(new Date().setMonth(new Date().getMonth() - 3)) } },
+      where: { localityId, registrationDate: { gte: new Date(new Date().setMonth(new Date().getMonth() - 3)) }, deletedAt: null },
     }),
     prisma.transaction.count({
       where: {
@@ -1247,6 +1248,7 @@ export async function getLocalityIntelligence(
           gte: new Date(new Date().setMonth(new Date().getMonth() - 6)),
           lt: new Date(new Date().setMonth(new Date().getMonth() - 3)),
         },
+        deletedAt: null,
       },
     }),
     prisma.project.findMany({
@@ -1269,7 +1271,7 @@ export async function getLocalityIntelligence(
 export async function getTopLocalitiesByActivity(limit = 3): Promise<LocalityInsight[]> {
   const grouped = await prisma.transaction.groupBy({
     by: ["localityId"],
-    where: { locality: { city: { slug: PRIMARY_CITY_SLUG } } },
+    where: { locality: { city: { slug: PRIMARY_CITY_SLUG } }, deletedAt: null },
     _count: { _all: true },
     _avg: { pricePerSqftPaise: true },
     orderBy: { _count: { localityId: "desc" } },

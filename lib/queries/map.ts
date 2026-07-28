@@ -70,7 +70,7 @@ export async function getLocalityMapMarkers(): Promise<LocalityMapMarker[]> {
   if (localities.length === 0) return [];
 
   const transactions = await prisma.transaction.findMany({
-    where: { localityId: { in: localities.map((l) => l.id) } },
+    where: { localityId: { in: localities.map((l) => l.id) }, deletedAt: null },
     select: { localityId: true, valuePaise: true },
   });
   const byLocality = new Map<string, { valuePaise: bigint }[]>();

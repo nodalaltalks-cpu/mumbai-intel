@@ -1,18 +1,19 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getAmenities, getBuilderForEdit } from "@/lib/admin-queries";
+import { getAmenities, getAuditHistory, getBuilderForEdit } from "@/lib/admin-queries";
 import BuilderForm from "@/app/admin/components/BuilderForm";
 import BuilderScoreManager from "@/app/admin/components/BuilderScoreManager";
 import BuilderTimelineManager from "@/app/admin/components/BuilderTimelineManager";
 import BuilderGalleryUploader from "@/app/admin/components/BuilderGalleryUploader";
+import AuditHistory from "@/app/admin/components/AuditHistory";
 
 export const metadata: Metadata = { title: "Edit Builder — Mumbai Intel Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function EditBuilderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [builder, amenities] = await Promise.all([getBuilderForEdit(id), getAmenities()]);
+  const [builder, amenities, history] = await Promise.all([getBuilderForEdit(id), getAmenities(), getAuditHistory("Builder", id)]);
   if (!builder) notFound();
 
   return (
@@ -75,6 +76,8 @@ export default async function EditBuilderPage({ params }: { params: Promise<{ id
       />
 
       <BuilderGalleryUploader builderId={builder.id} images={builder.images} />
+
+      <AuditHistory logs={history} />
     </div>
   );
 }

@@ -166,6 +166,7 @@ export async function getActivityFeed(limit = 15) {
 export async function getRecentProjectsAdmin(limit = 5) {
   return safeQuery("getRecentProjectsAdmin", [], () =>
     prisma.project.findMany({
+      where: { deletedAt: null },
       orderBy: { updatedAt: "desc" },
       take: limit,
       include: { locality: true, builder: true },
@@ -176,6 +177,7 @@ export async function getRecentProjectsAdmin(limit = 5) {
 export async function getRecentTransactionsAdmin(limit = 5) {
   return safeQuery("getRecentTransactionsAdmin", [], () =>
     prisma.transaction.findMany({
+      where: { deletedAt: null },
       orderBy: { registrationDate: "desc" },
       take: limit,
       include: { locality: true, project: true },
@@ -238,11 +240,12 @@ async function fetchProjectsPage(filters: ProjectListFilters) {
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, filters.pageSize ?? 20));
 
-  const where: Prisma.ProjectWhereInput = { isArchived: filters.showArchived ? true : false };
+  const where: Prisma.ProjectWhereInput = { isArchived: filters.showArchived ? true : false, deletedAt: null };
   if (filters.q) {
     where.OR = [
       { name: { contains: filters.q, mode: "insensitive" } },
       { tagline: { contains: filters.q, mode: "insensitive" } },
+      { reraNumber: { contains: filters.q, mode: "insensitive" } },
       { locality: { name: { contains: filters.q, mode: "insensitive" } } },
       { builder: { name: { contains: filters.q, mode: "insensitive" } } },
     ];
@@ -392,7 +395,7 @@ async function fetchBuildersPage(filters: BuilderListFilters) {
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, filters.pageSize ?? 20));
 
-  const where: Prisma.BuilderWhereInput = { isArchived: filters.showArchived ? true : false };
+  const where: Prisma.BuilderWhereInput = { isArchived: filters.showArchived ? true : false, deletedAt: null };
   if (filters.q) {
     where.OR = [
       { name: { contains: filters.q, mode: "insensitive" } },
@@ -474,6 +477,7 @@ async function fetchLocalitiesPage(filters: LocalityListFilters) {
   const where: Prisma.LocalityWhereInput = {
     city: { slug: PRIMARY_CITY_SLUG },
     isArchived: filters.showArchived ? true : false,
+    deletedAt: null,
   };
   if (filters.q) {
     where.OR = [
@@ -594,6 +598,7 @@ export async function getLocalityNearbyInfra(localityId: string, radiusMeters = 
 export async function getAllTransactionsAdmin(limit = 200) {
   return safeQuery("getAllTransactionsAdmin", [], () =>
     prisma.transaction.findMany({
+      where: { deletedAt: null },
       orderBy: { registrationDate: "desc" },
       take: limit,
       include: { locality: true, project: true },
@@ -916,6 +921,140 @@ export async function getPendingStagingRecords() {
 
 export async function getInfraAssetById(id: string) {
   return safeQuery("getInfraAssetById", null, () => prisma.infraAsset.findUnique({ where: { id } }));
+}
+
+async function resolveDeletedByNames(userIds: (string | null)[]): Promise<Map<string, string>> {
+  const ids = Array.from(new Set(userIds.filter((id): id is string => id !== null)));
+  if (ids.length === 0) return new Map();
+  const users = await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, email: true } });
+  return new Map(users.map((u) => [u.id, u.name || u.email]));
+}
+
+export interface TrashListFilters {
+  q?: string;
+}
+
+export async function getTrashedProjects(filters: TrashListFilters = {}) {
+  return safeQuery("getTrashedProjects", [] as Awaited<ReturnType<typeof fetchTrashedProjects>>, () => fetchTrashedProjects(filters));
+}
+
+async function fetchTrashedProjects(filters: TrashListFilters) {
+  const where: Prisma.ProjectWhereInput = { deletedAt: { not: null } };
+  if (filters.q) {
+    where.OR = [
+      { name: { contains: filters.q, mode: "insensitive" } },
+      { reraNumber: { contains: filters.q, mode: "insensitive" } },
+      { locality: { name: { contains: filters.q, mode: "insensitive" } } },
+      { builder: { name: { contains: filters.q, mode: "insensitive" } } },
+    ];
+  }
+  const items = await prisma.project.findMany({
+    where,
+    orderBy: { deletedAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      reraNumber: true,
+      deletedAt: true,
+      deletedByUserId: true,
+      locality: { select: { name: true } },
+      builder: { select: { name: true } },
+    },
+  });
+  const deletedByName = await resolveDeletedByNames(items.map((i) => i.deletedByUserId));
+  return items.map((i) => ({ ...i, deletedByName: i.deletedByUserId ? deletedByName.get(i.deletedByUserId) ?? null : null }));
+}
+
+export async function getTrashedBuilders(filters: TrashListFilters = {}) {
+  return safeQuery("getTrashedBuilders", [] as Awaited<ReturnType<typeof fetchTrashedBuilders>>, () => fetchTrashedBuilders(filters));
+}
+
+async function fetchTrashedBuilders(filters: TrashListFilters) {
+  const where: Prisma.BuilderWhereInput = { deletedAt: { not: null } };
+  if (filters.q) {
+    where.OR = [
+      { name: { contains: filters.q, mode: "insensitive" } },
+      { headquarters: { contains: filters.q, mode: "insensitive" } },
+    ];
+  }
+  const items = await prisma.builder.findMany({
+    where,
+    orderBy: { deletedAt: "desc" },
+    select: { id: true, name: true, headquarters: true, deletedAt: true, deletedByUserId: true, _count: { select: { projects: true } } },
+  });
+  const deletedByName = await resolveDeletedByNames(items.map((i) => i.deletedByUserId));
+  return items.map((i) => ({ ...i, deletedByName: i.deletedByUserId ? deletedByName.get(i.deletedByUserId) ?? null : null }));
+}
+
+export async function getTrashedLocalities(filters: TrashListFilters = {}) {
+  return safeQuery("getTrashedLocalities", [] as Awaited<ReturnType<typeof fetchTrashedLocalities>>, () => fetchTrashedLocalities(filters));
+}
+
+async function fetchTrashedLocalities(filters: TrashListFilters) {
+  const where: Prisma.LocalityWhereInput = { deletedAt: { not: null } };
+  if (filters.q) {
+    where.OR = [
+      { name: { contains: filters.q, mode: "insensitive" } },
+      { pincode: { contains: filters.q, mode: "insensitive" } },
+    ];
+  }
+  const items = await prisma.locality.findMany({
+    where,
+    orderBy: { deletedAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      deletedAt: true,
+      deletedByUserId: true,
+      _count: { select: { projects: true, transactions: true } },
+    },
+  });
+  const deletedByName = await resolveDeletedByNames(items.map((i) => i.deletedByUserId));
+  return items.map((i) => ({ ...i, deletedByName: i.deletedByUserId ? deletedByName.get(i.deletedByUserId) ?? null : null }));
+}
+
+export async function getTrashedTransactions(filters: TrashListFilters = {}) {
+  return safeQuery("getTrashedTransactions", [] as Awaited<ReturnType<typeof fetchTrashedTransactions>>, () => fetchTrashedTransactions(filters));
+}
+
+async function fetchTrashedTransactions(filters: TrashListFilters) {
+  const where: Prisma.TransactionWhereInput = { deletedAt: { not: null } };
+  if (filters.q) {
+    where.OR = [
+      { locality: { name: { contains: filters.q, mode: "insensitive" } } },
+      { project: { name: { contains: filters.q, mode: "insensitive" } } },
+    ];
+  }
+  const items = await prisma.transaction.findMany({
+    where,
+    orderBy: { deletedAt: "desc" },
+    select: {
+      id: true,
+      valuePaise: true,
+      registrationDate: true,
+      deletedAt: true,
+      deletedByUserId: true,
+      locality: { select: { name: true } },
+      project: { select: { name: true } },
+    },
+  });
+  const deletedByName = await resolveDeletedByNames(items.map((i) => i.deletedByUserId));
+  return items.map((i) => ({
+    ...i,
+    valuePaise: Number(i.valuePaise),
+    deletedByName: i.deletedByUserId ? deletedByName.get(i.deletedByUserId) ?? null : null,
+  }));
+}
+
+export async function getAuditHistory(entityType: string, entityId: string, limit = 50) {
+  return safeQuery("getAuditHistory", [], () =>
+    prisma.auditLog.findMany({
+      where: { entityType, entityId },
+      orderBy: { at: "desc" },
+      take: limit,
+      include: { actor: { select: { name: true, email: true } } },
+    })
+  );
 }
 
 export async function getUserForEdit(id: string) {

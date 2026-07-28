@@ -14,7 +14,7 @@ import { STATUS_CLASS, STATUS_LABEL, type ProjectStatus } from "@/lib/project-me
 import type { ProjectRow } from "./ProjectsTable";
 import ConfirmButton from "./ConfirmButton";
 
-export default function ProjectCardsGrid({ projects }: { projects: ProjectRow[] }) {
+export default function ProjectCardsGrid({ projects, isAdmin }: { projects: ProjectRow[]; isAdmin: boolean }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -85,15 +85,21 @@ export default function ProjectCardsGrid({ projects }: { projects: ProjectRow[] 
             </div>
 
             <div className="flex flex-wrap items-center gap-1">
-              <button
-                type="button"
-                onClick={() => togglePublishAction(project.id, !project.isPublished).then(() => router.refresh())}
-                className={`rounded-sm border px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wide ${
-                  project.isPublished ? "border-positive/40 bg-positive/10 text-positive" : "border-border text-muted"
-                }`}
-              >
-                {project.isPublished ? "Published" : "Draft"}
-              </button>
+              {isAdmin ? (
+                <button
+                  type="button"
+                  onClick={() => togglePublishAction(project.id, !project.isPublished).then(() => router.refresh())}
+                  className={`rounded-sm border px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wide ${
+                    project.isPublished ? "border-positive/40 bg-positive/10 text-positive" : "border-border text-muted"
+                  }`}
+                >
+                  {project.isPublished ? "Published" : "Draft"}
+                </button>
+              ) : (
+                <span className={`rounded-sm border px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wide ${project.isPublished ? "border-positive/40 bg-positive/10 text-positive" : "border-border text-muted"}`}>
+                  {project.isPublished ? "Published" : "Draft"}
+                </span>
+              )}
               {project.reraNumber ? (
                 <span className="rounded-sm border border-info/40 bg-info/10 px-1.5 py-0.5 text-[9px] font-mono uppercase text-info">RERA</span>
               ) : null}
@@ -114,14 +120,18 @@ export default function ProjectCardsGrid({ projects }: { projects: ProjectRow[] 
               >
                 Duplicate
               </button>
-              <button
-                type="button"
-                onClick={() => toggleArchiveAction(project.id, !project.isArchived).then(() => router.refresh())}
-                className="rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
-              >
-                {project.isArchived ? "Unarchive" : "Archive"}
-              </button>
-              <ConfirmButton action={deleteProjectAction.bind(null, project.id)} className="px-2 py-1" />
+              {isAdmin ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => toggleArchiveAction(project.id, !project.isArchived).then(() => router.refresh())}
+                    className="rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+                  >
+                    {project.isArchived ? "Unarchive" : "Archive"}
+                  </button>
+                  <ConfirmButton action={deleteProjectAction.bind(null, project.id)} label="Trash" className="px-2 py-1" />
+                </>
+              ) : null}
             </div>
           </div>
         </div>

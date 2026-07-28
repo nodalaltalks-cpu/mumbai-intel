@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { requireSession } from "@/lib/auth/guard";
 import { getBuildersAdminPaged } from "@/lib/admin-queries";
 import FlashMessage from "@/app/admin/components/FlashMessage";
 import Pagination from "@/app/admin/components/Pagination";
@@ -26,6 +27,7 @@ export default async function AdminBuildersPage({
     page?: string;
   }>;
 }) {
+  const session = await requireSession();
   const params = await searchParams;
   const page = Math.max(1, Number(params.page ?? 1) || 1);
   const view = params.view === "card" ? "card" : "table";
@@ -75,7 +77,11 @@ export default async function AdminBuildersPage({
 
       <BuilderFilterBar />
 
-      {view === "card" ? <BuilderCardsGrid builders={builders} /> : <BuildersTable builders={builders} />}
+      {view === "card" ? (
+        <BuilderCardsGrid builders={builders} isAdmin={session.role === "ADMIN"} />
+      ) : (
+        <BuildersTable builders={builders} isAdmin={session.role === "ADMIN"} />
+      )}
 
       <Pagination page={page} totalPages={totalPages} total={total} buildHref={buildHref} />
     </div>

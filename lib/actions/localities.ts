@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireMutateSession } from "@/lib/auth/guard";
+import { requireAdminSession, requireMutateSession } from "@/lib/auth/guard";
 import { prisma } from "@/lib/prisma";
 import { revalidateLocality } from "@/lib/cache";
 import { PRIMARY_CITY_SLUG } from "@/lib/queries";
@@ -198,45 +198,44 @@ export async function updateLocalityAction(
 
   const hasMarketData = marketFieldsPresent(data);
 
+  const nextData = {
+    zoneId: data.zoneId || null,
+    name: data.name,
+    slug,
+    pincode: data.pincode ?? null,
+    description: data.description ?? null,
+    coverImageUrl: data.coverImageUrl ?? null,
+    centroidLat: data.centroidLat ?? null,
+    centroidLng: data.centroidLng ?? null,
+    avgPricePerSqftPaise: data.avgPriceRupeesPerSqft !== undefined ? BigInt(Math.round(data.avgPriceRupeesPerSqft * 100)) : null,
+    rentalYieldPercent: data.rentalYieldPercent ?? null,
+    growthPercentYoy: data.growthPercentYoy ?? null,
+    marketDataSource: hasMarketData ? ("MANUALLY_VERIFIED" as const) : null,
+    marketAsOf: hasMarketData ? new Date() : null,
+    connectivityNotes: data.connectivityNotes ?? null,
+    investmentScore: data.investmentScore ?? null,
+    endUserScore: data.endUserScore ?? null,
+    luxuryScore: data.luxuryScore ?? null,
+    familyScore: data.familyScore ?? null,
+    advantages: parseLines(data.advantages),
+    disadvantages: parseLines(data.disadvantages),
+    metaTitle: data.metaTitle ?? null,
+    metaDescription: data.metaDescription ?? null,
+    canonicalUrl: data.canonicalUrl ?? null,
+    ogImageUrl: data.ogImageUrl ?? null,
+    isPublished: data.isPublished,
+    isFeatured: data.isFeatured,
+  };
+
   try {
-    await prisma.locality.update({
-      where: { id: localityId },
-      data: {
-        zoneId: data.zoneId || null,
-        name: data.name,
-        slug,
-        pincode: data.pincode ?? null,
-        description: data.description ?? null,
-        coverImageUrl: data.coverImageUrl ?? null,
-        centroidLat: data.centroidLat ?? null,
-        centroidLng: data.centroidLng ?? null,
-        avgPricePerSqftPaise: data.avgPriceRupeesPerSqft !== undefined ? BigInt(Math.round(data.avgPriceRupeesPerSqft * 100)) : null,
-        rentalYieldPercent: data.rentalYieldPercent ?? null,
-        growthPercentYoy: data.growthPercentYoy ?? null,
-        marketDataSource: hasMarketData ? "MANUALLY_VERIFIED" : null,
-        marketAsOf: hasMarketData ? new Date() : null,
-        connectivityNotes: data.connectivityNotes ?? null,
-        investmentScore: data.investmentScore ?? null,
-        endUserScore: data.endUserScore ?? null,
-        luxuryScore: data.luxuryScore ?? null,
-        familyScore: data.familyScore ?? null,
-        advantages: parseLines(data.advantages),
-        disadvantages: parseLines(data.disadvantages),
-        metaTitle: data.metaTitle ?? null,
-        metaDescription: data.metaDescription ?? null,
-        canonicalUrl: data.canonicalUrl ?? null,
-        ogImageUrl: data.ogImageUrl ?? null,
-        isPublished: data.isPublished,
-        isFeatured: data.isFeatured,
-      },
-    });
+    await prisma.locality.update({ where: { id: localityId }, data: nextData });
   } catch (error) {
     return { error: friendlyPrismaError(error) };
   }
 
   await syncLocalityAmenities(localityId, amenityIds);
 
-  await logAudit(session.userId, "locality.update", "Locality", localityId);
+  await logAudit(session.userId, "locality.update", "Locality", localityId, { before: existing, after: nextData });
   revalidateLocality({ id: localityId, slug });
   redirect("/admin/localities?saved=1");
 }
@@ -246,28 +245,75 @@ export interface DeleteLocalityResult {
 }
 
 export async function deleteLocalityAction(localityId: string): Promise<DeleteLocalityResult> {
-  const session = await requireMutateSession();
+  const session = await requireAdminSession();
+
+  const existing = await prisma.locality.findUnique({ where: { id: localityId }, select: { slug: true } });
+  if (!existing) return { error: "Locality not found" };
+
+  await prisma.locality.update({
+    where: { id: localityId },
+    data: { deletedAt: new Date(), deletedByUserId: session.userId, isPublished: false, isArchived: true },
+  });
+  await logAudit(session.userId, "locality.trash", "Locality", localityId);
+  revalidateLocality({ id: localityId, slug: existing.slug });
+  return {};
+}
+
+export async function restoreLocalityAction(localityId: string): Promise<DeleteLocalityResult> {
+  const session = await requireAdminSession();
+
+  const existing = await prisma.locality.findUnique({ where: { id: localityId }, select: { slug: true } });
+  if (!existing) return { error: "Locality not found" };
+
+  await prisma.locality.update({ where: { id: localityId }, data: { deletedAt: null, deletedByUserId: null } });
+  await logAudit(session.userId, "locality.restore", "Locality", localityId);
+  revalidateLocality({ id: localityId, slug: existing.slug });
+  return {};
+}
+
+export async function permanentlyDeleteLocalityAction(localityId: string): Promise<DeleteLocalityResult> {
+  const session = await requireAdminSession();
 
   const [projectCount, transactionCount, existing] = await Promise.all([
     prisma.project.count({ where: { localityId } }),
     prisma.transaction.count({ where: { localityId } }),
-    prisma.locality.findUnique({ where: { id: localityId }, select: { slug: true } }),
+    prisma.locality.findUnique({ where: { id: localityId }, select: { slug: true, deletedAt: true } }),
   ]);
 
+  if (!existing) return { error: "Locality not found" };
+  if (!existing.deletedAt) return { error: "Move this locality to Trash before permanently deleting it" };
   if (projectCount > 0 || transactionCount > 0) {
     return {
-      error: `Cannot delete — ${projectCount} project(s) and ${transactionCount} transaction(s) still reference this locality.`,
+      error: `Cannot permanently delete — ${projectCount} project(s) and ${transactionCount} transaction(s) still reference this locality.`,
     };
   }
 
   await prisma.locality.delete({ where: { id: localityId } });
-  await logAudit(session.userId, "locality.delete", "Locality", localityId);
-  revalidateLocality({ id: localityId, slug: existing?.slug });
+  await logAudit(session.userId, "locality.permanent-delete", "Locality", localityId);
+  revalidateLocality({ id: localityId, slug: existing.slug });
   return {};
 }
 
+export async function emptyLocalityTrashAction(): Promise<{ error?: string; affected?: number }> {
+  const session = await requireAdminSession();
+
+  const blocked = await prisma.locality.findMany({
+    where: { deletedAt: { not: null }, OR: [{ projects: { some: {} } }, { transactions: { some: {} } }] },
+    select: { id: true },
+  });
+  const blockedIds = new Set(blocked.map((b) => b.id));
+  const deletable = await prisma.locality.findMany({ where: { deletedAt: { not: null } }, select: { id: true } });
+  const ids = deletable.map((d) => d.id).filter((id) => !blockedIds.has(id));
+  if (ids.length === 0) return { affected: 0 };
+
+  const result = await prisma.locality.deleteMany({ where: { id: { in: ids } } });
+  await logAudit(session.userId, "locality.trash.empty", "Locality", ids.join(","));
+  revalidateLocality();
+  return { affected: result.count };
+}
+
 export async function toggleLocalityPublishAction(localityId: string, nextValue: boolean): Promise<void> {
-  const session = await requireMutateSession();
+  const session = await requireAdminSession();
   const updated = await prisma.locality.update({ where: { id: localityId }, data: { isPublished: nextValue }, select: { slug: true } });
   await logAudit(session.userId, nextValue ? "locality.publish" : "locality.unpublish", "Locality", localityId);
   revalidateLocality({ id: localityId, slug: updated.slug });
@@ -281,7 +327,7 @@ export async function toggleLocalityFeaturedAction(localityId: string, nextValue
 }
 
 export async function toggleLocalityArchiveAction(localityId: string, nextValue: boolean): Promise<void> {
-  const session = await requireMutateSession();
+  const session = await requireAdminSession();
   const updated = await prisma.locality.update({
     where: { id: localityId },
     data: { isArchived: nextValue, isPublished: nextValue ? false : undefined },
@@ -339,13 +385,13 @@ export async function duplicateLocalityAction(localityId: string): Promise<{ err
   }
 }
 
-export type BulkLocalityOperation = "publish" | "unpublish" | "archive" | "unarchive" | "delete";
+export type BulkLocalityOperation = "publish" | "unpublish" | "archive" | "unarchive" | "delete" | "restore" | "permanent-delete";
 
 export async function bulkLocalityAction(
   localityIds: string[],
   operation: BulkLocalityOperation
 ): Promise<{ error?: string; affected?: number }> {
-  const session = await requireMutateSession();
+  const session = await requireAdminSession();
   if (localityIds.length === 0) return { error: "No localities selected" };
 
   let affected = 0;
@@ -359,6 +405,17 @@ export async function bulkLocalityAction(
     } else if (operation === "unarchive") {
       affected = (await prisma.locality.updateMany({ where: { id: { in: localityIds } }, data: { isArchived: false } })).count;
     } else if (operation === "delete") {
+      affected = (
+        await prisma.locality.updateMany({
+          where: { id: { in: localityIds } },
+          data: { deletedAt: new Date(), deletedByUserId: session.userId, isPublished: false, isArchived: true },
+        })
+      ).count;
+    } else if (operation === "restore") {
+      affected = (
+        await prisma.locality.updateMany({ where: { id: { in: localityIds } }, data: { deletedAt: null, deletedByUserId: null } })
+      ).count;
+    } else if (operation === "permanent-delete") {
       const blocked = await prisma.locality.findMany({
         where: { id: { in: localityIds }, OR: [{ projects: { some: {} } }, { transactions: { some: {} } }] },
         select: { id: true },
@@ -366,7 +423,7 @@ export async function bulkLocalityAction(
       const blockedIds = new Set(blocked.map((b) => b.id));
       const deletable = localityIds.filter((id) => !blockedIds.has(id));
       if (deletable.length === 0) return { error: "Selected localities are still referenced by projects or transactions" };
-      affected = (await prisma.locality.deleteMany({ where: { id: { in: deletable } } })).count;
+      affected = (await prisma.locality.deleteMany({ where: { id: { in: deletable }, deletedAt: { not: null } } })).count;
     }
   } catch (error) {
     return { error: friendlyPrismaError(error) };

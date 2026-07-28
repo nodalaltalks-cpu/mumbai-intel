@@ -12,7 +12,7 @@ import {
 import type { LocalityRow } from "./LocalitiesTable";
 import ConfirmButton from "./ConfirmButton";
 
-export default function LocalityCardsGrid({ localities }: { localities: LocalityRow[] }) {
+export default function LocalityCardsGrid({ localities, isAdmin }: { localities: LocalityRow[]; isAdmin: boolean }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -54,15 +54,21 @@ export default function LocalityCardsGrid({ localities }: { localities: Locality
           </div>
 
           <div className="flex items-center justify-between border-t border-border pt-2">
-            <button
-              type="button"
-              onClick={() => toggleLocalityPublishAction(locality.id, !locality.isPublished).then(() => router.refresh())}
-              className={`rounded-sm border px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wide ${
-                locality.isPublished ? "border-positive/40 bg-positive/10 text-positive" : "border-border text-muted"
-              }`}
-            >
-              {locality.isPublished ? "Published" : "Draft"}
-            </button>
+            {isAdmin ? (
+              <button
+                type="button"
+                onClick={() => toggleLocalityPublishAction(locality.id, !locality.isPublished).then(() => router.refresh())}
+                className={`rounded-sm border px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wide ${
+                  locality.isPublished ? "border-positive/40 bg-positive/10 text-positive" : "border-border text-muted"
+                }`}
+              >
+                {locality.isPublished ? "Published" : "Draft"}
+              </button>
+            ) : (
+              <span className={`rounded-sm border px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wide ${locality.isPublished ? "border-positive/40 bg-positive/10 text-positive" : "border-border text-muted"}`}>
+                {locality.isPublished ? "Published" : "Draft"}
+              </span>
+            )}
             {locality.isFeatured ? (
               <span className="rounded-sm border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[9px] font-mono uppercase text-accent">Featured</span>
             ) : null}
@@ -83,14 +89,18 @@ export default function LocalityCardsGrid({ localities }: { localities: Locality
             >
               Duplicate
             </button>
-            <button
-              type="button"
-              onClick={() => toggleLocalityArchiveAction(locality.id, !locality.isArchived).then(() => router.refresh())}
-              className="rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
-            >
-              {locality.isArchived ? "Unarchive" : "Archive"}
-            </button>
-            <ConfirmButton action={deleteLocalityAction.bind(null, locality.id)} className="px-2 py-1" />
+            {isAdmin ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => toggleLocalityArchiveAction(locality.id, !locality.isArchived).then(() => router.refresh())}
+                  className="rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+                >
+                  {locality.isArchived ? "Unarchive" : "Archive"}
+                </button>
+                <ConfirmButton action={deleteLocalityAction.bind(null, locality.id)} label="Trash" className="px-2 py-1" />
+              </>
+            ) : null}
           </div>
         </div>
       ))}

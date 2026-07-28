@@ -1,17 +1,19 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getLocalitiesForSelect, getProjectsForSelect, getTransactionForEdit } from "@/lib/admin-queries";
+import { getAuditHistory, getLocalitiesForSelect, getProjectsForSelect, getTransactionForEdit } from "@/lib/admin-queries";
 import TransactionForm from "@/app/admin/components/TransactionForm";
+import AuditHistory from "@/app/admin/components/AuditHistory";
 
 export const metadata: Metadata = { title: "Edit Transaction — Mumbai Intel Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function EditTransactionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [transaction, localities, projects] = await Promise.all([
+  const [transaction, localities, projects, history] = await Promise.all([
     getTransactionForEdit(id),
     getLocalitiesForSelect(),
     getProjectsForSelect(),
+    getAuditHistory("Transaction", id),
   ]);
   if (!transaction) notFound();
 
@@ -21,6 +23,8 @@ export default async function EditTransactionPage({ params }: { params: Promise<
       <div className="rounded-sm border border-border bg-surface p-4">
         <TransactionForm transaction={transaction} localities={localities} projects={projects} />
       </div>
+
+      <AuditHistory logs={history} />
     </div>
   );
 }

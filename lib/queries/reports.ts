@@ -47,7 +47,7 @@ export async function getMarketBaseline(): Promise<MarketBaseline> {
 export async function getTopProjectsByActivity(limit = 6) {
   const grouped = await prisma.transaction.groupBy({
     by: ["projectId"],
-    where: { projectId: { not: null }, locality: { city: { slug: PRIMARY_CITY_SLUG } } },
+    where: { projectId: { not: null }, locality: { city: { slug: PRIMARY_CITY_SLUG } }, deletedAt: null },
     _count: { _all: true },
   });
   if (grouped.length === 0) return [];
