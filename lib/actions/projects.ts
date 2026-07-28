@@ -8,7 +8,7 @@ import { revalidateProject } from "@/lib/cache";
 import { PROJECT_STATUSES } from "@/lib/project-meta";
 import { PRIMARY_CITY_SLUG } from "@/lib/queries";
 import { ensureUniqueSlug, slugify } from "@/lib/slug";
-import { deleteImageByPublicId, publicIdFromUrl } from "@/lib/cloudinary";
+import { deleteDocumentByPublicId, deleteImageByPublicId, documentPublicIdFromUrl, publicIdFromUrl } from "@/lib/cloudinary";
 import { logAudit } from "@/lib/audit";
 import { syncProjectNearbyInfra } from "@/lib/infra-linking";
 import { buildProjectData, parseHighlights, parseProjectForm, toPaise } from "@/lib/project-data";
@@ -31,27 +31,56 @@ async function syncProjectAmenities(projectId: string, amenityIds: string[]) {
   }
 }
 
-/** Deletes a project's remote images/brochure — only ever called for a PERMANENT delete, never a soft one. */
-async function deleteProjectMediaAssets(projectId: string, brochureUrl: string | null) {
-  const images = await prisma.projectImage.findMany({ where: { projectId }, select: { url: true } });
-  for (const image of images) {
-    const publicId = publicIdFromUrl(image.url);
-    if (publicId) {
-      try {
-        await deleteImageByPublicId(publicId);
-      } catch {
-        // Best-effort — DB rows are the source of truth; a stray remote asset isn't fatal.
-      }
+/**
+ * Fetches everything `deleteProjectMediaAssets` needs to clean up — call
+ * BEFORE deleting the Project row, since ProjectImage/ProjectDocument cascade
+ * away with it (onDelete: Cascade) and would no longer be queryable after.
+ */
+async function fetchProjectMediaRefs(projectId: string) {
+  const [images, documents, project] = await Promise.all([
+    prisma.projectImage.findMany({ where: { projectId }, select: { url: true } }),
+    prisma.projectDocument.findMany({ where: { projectId }, select: { url: true } }),
+    prisma.project.findUnique({ where: { id: projectId }, select: { brochureUrl: true } }),
+  ]);
+  return {
+    imageUrls: images.map((i) => i.url),
+    documentUrls: documents.map((d) => d.url),
+    brochureUrl: project?.brochureUrl ?? null,
+  };
+}
+
+/**
+ * Deletes a project's remote Cloudinary assets — gallery/hero images
+ * (`image` resource type), additional documents and the brochure (`raw`
+ * resource type, hence the separate `deleteDocumentByPublicId` call — using
+ * the image-delete API on a raw asset silently fails to remove it). Only
+ * ever called AFTER the DB row is already gone, so a Cloudinary failure here
+ * can never leave the database inconsistent. Each asset is deleted
+ * independently and failures are logged (never thrown) so one bad asset
+ * doesn't block the rest.
+ */
+async function deleteProjectMediaAssets(
+  projectId: string,
+  refs: { imageUrls: string[]; documentUrls: string[]; brochureUrl: string | null }
+): Promise<void> {
+  for (const url of refs.imageUrls) {
+    const publicId = publicIdFromUrl(url);
+    if (!publicId) continue;
+    try {
+      await deleteImageByPublicId(publicId);
+    } catch (error) {
+      console.error(`[projects] failed to delete Cloudinary image "${publicId}" for project ${projectId}:`, error);
     }
   }
-  if (brochureUrl) {
-    const publicId = publicIdFromUrl(brochureUrl);
-    if (publicId) {
-      try {
-        await deleteImageByPublicId(publicId);
-      } catch {
-        // best-effort
-      }
+
+  const documentUrls = [...refs.documentUrls, ...(refs.brochureUrl ? [refs.brochureUrl] : [])];
+  for (const url of documentUrls) {
+    const publicId = documentPublicIdFromUrl(url);
+    if (!publicId) continue;
+    try {
+      await deleteDocumentByPublicId(publicId);
+    } catch (error) {
+      console.error(`[projects] failed to delete Cloudinary document "${publicId}" for project ${projectId}:`, error);
     }
   }
 }
@@ -366,21 +395,28 @@ export async function restoreProjectAction(projectId: string): Promise<{ error?:
   return {};
 }
 
-/** The actual hard delete — only ever reachable from Trash (requires deletedAt already set). */
+/**
+ * The actual hard delete — only ever reachable from Trash. Deletes the DB
+ * row first; only once that succeeds do we touch Cloudinary, so a DB failure
+ * never orphans anything and a Cloudinary failure never leaves the database
+ * inconsistent (the row is already gone either way).
+ */
 export async function permanentlyDeleteProjectAction(projectId: string): Promise<{ error?: string }> {
   const session = await requireAdminSession();
 
-  const existing = await prisma.project.findUnique({ where: { id: projectId }, select: { deletedAt: true, brochureUrl: true } });
+  const existing = await prisma.project.findUnique({ where: { id: projectId }, select: { deletedAt: true } });
   if (!existing) return { error: "Project not found" };
   if (!existing.deletedAt) return { error: "Move this project to Trash before permanently deleting it" };
 
-  await deleteProjectMediaAssets(projectId, existing.brochureUrl);
+  const mediaRefs = await fetchProjectMediaRefs(projectId);
 
   try {
     await prisma.project.delete({ where: { id: projectId } });
   } catch (error) {
     return { error: friendlyPrismaError(error) };
   }
+
+  await deleteProjectMediaAssets(projectId, mediaRefs);
 
   await logAudit(session.userId, "project.permanent-delete", "Project", projectId);
   revalidateProject();
@@ -425,11 +461,12 @@ export async function bulkProjectAction(
     } else if (operation === "permanent-delete") {
       const trashed = await prisma.project.findMany({
         where: { id: { in: projectIds }, deletedAt: { not: null } },
-        select: { id: true, brochureUrl: true },
+        select: { id: true },
       });
       for (const p of trashed) {
-        await deleteProjectMediaAssets(p.id, p.brochureUrl);
+        const mediaRefs = await fetchProjectMediaRefs(p.id);
         await prisma.project.delete({ where: { id: p.id } });
+        await deleteProjectMediaAssets(p.id, mediaRefs);
       }
       affected = trashed.length;
     }
@@ -446,10 +483,11 @@ export async function bulkProjectAction(
 export async function emptyProjectTrashAction(): Promise<{ error?: string; affected?: number }> {
   const session = await requireAdminSession();
 
-  const trashed = await prisma.project.findMany({ where: { deletedAt: { not: null } }, select: { id: true, brochureUrl: true } });
+  const trashed = await prisma.project.findMany({ where: { deletedAt: { not: null } }, select: { id: true } });
   for (const p of trashed) {
-    await deleteProjectMediaAssets(p.id, p.brochureUrl);
+    const mediaRefs = await fetchProjectMediaRefs(p.id);
     await prisma.project.delete({ where: { id: p.id } });
+    await deleteProjectMediaAssets(p.id, mediaRefs);
   }
 
   await logAudit(session.userId, "project.trash.empty", "Project", "*");

@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidateLocality } from "@/lib/cache";
 import { PRIMARY_CITY_SLUG } from "@/lib/queries";
 import { slugify } from "@/lib/slug";
+import { deleteImageByPublicId, publicIdFromUrl } from "@/lib/cloudinary";
 import { logAudit } from "@/lib/audit";
 import { friendlyPrismaError } from "./errors";
 
@@ -108,6 +109,42 @@ async function uniqueLocalitySlug(cityId: string, base: string, excludeId?: stri
 
 function marketFieldsPresent(data: z.infer<typeof localitySchema>): boolean {
   return data.avgPriceRupeesPerSqft !== undefined || data.rentalYieldPercent !== undefined || data.growthPercentYoy !== undefined;
+}
+
+/**
+ * Fetches everything `deleteLocalityMediaAssets` needs — call BEFORE
+ * deleting the Locality row, since LocalityImage cascades away with it
+ * (onDelete: Cascade) and would no longer be queryable after.
+ */
+async function fetchLocalityMediaRefs(localityId: string) {
+  const [locality, images] = await Promise.all([
+    prisma.locality.findUnique({ where: { id: localityId }, select: { coverImageUrl: true } }),
+    prisma.localityImage.findMany({ where: { localityId }, select: { url: true } }),
+  ]);
+  return { coverImageUrl: locality?.coverImageUrl ?? null, galleryUrls: images.map((i) => i.url) };
+}
+
+/**
+ * Deletes a locality's remote Cloudinary assets — cover image and gallery.
+ * Only ever called AFTER the DB row is already gone, so a Cloudinary
+ * failure here can never leave the database inconsistent. Each asset is
+ * deleted independently and failures are logged (never thrown) so one bad
+ * asset doesn't block the rest.
+ */
+async function deleteLocalityMediaAssets(
+  localityId: string,
+  refs: { coverImageUrl: string | null; galleryUrls: string[] }
+): Promise<void> {
+  const urls = [refs.coverImageUrl, ...refs.galleryUrls].filter((url): url is string => Boolean(url));
+  for (const url of urls) {
+    const publicId = publicIdFromUrl(url);
+    if (!publicId) continue;
+    try {
+      await deleteImageByPublicId(publicId);
+    } catch (error) {
+      console.error(`[localities] failed to delete Cloudinary asset "${publicId}" for locality ${localityId}:`, error);
+    }
+  }
 }
 
 export async function createLocalityAction(
@@ -288,7 +325,12 @@ export async function permanentlyDeleteLocalityAction(localityId: string): Promi
     };
   }
 
+  const mediaRefs = await fetchLocalityMediaRefs(localityId);
+
   await prisma.locality.delete({ where: { id: localityId } });
+
+  await deleteLocalityMediaAssets(localityId, mediaRefs);
+
   await logAudit(session.userId, "locality.permanent-delete", "Locality", localityId);
   revalidateLocality({ id: localityId, slug: existing.slug });
   return {};
@@ -306,7 +348,15 @@ export async function emptyLocalityTrashAction(): Promise<{ error?: string; affe
   const ids = deletable.map((d) => d.id).filter((id) => !blockedIds.has(id));
   if (ids.length === 0) return { affected: 0 };
 
+  const mediaRefsById = new Map(await Promise.all(ids.map(async (id) => [id, await fetchLocalityMediaRefs(id)] as const)));
+
   const result = await prisma.locality.deleteMany({ where: { id: { in: ids } } });
+
+  for (const id of ids) {
+    const refs = mediaRefsById.get(id);
+    if (refs) await deleteLocalityMediaAssets(id, refs);
+  }
+
   await logAudit(session.userId, "locality.trash.empty", "Locality", ids.join(","));
   revalidateLocality();
   return { affected: result.count };
@@ -423,7 +473,17 @@ export async function bulkLocalityAction(
       const blockedIds = new Set(blocked.map((b) => b.id));
       const deletable = localityIds.filter((id) => !blockedIds.has(id));
       if (deletable.length === 0) return { error: "Selected localities are still referenced by projects or transactions" };
-      affected = (await prisma.locality.deleteMany({ where: { id: { in: deletable }, deletedAt: { not: null } } })).count;
+
+      const mediaRefsById = new Map(await Promise.all(deletable.map(async (id) => [id, await fetchLocalityMediaRefs(id)] as const)));
+
+      const result = await prisma.locality.deleteMany({ where: { id: { in: deletable }, deletedAt: { not: null } } });
+
+      for (const id of deletable) {
+        const refs = mediaRefsById.get(id);
+        if (refs) await deleteLocalityMediaAssets(id, refs);
+      }
+
+      affected = result.count;
     }
   } catch (error) {
     return { error: friendlyPrismaError(error) };
