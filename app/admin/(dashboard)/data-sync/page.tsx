@@ -71,7 +71,16 @@ export default async function DataSyncPage() {
                   <td className="px-3 py-2 text-muted">{formatDate(source.lastRunAt)}</td>
                   <td className="px-3 py-2">
                     <div className="flex items-center justify-end gap-2">
-                      <ConfirmButton action={triggerSyncAction.bind(null, source.key)} label="Sync now" confirmLabel="Run sync?" />
+                      {source.kind === "DATASET_UPLOAD" ? (
+                        <Link
+                          href="/admin/data-sync/import"
+                          className="rounded-sm border border-border px-2 py-1 text-[11px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+                        >
+                          Upload file
+                        </Link>
+                      ) : (
+                        <ConfirmButton action={triggerSyncAction.bind(null, source.key)} label="Sync now" confirmLabel="Run sync?" />
+                      )}
                       {session.role === "ADMIN" ? (
                         <ConfirmButton
                           action={toggleIngestSourceEnabledAction.bind(null, source.key, !source.enabled)}

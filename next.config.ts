@@ -37,6 +37,11 @@ const nextConfig: NextConfig = {
     // by body, so it was serving stale/empty results for dynamic routes
     // (e.g. the project edit page 404ing for projects that exist). Disable it.
     serverComponentsHmrCache: false,
+    // Default Server Action body limit is 1mb — too small for a real CSV
+    // bulk-import upload (admin Data Sync → Import).
+    serverActions: {
+      bodySizeLimit: "10mb",
+    },
   },
   async headers() {
     const headers = [...SECURITY_HEADERS];

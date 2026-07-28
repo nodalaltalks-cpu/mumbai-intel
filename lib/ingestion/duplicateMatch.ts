@@ -62,3 +62,44 @@ export function findPossibleDuplicateInfraAsset(
   }
   return best;
 }
+
+export interface ExistingProjectCandidate {
+  id: string;
+  name: string;
+  localityId: string;
+  reraNumber: string | null;
+}
+
+export interface ProjectDuplicateMatch extends DuplicateMatch {
+  reason: "rera_number" | "name_locality";
+}
+
+/**
+ * Flags a likely-duplicate existing Project for an imported candidate.
+ * An exact RERA number match (a real, unique regulatory identifier) is
+ * decisive on its own — no locality or name comparison needed. Otherwise
+ * falls back to name similarity, restricted to the SAME locality (a
+ * same-named project in a different area is not a duplicate) with a
+ * stricter threshold than infra points, since project names are more
+ * distinctive than "Andheri" appearing on ten different signboards.
+ */
+export function findPossibleDuplicateProject(
+  existingProjects: ExistingProjectCandidate[],
+  candidate: { name: string; localityId: string; reraNumber?: string }
+): ProjectDuplicateMatch | null {
+  if (candidate.reraNumber) {
+    const exact = existingProjects.find(
+      (p) => p.reraNumber && p.reraNumber.trim().toUpperCase() === candidate.reraNumber!.trim().toUpperCase()
+    );
+    if (exact) return { existingId: exact.id, confidence: 1, reason: "rera_number" };
+  }
+
+  let best: ProjectDuplicateMatch | null = null;
+  for (const existing of existingProjects) {
+    if (existing.localityId !== candidate.localityId) continue;
+    const similarity = nameSimilarity(candidate.name, existing.name);
+    if (similarity < 0.5) continue;
+    if (!best || similarity > best.confidence) best = { existingId: existing.id, confidence: similarity, reason: "name_locality" };
+  }
+  return best;
+}
