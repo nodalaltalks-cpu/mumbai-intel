@@ -482,6 +482,7 @@ export interface PublicProjectFilters {
   possession?: string;
   hasRera?: boolean;
   isLuxury?: boolean;
+  isAffordable?: boolean;
   sortBy?: string;
   page?: number;
   pageSize?: number;
@@ -591,6 +592,7 @@ export async function getPublicProjectsPaged(filters: PublicProjectFilters) {
   if (possessionRange) where.promisedPossession = possessionRange;
   if (filters.hasRera !== undefined) where.reraNumber = filters.hasRera ? { not: null } : null;
   if (filters.isLuxury) where.isLuxury = true;
+  if (filters.isAffordable) where.isAffordable = true;
 
   const [items, total] = await Promise.all([
     prisma.project.findMany({
@@ -1333,4 +1335,19 @@ export async function getPublicBuilderTrustLeaderboard(limit = 10) {
     .filter((b) => b.scoreSnapshots.length > 0)
     .map((b) => ({ id: b.id, slug: b.slug, name: b.name, score: Number(b.scoreSnapshots[0].overallScore), asOf: b.scoreSnapshots[0].asOf }));
   return MarketAnalyticsService.rankByScoreDesc(scored, (b) => b.score, limit);
+}
+
+/** The most recent `updatedAt` across every published catalog/market table — a real "data last updated" freshness signal for the site footer, not a fabricated one. */
+export async function getPlatformDataFreshness(): Promise<Date | null> {
+  const [project, transaction, builder, locality] = await Promise.all([
+    prisma.project.aggregate({ where: { isPublished: true, isArchived: false }, _max: { updatedAt: true } }),
+    prisma.transaction.aggregate({ where: { deletedAt: null }, _max: { updatedAt: true } }),
+    prisma.builder.aggregate({ where: { isPublished: true, isArchived: false }, _max: { updatedAt: true } }),
+    prisma.locality.aggregate({ where: { isPublished: true, isArchived: false }, _max: { updatedAt: true } }),
+  ]);
+  const dates = [project._max.updatedAt, transaction._max.updatedAt, builder._max.updatedAt, locality._max.updatedAt].filter(
+    (d): d is Date => d !== null
+  );
+  if (dates.length === 0) return null;
+  return dates.reduce((latest, d) => (d > latest ? d : latest));
 }

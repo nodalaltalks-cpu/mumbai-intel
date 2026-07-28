@@ -107,6 +107,7 @@ export default function ProjectFilterBar() {
         <option value="">Published + drafts</option>
         <option value="1">Published only</option>
         <option value="0">Drafts only</option>
+        <option value="review">Under review</option>
       </select>
       <select
         value={searchParams.get("featured") ?? ""}

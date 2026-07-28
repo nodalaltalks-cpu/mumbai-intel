@@ -34,7 +34,12 @@ import ProjectCard from "@/app/components/ProjectCard";
 import BuilderCard from "@/app/components/BuilderCard";
 import LocalityCard from "@/app/components/LocalityCard";
 import SaveProjectButton from "@/app/components/SaveProjectButton";
+import CompareToggleButton from "@/app/components/CompareToggleButton";
+import ShareButton from "@/app/components/ShareButton";
+import ContactDeveloperButton from "@/app/components/ContactDeveloperButton";
+import ReportIssueButton from "@/app/components/ReportIssueButton";
 import { isProjectSaved } from "@/lib/actions/saved-projects";
+import { getPublicSession } from "@/lib/public-auth/session";
 import MapEmbed from "@/app/admin/components/MapEmbed";
 import Breadcrumbs from "@/app/components/Breadcrumbs";
 import JsonLd from "@/app/components/JsonLd";
@@ -45,6 +50,7 @@ import Pagination from "@/app/admin/components/Pagination";
 import EmptyState from "@/app/components/ui/EmptyState";
 import { Fact, StatCard } from "@/app/components/ui/StatCard";
 import Gallery from "./_components/Gallery";
+import { recordRecentViewAction } from "@/lib/actions/recent-views";
 
 export const dynamic = "force-dynamic";
 
@@ -99,6 +105,8 @@ export default async function ProjectDetailPage({
   const project = await getPublicProjectBySlug(slug);
   if (!project) notFound();
 
+  await recordRecentViewAction("Project", project.id);
+
   const page = Math.max(1, Number(sp.page ?? 1) || 1);
   const txFilters = { projectId: project.id };
 
@@ -113,6 +121,7 @@ export default async function ProjectDetailPage({
     nearbyBuilders,
     nearbyLocalities,
     isSaved,
+    publicSession,
   ] = await Promise.all([
     getRelatedProjects({ id: project.id, localityId: project.localityId, builderId: project.builderId }),
     getProjectPriceHistory(project.id),
@@ -124,6 +133,7 @@ export default async function ProjectDetailPage({
     getTopBuildersForLocality(project.localityId, 4),
     getNearbyLocalities(project.localityId, 4),
     isProjectSaved(project.id),
+    getPublicSession(),
   ]);
 
   const investmentScore = computeProjectInvestmentScore(project.localityInvestmentScore, project.builderOverallScore, txStats.totalTransactions);
@@ -206,6 +216,13 @@ export default async function ProjectDetailPage({
               <span className="rounded-sm border border-accent/40 bg-accent/10 px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-accent">Featured</span>
             ) : null}
             <SaveProjectButton projectId={project.id} initialSaved={isSaved} />
+            <CompareToggleButton slug={project.slug} />
+            <ShareButton title={project.name} text={`Check out ${project.name} on Mumbai Intel`} />
+            <ContactDeveloperButton
+              projectName={project.name}
+              defaultName={publicSession?.name}
+              defaultEmail={publicSession?.email}
+            />
           </div>
           <h1 className="mt-2 font-mono text-2xl font-bold text-foreground sm:text-3xl">{project.name}</h1>
           <p className="mt-1 text-sm text-muted">
@@ -774,10 +791,11 @@ export default async function ProjectDetailPage({
           )}
         </section>
 
-        <div>
+        <div className="flex items-center justify-between">
           <Link href="/projects" className="text-xs text-muted hover:text-accent">
             ← Back to all projects
           </Link>
+          <ReportIssueButton entityType="Project" entityName={project.name} loggedIn={publicSession !== null} />
         </div>
       </main>
 

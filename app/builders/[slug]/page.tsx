@@ -20,6 +20,12 @@ import { LabeledDistributionBars, TransactionLineChart, TransactionVolumeChart }
 import EmptyState from "@/app/components/ui/EmptyState";
 import { Fact, StatCard } from "@/app/components/ui/StatCard";
 import Breadcrumbs from "@/app/components/Breadcrumbs";
+import WishlistButton from "@/app/components/WishlistButton";
+import ShareButton from "@/app/components/ShareButton";
+import ReportIssueButton from "@/app/components/ReportIssueButton";
+import { isWishlisted } from "@/lib/actions/wishlist";
+import { recordRecentViewAction } from "@/lib/actions/recent-views";
+import { getPublicSession } from "@/lib/public-auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -55,14 +61,18 @@ export default async function BuilderDetailPage({ params }: { params: Promise<{ 
   const builder = await getPublicBuilderBySlug(slug);
   if (!builder) notFound();
 
+  await recordRecentViewAction("Builder", builder.id);
+
   const latestScore = builder.scoreSnapshots[0] ?? null;
   const filters = { builderId: builder.id };
 
-  const [{ items: recentTransactions }, relatedLocalities, txStats, monthlyTrend] = await Promise.all([
+  const [{ items: recentTransactions }, relatedLocalities, txStats, monthlyTrend, isSaved, publicSession] = await Promise.all([
     getPublicTransactionsPaged({ ...filters, pageSize: 6 }),
     getLocalitiesForBuilder(builder.id, 4),
     getTransactionStats(filters),
     getTransactionMonthlyTrend(filters, 12),
+    isWishlisted("Builder", builder.id),
+    getPublicSession(),
   ]);
 
   const projectsByCityBars = builder.citiesServed.map((c) => ({ label: c.cityName, count: c.projectCount }));
@@ -94,9 +104,13 @@ export default async function BuilderDetailPage({ params }: { params: Promise<{ 
             </div>
           )}
           <div className="flex-1">
-            <span className={`rounded-sm border px-2 py-1 text-[10px] font-mono uppercase tracking-wide ${SOURCE_CLASS[builder.dataSource]}`}>
-              {SOURCE_LABEL[builder.dataSource]}
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`rounded-sm border px-2 py-1 text-[10px] font-mono uppercase tracking-wide ${SOURCE_CLASS[builder.dataSource]}`}>
+                {SOURCE_LABEL[builder.dataSource]}
+              </span>
+              <WishlistButton entityType="Builder" entityId={builder.id} initialSaved={isSaved} />
+              <ShareButton title={builder.name} text={`Check out ${builder.name} on Mumbai Intel`} />
+            </div>
             <h1 className="mt-2 font-mono text-2xl font-bold text-foreground">{builder.name}</h1>
             <p className="mt-1 text-sm text-muted">
               {builder.headquarters ?? "Headquarters not specified"}
@@ -434,10 +448,11 @@ export default async function BuilderDetailPage({ params }: { params: Promise<{ 
           )}
         </section>
 
-        <div>
+        <div className="flex items-center justify-between">
           <Link href="/builders" className="text-xs text-muted hover:text-accent">
             ← Back to all developers
           </Link>
+          <ReportIssueButton entityType="Builder" entityName={builder.name} loggedIn={publicSession !== null} />
         </div>
       </main>
 

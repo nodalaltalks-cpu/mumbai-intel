@@ -14,6 +14,7 @@ import {
   type PropertyCategory,
 } from "@/lib/project-meta";
 import { saveRecentSearch, useRecentSearches } from "@/lib/recent-searches";
+import SaveSearchButton from "@/app/components/SaveSearchButton";
 import ActiveFilters, { type ActiveFilterChip } from "@/app/components/ui/ActiveFilters";
 import { chipClass, selectClass, selectStyle } from "@/app/components/ui/formStyles";
 
@@ -61,6 +62,7 @@ export default function ProjectFilters({ localities, builders }: { localities: F
 
   const currentStatus = searchParams.get("status") ?? "";
   const isLuxury = searchParams.get("luxury") === "1";
+  const isAffordable = searchParams.get("affordable") === "1";
 
   const chips: ActiveFilterChip[] = [];
   if (searchParams.get("q")) chips.push({ keys: ["q"], label: `Search: "${searchParams.get("q")}"` });
@@ -86,6 +88,7 @@ export default function ProjectFilters({ localities, builders }: { localities: F
   const reraValue = searchParams.get("rera");
   if (reraValue) chips.push({ keys: ["rera"], label: reraValue === "1" ? "Has RERA" : "No RERA" });
   if (isLuxury) chips.push({ keys: ["luxury"], label: "Luxury" });
+  if (isAffordable) chips.push({ keys: ["affordable"], label: "Affordable" });
 
   return (
     <div className="sticky top-[57px] z-40 rounded-3xl border border-border bg-surface/95 px-4 py-4 shadow-sm backdrop-blur sm:px-6">
@@ -188,6 +191,11 @@ export default function ProjectFilters({ localities, builders }: { localities: F
         <button type="button" onClick={() => updateParam("luxury", isLuxury ? "" : "1")} className={chipClass(isLuxury)}>
           Luxury
         </button>
+        <button type="button" onClick={() => updateParam("affordable", isAffordable ? "" : "1")} className={chipClass(isAffordable)}>
+          Affordable
+        </button>
+        <span className="mx-1 h-4 w-px bg-border" aria-hidden="true" />
+        <SaveSearchButton />
       </div>
 
       {recentSearches.length > 0 ? (

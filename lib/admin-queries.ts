@@ -22,6 +22,7 @@ const EMPTY_STATS = {
   projectCount: 0,
   publishedCount: 0,
   draftCount: 0,
+  reviewCount: 0,
   archivedCount: 0,
   builderCount: 0,
   localityCount: 0,
@@ -32,10 +33,11 @@ const EMPTY_STATS = {
 
 export async function getDashboardStats() {
   return safeQuery("getDashboardStats", EMPTY_STATS, async () => {
-    const [projectCount, publishedCount, archivedCount, builderCount, localityCount, transactionCount, imageCount, priceAgg] =
+    const [projectCount, publishedCount, reviewCount, archivedCount, builderCount, localityCount, transactionCount, imageCount, priceAgg] =
       await Promise.all([
         prisma.project.count(),
         prisma.project.count({ where: { isPublished: true } }),
+        prisma.project.count({ where: { isPublished: false, submittedForReviewAt: { not: null } } }),
         prisma.project.count({ where: { isArchived: true } }),
         prisma.builder.count(),
         prisma.locality.count(),
@@ -58,6 +60,7 @@ export async function getDashboardStats() {
       projectCount,
       publishedCount,
       draftCount: projectCount - publishedCount,
+      reviewCount,
       archivedCount,
       builderCount,
       localityCount,
@@ -192,6 +195,8 @@ export interface ProjectListFilters {
   isPublished?: boolean;
   isFeatured?: boolean;
   showArchived?: boolean;
+  /** Drafts currently awaiting admin review — takes precedence over isPublished when set. */
+  reviewOnly?: boolean;
   bedrooms?: string; // "1" | "2" | "3" | "4" (4 = 4+)
   priceMinRupees?: number;
   priceMaxRupees?: number;
@@ -252,7 +257,12 @@ async function fetchProjectsPage(filters: ProjectListFilters) {
   }
   if (filters.status) where.status = filters.status as ProjectStatus;
   if (filters.category) where.category = filters.category as Prisma.ProjectWhereInput["category"];
-  if (filters.isPublished !== undefined) where.isPublished = filters.isPublished;
+  if (filters.reviewOnly) {
+    where.isPublished = false;
+    where.submittedForReviewAt = { not: null };
+  } else if (filters.isPublished !== undefined) {
+    where.isPublished = filters.isPublished;
+  }
   if (filters.isFeatured !== undefined) where.isFeatured = filters.isFeatured;
   if (filters.bedrooms) {
     const n = Number(filters.bedrooms);
@@ -288,6 +298,8 @@ async function fetchProjectsPage(filters: ProjectListFilters) {
         isArchived: true,
         reraNumber: true,
         constructionPercent: true,
+        completionPercent: true,
+        submittedForReviewAt: true,
         locality: { select: { name: true } },
         builder: { select: { name: true } },
         images: { select: { url: true }, orderBy: { sortOrder: "asc" }, take: 1 },

@@ -72,11 +72,12 @@ export default async function AdminDashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-9">
         <StatTile label="Projects" value={stats.projectCount} href="/admin/projects" />
-        <StatTile label="Published" value={stats.publishedCount} href="/admin/projects" />
-        <StatTile label="Drafts" value={stats.draftCount} href="/admin/projects" />
-        <StatTile label="Archived" value={stats.archivedCount} href="/admin/projects" />
+        <StatTile label="Published" value={stats.publishedCount} href="/admin/projects?published=1" />
+        <StatTile label="Drafts" value={stats.draftCount} href="/admin/projects?published=0" />
+        <StatTile label="Under Review" value={stats.reviewCount} href="/admin/projects?published=review" />
+        <StatTile label="Archived" value={stats.archivedCount} href="/admin/projects?archived=1" />
         <StatTile label="Builders" value={stats.builderCount} href="/admin/builders" />
         <StatTile label="Localities" value={stats.localityCount} href="/admin/localities" />
         <StatTile label="Transactions" value={stats.transactionCount} href="/admin/transactions" />

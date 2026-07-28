@@ -23,6 +23,8 @@ import ReportSection from "@/app/components/reports/ReportSection";
 import MarketSummaryCard from "@/app/components/reports/MarketSummaryCard";
 import HistoricalTable from "@/app/components/reports/HistoricalTable";
 import RelatedSection from "@/app/components/reports/RelatedSection";
+import { recordRecentViewAction } from "@/lib/actions/recent-views";
+import { MARKET_REPORT_ENTITY_ID } from "@/lib/queries/dashboard";
 
 export const metadata: Metadata = {
   title: "Market Report — Mumbai Intel",
@@ -41,6 +43,8 @@ const NAV_SECTIONS = [
 ];
 
 export default async function MarketReportPage() {
+  await recordRecentViewAction("MarketReport", MARKET_REPORT_ENTITY_ID);
+
   const [snapshot, priceTrend, monthlyTrend, propertyTypes, topLocalities, featuredProjects, topDevelopers] = await Promise.all([
     getMarketSnapshot(),
     getCityPriceTrend(12),

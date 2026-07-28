@@ -12,7 +12,7 @@ import { deleteDocumentByPublicId, deleteImageByPublicId, documentPublicIdFromUr
 import { logAudit } from "@/lib/audit";
 import { emit } from "@/lib/events";
 import { syncProjectNearbyInfra } from "@/lib/infra-linking";
-import { buildProjectData, parseHighlights, parseProjectForm, toPaise } from "@/lib/project-data";
+import { buildProjectData, computeProjectCompletionPercent, parseHighlights, parseProjectForm, toPaise } from "@/lib/project-data";
 import { friendlyPrismaError } from "./errors";
 
 export interface ProjectFormState {
@@ -224,6 +224,7 @@ export async function autosaveProjectAction(projectId: string, formData: FormDat
         metaTitle: data.metaTitle ?? null,
         metaDescription: data.metaDescription ?? null,
         ogImageUrl: data.ogImageUrl ?? null,
+        completionPercent: computeProjectCompletionPercent(data),
       },
     });
     await syncProjectAmenities(projectId, amenityIds);
@@ -238,13 +239,43 @@ export async function autosaveProjectAction(projectId: string, formData: FormDat
 /** Publish/unpublish, archive, delete, restore and every bulk action are ADMIN-only — create/edit/duplicate stay open to EDITOR. */
 export async function togglePublishAction(projectId: string, nextValue: boolean): Promise<void> {
   const session = await requireAdminSession();
-  const updated = await prisma.project.update({ where: { id: projectId }, data: { isPublished: nextValue }, select: { slug: true } });
+  // Publishing resolves any pending review request — there's nothing left to review once it's live.
+  const updated = await prisma.project.update({
+    where: { id: projectId },
+    data: { isPublished: nextValue, submittedForReviewAt: nextValue ? null : undefined },
+    select: { slug: true },
+  });
   if (nextValue) {
     await emit("ProjectPublished", { projectId, slug: updated.slug, actorId: session.userId });
   } else {
     await logAudit(session.userId, "project.unpublish", "Project", projectId);
     revalidateProject({ id: projectId, slug: updated.slug });
   }
+}
+
+/** Marks a draft as ready for an ADMIN to review — the Draft → Under Review step ahead of Publish. Doesn't publish anything itself. */
+export async function submitForReviewAction(projectId: string): Promise<{ error?: string }> {
+  const session = await requireMutateSession();
+  const existing = await prisma.project.findUnique({ where: { id: projectId }, select: { slug: true, isPublished: true } });
+  if (!existing) return { error: "Project not found" };
+  if (existing.isPublished) return { error: "This project is already published" };
+
+  await prisma.project.update({ where: { id: projectId }, data: { submittedForReviewAt: new Date() } });
+  await logAudit(session.userId, "project.submit-review", "Project", projectId);
+  revalidateProject({ id: projectId, slug: existing.slug });
+  return {};
+}
+
+/** Pulls a project back out of the review queue without publishing or discarding it — back to a plain Draft. */
+export async function withdrawFromReviewAction(projectId: string): Promise<{ error?: string }> {
+  const session = await requireMutateSession();
+  const existing = await prisma.project.findUnique({ where: { id: projectId }, select: { slug: true } });
+  if (!existing) return { error: "Project not found" };
+
+  await prisma.project.update({ where: { id: projectId }, data: { submittedForReviewAt: null } });
+  await logAudit(session.userId, "project.withdraw-review", "Project", projectId);
+  revalidateProject({ id: projectId, slug: existing.slug });
+  return {};
 }
 
 export async function toggleFeaturedAction(projectId: string, nextValue: boolean): Promise<void> {
@@ -326,6 +357,7 @@ export async function duplicateProjectAction(projectId: string): Promise<{ error
         isAffordable: source.isAffordable,
         isPublished: false,
         isFeatured: false,
+        completionPercent: source.completionPercent,
       },
       select: { id: true },
     });

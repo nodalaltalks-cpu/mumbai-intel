@@ -45,6 +45,7 @@ export default async function AdminProjectsPage({
     status: params.status,
     category: params.category,
     isPublished: params.published === "1" ? true : params.published === "0" ? false : undefined,
+    reviewOnly: params.published === "review",
     isFeatured: params.featured === "1" ? true : undefined,
     showArchived: params.archived === "1",
     bedrooms: params.bedrooms,

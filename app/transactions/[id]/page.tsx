@@ -20,6 +20,7 @@ import Footer from "@/app/components/Footer";
 import TransactionTable from "@/app/components/TransactionTable";
 import { Fact } from "@/app/components/ui/StatCard";
 import Breadcrumbs from "@/app/components/Breadcrumbs";
+import { recordRecentViewAction } from "@/lib/actions/recent-views";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,8 @@ export default async function TransactionDetailPage({ params }: { params: Promis
   const { id } = await params;
   const tx = await getPublicTransactionById(id);
   if (!tx) notFound();
+
+  await recordRecentViewAction("Transaction", tx.id);
 
   const { history, similar } = await getRelatedTransactions(tx);
 

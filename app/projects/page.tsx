@@ -30,6 +30,7 @@ export default async function ProjectsPage({
     possession?: string;
     rera?: string;
     luxury?: string;
+    affordable?: string;
     sort?: string;
     page?: string;
   }>;
@@ -50,6 +51,7 @@ export default async function ProjectsPage({
       possession: params.possession,
       hasRera: params.rera === "1" ? true : params.rera === "0" ? false : undefined,
       isLuxury: params.luxury === "1",
+      isAffordable: params.affordable === "1",
       sortBy: params.sort,
       page,
       pageSize: 12,

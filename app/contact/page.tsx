@@ -19,6 +19,14 @@ export default function ContactPage() {
             Have a question, a correction to report, or a partnership inquiry? Send us a message and we&apos;ll get
             back to you.
           </p>
+          <div className="mt-4 flex flex-col gap-1 text-sm text-muted">
+            <a href="mailto:nodalaltalks02@gmail.com" className="transition-colors hover:text-accent">
+              nodalaltalks02@gmail.com
+            </a>
+            <a href="tel:+919833750932" className="transition-colors hover:text-accent">
+              +91 9833750932
+            </a>
+          </div>
         </div>
         <ContactForm />
       </main>

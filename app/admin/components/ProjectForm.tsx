@@ -1,7 +1,14 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState, useTransition, type ChangeEvent } from "react";
-import { autosaveProjectAction, createProjectAction, updateProjectAction, type ProjectFormState } from "@/lib/actions/projects";
+import {
+  autosaveProjectAction,
+  createProjectAction,
+  submitForReviewAction,
+  updateProjectAction,
+  withdrawFromReviewAction,
+  type ProjectFormState,
+} from "@/lib/actions/projects";
 import {
   CATEGORY_LABEL,
   CONFIDENCE_LEVELS,
@@ -66,6 +73,8 @@ export interface ProjectFormData {
   metaTitle: string | null;
   metaDescription: string | null;
   ogImageUrl: string | null;
+  submittedForReviewAt: Date | null;
+  completionPercent: number;
   amenityIds: string[];
   configurations: ConfigurationRow[];
   specifications: SpecificationRow[];
@@ -132,7 +141,9 @@ export default function ProjectForm({
   const action = project ? updateProjectAction.bind(null, project.id) : createProjectAction;
   const [state, formAction] = useActionState(action, initialState);
   const [activeTab, setActiveTab] = useState("general");
-  const [progress, setProgress] = useState(0);
+  const [progress, setProgress] = useState(project?.completionPercent ?? 0);
+  const [underReview, setUnderReview] = useState(Boolean(project?.submittedForReviewAt));
+  const [isReviewPending, startReviewTransition] = useTransition();
   const [lat, setLat] = useState<number | null>(project?.latitude ?? null);
   const [lng, setLng] = useState<number | null>(project?.longitude ?? null);
   const [selectedLocalityId, setSelectedLocalityId] = useState(project?.localityId ?? "");
@@ -186,11 +197,36 @@ export default function ProjectForm({
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <ProgressIndicator percent={progress} />
-        {project ? (
-          <span className="font-mono text-[10px] text-muted">
-            {autosaveStatus === "saving" ? "Saving draft…" : autosaveStatus === "saved" ? "Draft autosaved" : "Autosave on blur"}
-          </span>
-        ) : null}
+        <div className="flex items-center gap-2">
+          {project ? (
+            <span className="font-mono text-[10px] text-muted">
+              {autosaveStatus === "saving" ? "Saving draft…" : autosaveStatus === "saved" ? "Draft autosaved" : "Autosave on blur"}
+            </span>
+          ) : null}
+          {project && !project.isPublished ? (
+            <>
+              {underReview ? (
+                <span className="rounded-sm border border-accent/40 bg-accent/10 px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-accent">
+                  Under Review
+                </span>
+              ) : null}
+              <button
+                type="button"
+                disabled={isReviewPending}
+                onClick={() =>
+                  startReviewTransition(async () => {
+                    if (underReview) await withdrawFromReviewAction(project.id);
+                    else await submitForReviewAction(project.id);
+                    setUnderReview(!underReview);
+                  })
+                }
+                className="rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent disabled:opacity-60"
+              >
+                {isReviewPending ? "…" : underReview ? "Withdraw from review" : "Submit for review"}
+              </button>
+            </>
+          ) : null}
+        </div>
       </div>
 
       <FormTabs tabs={TABS} active={activeTab} onChange={setActiveTab} />
@@ -394,7 +430,7 @@ export default function ProjectForm({
       </div>
 
       <div>
-        <SubmitButton>{project ? "Save changes" : "Create project"}</SubmitButton>
+        <SubmitButton>{project ? (project.isPublished ? "Save changes" : "Save Draft") : "Save Draft"}</SubmitButton>
       </div>
     </form>
   );

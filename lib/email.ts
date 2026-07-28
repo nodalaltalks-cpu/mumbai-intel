@@ -99,6 +99,73 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string, expir
   await sendEmail({ to, subject: "Reset your Mumbai Intel password", html });
 }
 
+/** Newsletter signups aren't persisted to a table today — this forwards the address the same way the contact form does, to the site's own inbox, so a real person adds it to the actual mailing list. */
+export async function sendNewsletterSignupEmail(email: string): Promise<void> {
+  const to = process.env.CONTACT_EMAIL;
+  if (!to) {
+    console.log(`[email] CONTACT_EMAIL is not set — would forward newsletter signup from ${email}`);
+    return;
+  }
+  await sendEmail({
+    to,
+    subject: "Mumbai Intel newsletter signup",
+    html: `<p><strong>New newsletter signup:</strong> ${escapeHtml(email)}</p>`,
+    replyTo: email,
+  });
+}
+
+export async function sendProjectInquiryEmail(params: {
+  name: string;
+  email: string;
+  phone?: string;
+  message: string;
+  projectName: string;
+  projectUrl: string;
+}): Promise<void> {
+  const to = process.env.CONTACT_EMAIL;
+  if (!to) {
+    console.log(`[email] CONTACT_EMAIL is not set — would forward developer inquiry for ${params.projectName} from ${params.email}`);
+    return;
+  }
+  await sendEmail({
+    to,
+    subject: `Developer inquiry — ${params.projectName}`,
+    html: `
+      <p><strong>Project:</strong> ${escapeHtml(params.projectName)} (<a href="${escapeHtml(params.projectUrl)}">${escapeHtml(params.projectUrl)}</a>)</p>
+      <p><strong>From:</strong> ${escapeHtml(params.name)} (${escapeHtml(params.email)})${params.phone ? ` · ${escapeHtml(params.phone)}` : ""}</p>
+      <p><strong>Message:</strong></p>
+      <p>${escapeHtml(params.message).replace(/\n/g, "<br />")}</p>
+    `,
+    replyTo: params.email,
+  });
+}
+
+export async function sendReportIssueEmail(params: {
+  reporterName: string | null;
+  reporterEmail: string | null;
+  entityType: string;
+  entityName: string;
+  entityUrl: string;
+  issue: string;
+}): Promise<void> {
+  const to = process.env.CONTACT_EMAIL;
+  if (!to) {
+    console.log(`[email] CONTACT_EMAIL is not set — would forward a reported issue on ${params.entityType} "${params.entityName}"`);
+    return;
+  }
+  await sendEmail({
+    to,
+    subject: `Data correction reported — ${params.entityType}: ${params.entityName}`,
+    html: `
+      <p><strong>${escapeHtml(params.entityType)}:</strong> ${escapeHtml(params.entityName)} (<a href="${escapeHtml(params.entityUrl)}">${escapeHtml(params.entityUrl)}</a>)</p>
+      <p><strong>Reported by:</strong> ${params.reporterName ? escapeHtml(params.reporterName) : "Anonymous"}${params.reporterEmail ? ` (${escapeHtml(params.reporterEmail)})` : ""}</p>
+      <p><strong>Issue:</strong></p>
+      <p>${escapeHtml(params.issue).replace(/\n/g, "<br />")}</p>
+    `,
+    ...(params.reporterEmail ? { replyTo: params.reporterEmail } : {}),
+  });
+}
+
 export async function sendContactMessageEmail(params: { name: string; email: string; message: string }): Promise<void> {
   const to = process.env.CONTACT_EMAIL;
   if (!to) {

@@ -29,6 +29,8 @@ export interface ProjectRow {
   isArchived: boolean;
   reraNumber?: string | null;
   constructionPercent?: number | null;
+  completionPercent?: number | null;
+  submittedForReviewAt?: Date | string | null;
   locality: { name: string };
   builder: { name: string } | null;
   images?: { url: string }[];
@@ -129,6 +131,7 @@ export default function ProjectsTable({ projects, isAdmin }: { projects: Project
               <th className="px-3 py-2 font-medium">Status</th>
               <th className="px-3 py-2 font-medium">Price band</th>
               <th className="px-3 py-2 font-medium">Updated</th>
+              <th className="px-3 py-2 font-medium">Completion</th>
               <th className="px-3 py-2 font-medium">Published</th>
               <th className="px-3 py-2 font-medium">Featured</th>
               <th className="px-3 py-2 font-medium text-right">Actions</th>
@@ -154,6 +157,9 @@ export default function ProjectsTable({ projects, isAdmin }: { projects: Project
                   {project.isArchived ? (
                     <span className="ml-1.5 rounded-sm border border-border px-1 py-0.5 text-[9px] uppercase text-muted">Archived</span>
                   ) : null}
+                  {!project.isPublished && project.submittedForReviewAt ? (
+                    <span className="ml-1.5 rounded-sm border border-accent/40 bg-accent/10 px-1 py-0.5 text-[9px] uppercase text-accent">Under Review</span>
+                  ) : null}
                 </td>
                 <td className="px-3 py-2 text-muted">{project.locality.name}</td>
                 <td className="px-3 py-2">
@@ -166,6 +172,7 @@ export default function ProjectsTable({ projects, isAdmin }: { projects: Project
                   )}
                 </td>
                 <td className="px-3 py-2 text-muted">{formatDate(project.updatedAt)}</td>
+                <td className="px-3 py-2 font-mono text-muted">{project.completionPercent ?? 0}%</td>
                 <td className="px-3 py-2">
                   {isAdmin ? (
                     <ToggleButton

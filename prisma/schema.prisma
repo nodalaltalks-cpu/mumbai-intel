@@ -434,6 +434,16 @@ model Project {
   /// no changes to exclude trashed projects.
   deletedAt       DateTime?
   deletedByUserId String?
+  /// Set by an EDITOR to flag a draft as ready for an ADMIN to review before
+  /// publishing (Draft → Under Review → Published). Cleared automatically on
+  /// publish. Null = not currently in review — independent of isPublished so
+  /// existing publish/archive logic never needs to branch on it.
+  submittedForReviewAt DateTime?
+  /// Server-computed % of the admin form's required fields that are filled in
+  /// (see computeProjectCompletionPercent in lib/project-data.ts) — recomputed
+  /// on every create/update/autosave. Purely an admin-side data-quality
+  /// indicator; never read by any public query.
+  completionPercent Int @default(0)
   /// Merchandising tags. Deliberately NOT duplicating `status` — READY_TO_MOVE
   /// and PRE_LAUNCH ("new launch") are already derivable from `status`; these
   /// three are independent editorial calls a status enum can't express.
@@ -897,6 +907,12 @@ model PublicUser {
 
   resetTokens   PublicPasswordResetToken[]
   savedProjects SavedProject[]
+  wishlist      Wishlist[]
+  recentViews   RecentView[]
+  savedSearches SavedSearch[]
+  searchHistory SearchHistory[]
+  preferences   UserPreferences?
+  notificationPreferences NotificationPreferences?
 
   @@index([provider])
 }
@@ -1007,8 +1023,117 @@ model IngestStagingRecord {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// PUBLIC USER INTELLIGENCE DASHBOARD — Wishlist/RecentView use the same
+// entityType+entityId string-pair convention already established by
+// AuditLog/IngestLogEntry/IngestStagingRecord above, specifically so a
+// future entity type (InfraAsset, a Consultation, an AI recommendation …)
+// is a new string value, never a schema change. `SavedProject` (already
+// shipped, above) stays exactly as-is for Projects; `Wishlist` covers every
+// OTHER bookmarkable entity (Builder/Locality today, Report later) rather
+// than migrating already-working Project bookmarks onto a new table.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// A public user's bookmarked Builder/Locality (Projects use the existing
+/// SavedProject table above, unchanged). One generic table per the same
+/// entityType+entityId convention as AuditLog, so a future bookmarkable
+/// entity (e.g. a Report) is a new entityType value, not a new table.
+model Wishlist {
+  id           String     @id @default(cuid())
+  publicUserId String
+  publicUser   PublicUser @relation(fields: [publicUserId], references: [id], onDelete: Cascade)
+  entityType   String // "Builder" | "Locality" | "Report" (future)
+  entityId     String
+  createdAt    DateTime   @default(now())
+
+  @@unique([publicUserId, entityType, entityId])
+  @@index([publicUserId])
+}
+
+/// "Continue Research" — every Project/Builder/Locality/Transaction/
+/// MarketReport a logged-in user has opened, newest first. The compound
+/// unique constraint is what makes re-viewing an update, not a new row —
+/// see recordRecentViewAction (lib/actions/recent-views.ts) for the
+/// find-then-update-or-create that enforces this (Neon's HTTP adapter has
+/// no native upsert()).
+model RecentView {
+  id           String     @id @default(cuid())
+  publicUserId String
+  publicUser   PublicUser @relation(fields: [publicUserId], references: [id], onDelete: Cascade)
+  entityType   String // "Project" | "Builder" | "Locality" | "Transaction" | "MarketReport"
+  entityId     String
+  viewedAt     DateTime   @default(now())
+
+  @@unique([publicUserId, entityType, entityId])
+  @@index([publicUserId, viewedAt])
+}
+
+/// A saved filter combination ("2 BHK Andheri", "Luxury Bandra") a user can
+/// re-run from their dashboard. `notifyOnMatch`/`lastNotifiedAt` are the
+/// hook a future matching+alert job would use — no such job exists yet
+/// (see docs), so these are write-only today, not a live promise.
+model SavedSearch {
+  id             String     @id @default(cuid())
+  publicUserId   String
+  publicUser     PublicUser @relation(fields: [publicUserId], references: [id], onDelete: Cascade)
+  label          String
+  /// The raw filter query params (q/locality/status/category/priceMin/… —
+  /// same shape as PublicProjectFilters), stored as-is so re-running a
+  /// search never drifts from what /projects itself already accepts.
+  filtersJson    Json
+  notifyOnMatch  Boolean    @default(false)
+  lastNotifiedAt DateTime?
+  createdAt      DateTime   @default(now())
+
+  @@index([publicUserId])
+}
+
+/// Server-persisted search history for logged-in users (syncs across
+/// devices) — distinct from lib/recent-searches.ts's localStorage-only
+/// history for anonymous visitors, which is untouched by this model.
+model SearchHistory {
+  id           String     @id @default(cuid())
+  publicUserId String
+  publicUser   PublicUser @relation(fields: [publicUserId], references: [id], onDelete: Cascade)
+  query        String
+  searchedAt   DateTime   @default(now())
+
+  @@index([publicUserId, searchedAt])
+  @@index([query])
+}
+
+/// Collected now for future personalization (a personalized home feed, AI
+/// recommendations) — nothing reads this to change what a user sees yet;
+/// it's real, user-editable data, not a placeholder.
+model UserPreferences {
+  id                       String            @id @default(cuid())
+  publicUserId             String            @unique
+  publicUser               PublicUser        @relation(fields: [publicUserId], references: [id], onDelete: Cascade)
+  preferredBudgetMinRupees Int?
+  preferredBudgetMaxRupees Int?
+  preferredLocalityIds     String[]          @default([])
+  preferredCategory        PropertyCategory?
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
+}
+
+/// Notification channel toggles. No notification is actually sent by
+/// anything in this codebase today (see docs/governance-standards.md's
+/// Event & Change Policy) — this table exists so the setting has somewhere
+/// real to live the moment a sending job is built, without a schema change.
+model NotificationPreferences {
+  id                String     @id @default(cuid())
+  publicUserId      String     @unique
+  publicUser        PublicUser @relation(fields: [publicUserId], references: [id], onDelete: Cascade)
+  savedSearchAlerts Boolean    @default(true)
+  weeklyDigest      Boolean    @default(true)
+  productUpdates    Boolean    @default(false)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // END OF SCHEMA
 // If this comment is missing from your copy, the file was truncated during
-// download. Complete file: 10 enums + 39 models, ending with IngestStagingRecord.
-// Verify with:  grep -c '^model ' prisma/schema.prisma   → must print 39
+// download. Complete file: 10 enums + 45 models, ending with NotificationPreferences.
+// Verify with:  grep -c '^model ' prisma/schema.prisma   → must print 45
 // ═══════════════════════════════════════════════════════════════════════════

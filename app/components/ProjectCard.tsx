@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import Button from "@/app/components/ui/Button";
+import CompareToggleButton from "@/app/components/CompareToggleButton";
 import { IconClose } from "@/app/components/ui/icons";
 import { formatDate, formatPriceBand, formatPricePerSqft } from "@/lib/format";
 import {
@@ -133,6 +134,11 @@ export default function ProjectCard({ project }: { project: ProjectCardData }) {
         >
           Quick view
         </button>
+
+        <CompareToggleButton
+          slug={project.slug}
+          className="absolute bottom-2 right-2 z-10 opacity-0 transition-opacity group-hover:opacity-100"
+        />
       </div>
 
       {quickViewOpen ? <QuickViewModal project={project} onClose={() => setQuickViewOpen(false)} /> : null}

@@ -32,6 +32,12 @@ import Pagination from "@/app/admin/components/Pagination";
 import EmptyState from "@/app/components/ui/EmptyState";
 import Breadcrumbs from "@/app/components/Breadcrumbs";
 import { Fact } from "@/app/components/ui/StatCard";
+import WishlistButton from "@/app/components/WishlistButton";
+import ShareButton from "@/app/components/ShareButton";
+import ReportIssueButton from "@/app/components/ReportIssueButton";
+import { isWishlisted } from "@/lib/actions/wishlist";
+import { recordRecentViewAction } from "@/lib/actions/recent-views";
+import { getPublicSession } from "@/lib/public-auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -83,6 +89,8 @@ export default async function LocalityDetailPage({
   const locality = await getPublicLocalityBySlug(slug);
   if (!locality) notFound();
 
+  await recordRecentViewAction("Locality", locality.id);
+
   const page = Math.max(1, Number(sp.page ?? 1) || 1);
   const filters: PublicTransactionFilters = {
     localityId: locality.id,
@@ -104,6 +112,8 @@ export default async function LocalityDetailPage({
     { items: transactions, total: totalTransactions, totalPages },
     priceTrend,
     nearbyInfra,
+    isSaved,
+    publicSession,
   ] = await Promise.all([
     getTransactionStats(filters),
     getTransactionMonthlyTrend(filters, 12),
@@ -115,6 +125,8 @@ export default async function LocalityDetailPage({
     getPublicTransactionsPaged({ ...filters, page, pageSize: 10 }),
     getLocalityPriceTrend(locality.id),
     getLocalityNearbyInfra(locality.id),
+    isWishlisted("Locality", locality.id),
+    getPublicSession(),
   ]);
 
   function buildHref(targetPage: number) {
@@ -148,9 +160,13 @@ export default async function LocalityDetailPage({
         ) : null}
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-6xl px-4 pb-6 sm:px-6">
-          {locality.isFeatured ? (
-            <span className="rounded-sm border border-accent/40 bg-accent/10 px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-accent">Featured</span>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {locality.isFeatured ? (
+              <span className="rounded-sm border border-accent/40 bg-accent/10 px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-accent">Featured</span>
+            ) : null}
+            <WishlistButton entityType="Locality" entityId={locality.id} initialSaved={isSaved} />
+            <ShareButton title={locality.name} text={`Check out ${locality.name} on Mumbai Intel`} />
+          </div>
           <h1 className="mt-2 font-mono text-2xl font-bold text-foreground sm:text-3xl">{locality.name}</h1>
           <p className="mt-1 text-sm text-muted">
             {locality.zone ? locality.zone.name : ""}
@@ -496,10 +512,11 @@ export default async function LocalityDetailPage({
           )}
         </section>
 
-        <div>
+        <div className="flex items-center justify-between">
           <Link href="/localities" className="text-xs text-muted hover:text-accent">
             ← Back to all localities
           </Link>
+          <ReportIssueButton entityType="Locality" entityName={locality.name} loggedIn={publicSession !== null} />
         </div>
       </main>
 
