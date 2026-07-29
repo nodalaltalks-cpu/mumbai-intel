@@ -11,6 +11,7 @@ import FlashMessage from "@/app/admin/components/FlashMessage";
 import ImageUploader from "@/app/admin/components/ImageUploader";
 import CoverImageUploader from "@/app/admin/components/CoverImageUploader";
 import ProjectForm from "@/app/admin/components/ProjectForm";
+import BackButton from "@/app/admin/components/BackButton";
 import ConfigurationsManager from "@/app/admin/components/ConfigurationsManager";
 import SpecificationsManager from "@/app/admin/components/SpecificationsManager";
 import NearbyPlacesManager from "@/app/admin/components/NearbyPlacesManager";
@@ -49,6 +50,7 @@ export default async function EditProjectPage({
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
+      <BackButton fallbackHref="/admin/projects" />
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="font-mono text-lg font-semibold text-foreground">Edit Project</h1>

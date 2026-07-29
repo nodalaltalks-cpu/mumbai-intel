@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getAmenities, getBuildersForSelect, getLocalitiesForSelect } from "@/lib/admin-queries";
 import ProjectForm from "@/app/admin/components/ProjectForm";
+import BackButton from "@/app/admin/components/BackButton";
 
 export const metadata: Metadata = { title: "New Project — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
@@ -14,6 +15,7 @@ export default async function NewProjectPage() {
 
   return (
     <div className="flex max-w-3xl flex-col gap-4">
+      <BackButton fallbackHref="/admin/projects" />
       <div>
         <h1 className="font-mono text-lg font-semibold text-foreground">New Project</h1>
         <p className="text-xs text-muted">

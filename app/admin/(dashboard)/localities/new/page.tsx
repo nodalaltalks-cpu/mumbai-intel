@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getAmenities, getZones } from "@/lib/admin-queries";
 import LocalityForm from "@/app/admin/components/LocalityForm";
+import BackButton from "@/app/admin/components/BackButton";
 
 export const metadata: Metadata = { title: "New Locality — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
@@ -10,6 +11,7 @@ export default async function NewLocalityPage() {
 
   return (
     <div className="flex max-w-2xl flex-col gap-4">
+      <BackButton fallbackHref="/admin/localities" />
       <div>
         <h1 className="font-mono text-lg font-semibold text-foreground">New Locality</h1>
         <p className="text-xs text-muted">Micro markets and the gallery become available after the locality is created.</p>

@@ -68,7 +68,7 @@ export default function AdminTopbar({
         </button>
         {openMenu === "quickadd" ? (
           <>
-            <div className="fixed inset-0 z-30" onClick={() => setOpenMenu(null)} />
+            <div className="fixed inset-0 z-40" onClick={() => setOpenMenu(null)} />
             <div className="absolute right-0 z-40 mt-1.5 w-40 overflow-hidden rounded-sm border border-border bg-surface-raised shadow-xl">
               {QUICK_ADD_LINKS.map((l) => (
                 <Link
@@ -100,7 +100,7 @@ export default function AdminTopbar({
         </button>
         {openMenu === "notifications" ? (
           <>
-            <div className="fixed inset-0 z-30" onClick={() => setOpenMenu(null)} />
+            <div className="fixed inset-0 z-40" onClick={() => setOpenMenu(null)} />
             <div className="absolute right-0 z-40 mt-1.5 w-72 overflow-hidden rounded-sm border border-border bg-surface-raised shadow-xl">
               <p className="border-b border-border px-3 py-2 text-[10px] font-semibold uppercase tracking-widest text-muted">
                 Recent activity
@@ -135,7 +135,7 @@ export default function AdminTopbar({
         </button>
         {openMenu === "profile" ? (
           <>
-            <div className="fixed inset-0 z-30" onClick={() => setOpenMenu(null)} />
+            <div className="fixed inset-0 z-40" onClick={() => setOpenMenu(null)} />
             <div className="absolute right-0 z-40 mt-1.5 w-52 overflow-hidden rounded-sm border border-border bg-surface-raised shadow-xl">
               <div className="border-b border-border px-3 py-2">
                 <p className="truncate text-xs text-foreground">{session.name ?? "Founder"}</p>

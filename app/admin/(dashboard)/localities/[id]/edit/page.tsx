@@ -9,6 +9,7 @@ import MicroMarketManager from "@/app/admin/components/MicroMarketManager";
 import LocalityGalleryUploader from "@/app/admin/components/LocalityGalleryUploader";
 import AuditHistory from "@/app/admin/components/AuditHistory";
 import BrochureStatsCard from "@/app/admin/components/BrochureStatsCard";
+import BackButton from "@/app/admin/components/BackButton";
 import { getLocalityBrochureStats } from "@/lib/analytics/brochure-queries";
 
 export const metadata: Metadata = { title: "Edit Locality — NoDalalTalks Admin" };
@@ -28,6 +29,7 @@ export default async function EditLocalityPage({ params }: { params: Promise<{ i
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
+      <BackButton fallbackHref="/admin/localities" />
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="font-mono text-lg font-semibold text-foreground">Edit Locality</h1>

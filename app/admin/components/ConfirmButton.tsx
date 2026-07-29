@@ -19,12 +19,28 @@ export default function ConfirmButton({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, []);
+
+  // While armed, clicking anywhere else on the page cancels the pending
+  // confirmation instead of leaving it armed until the 3s timeout — same
+  // click-anywhere-to-dismiss behavior as the topbar dropdowns.
+  useEffect(() => {
+    if (!confirming) return;
+    function handleOutsideClick(event: MouseEvent) {
+      if (buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        setConfirming(false);
+      }
+    }
+    document.addEventListener("click", handleOutsideClick, true);
+    return () => document.removeEventListener("click", handleOutsideClick, true);
+  }, [confirming]);
 
   function handleClick() {
     setError(null);
@@ -50,6 +66,7 @@ export default function ConfirmButton({
   return (
     <div className="flex flex-col items-end gap-1">
       <button
+        ref={buttonRef}
         type="button"
         onClick={handleClick}
         disabled={isPending}

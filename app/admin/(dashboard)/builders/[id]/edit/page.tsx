@@ -8,6 +8,7 @@ import BuilderTimelineManager from "@/app/admin/components/BuilderTimelineManage
 import BuilderGalleryUploader from "@/app/admin/components/BuilderGalleryUploader";
 import AuditHistory from "@/app/admin/components/AuditHistory";
 import BrochureStatsCard from "@/app/admin/components/BrochureStatsCard";
+import BackButton from "@/app/admin/components/BackButton";
 import { getBuilderBrochureStats } from "@/lib/analytics/brochure-queries";
 
 export const metadata: Metadata = { title: "Edit Builder — NoDalalTalks Admin" };
@@ -25,6 +26,7 @@ export default async function EditBuilderPage({ params }: { params: Promise<{ id
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
+      <BackButton fallbackHref="/admin/builders" />
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="font-mono text-lg font-semibold text-foreground">Edit Builder</h1>
