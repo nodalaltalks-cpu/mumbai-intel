@@ -10,7 +10,7 @@ import { ensureUniqueSlug, slugify } from "@/lib/slug";
 import { deleteImageByPublicId, publicIdFromUrl } from "@/lib/cloudinary";
 import { logAudit } from "@/lib/audit";
 import { emit } from "@/lib/events";
-import { friendlyPrismaError } from "./errors";
+import { friendlyPrismaError, updateManyByRow } from "./errors";
 
 const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefined ? undefined : v);
 
@@ -436,29 +436,26 @@ export async function bulkBuilderAction(
   let affected = 0;
   try {
     if (operation === "publish") {
-      const result = await prisma.builder.updateMany({ where: { id: { in: builderIds } }, data: { isPublished: true } });
-      affected = result.count;
+      affected = await updateManyByRow(builderIds, (id) => prisma.builder.update({ where: { id }, data: { isPublished: true } }));
     } else if (operation === "unpublish") {
-      const result = await prisma.builder.updateMany({ where: { id: { in: builderIds } }, data: { isPublished: false } });
-      affected = result.count;
+      affected = await updateManyByRow(builderIds, (id) => prisma.builder.update({ where: { id }, data: { isPublished: false } }));
     } else if (operation === "archive") {
-      const result = await prisma.builder.updateMany({ where: { id: { in: builderIds } }, data: { isArchived: true, isPublished: false } });
-      affected = result.count;
+      affected = await updateManyByRow(builderIds, (id) => prisma.builder.update({ where: { id }, data: { isArchived: true, isPublished: false } }));
     } else if (operation === "unarchive") {
-      const result = await prisma.builder.updateMany({ where: { id: { in: builderIds } }, data: { isArchived: false } });
-      affected = result.count;
+      affected = await updateManyByRow(builderIds, (id) => prisma.builder.update({ where: { id }, data: { isArchived: false } }));
     } else if (operation === "delete") {
-      const result = await prisma.builder.updateMany({
-        where: { id: { in: builderIds } },
-        data: { deletedAt: new Date(), deletedByUserId: session.userId, isPublished: false, isArchived: true },
-      });
-      affected = result.count;
+      affected = await updateManyByRow(builderIds, (id) =>
+        prisma.builder.update({
+          where: { id },
+          data: { deletedAt: new Date(), deletedByUserId: session.userId, isPublished: false, isArchived: true },
+        })
+      );
     } else if (operation === "restore") {
-      const result = await prisma.builder.updateMany({
-        where: { id: { in: builderIds }, deletedAt: { not: null } },
-        data: { deletedAt: null, deletedByUserId: null },
-      });
-      affected = result.count;
+      const trashed = await prisma.builder.findMany({ where: { id: { in: builderIds }, deletedAt: { not: null } }, select: { id: true } });
+      affected = await updateManyByRow(
+        trashed.map((b) => b.id),
+        (id) => prisma.builder.update({ where: { id }, data: { deletedAt: null, deletedByUserId: null } })
+      );
     } else if (operation === "permanent-delete") {
       const trashed = await prisma.builder.findMany({
         where: { id: { in: builderIds }, deletedAt: { not: null } },

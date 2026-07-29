@@ -10,7 +10,7 @@ import { slugify } from "@/lib/slug";
 import { deleteImageByPublicId, publicIdFromUrl } from "@/lib/cloudinary";
 import { logAudit } from "@/lib/audit";
 import { emit } from "@/lib/events";
-import { friendlyPrismaError } from "./errors";
+import { friendlyPrismaError, updateManyByRow } from "./errors";
 import type { InlineCreateResult } from "./builders";
 
 const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefined ? undefined : v);
@@ -476,24 +476,24 @@ export async function bulkLocalityAction(
   let affected = 0;
   try {
     if (operation === "publish") {
-      affected = (await prisma.locality.updateMany({ where: { id: { in: localityIds } }, data: { isPublished: true } })).count;
+      affected = await updateManyByRow(localityIds, (id) => prisma.locality.update({ where: { id }, data: { isPublished: true } }));
     } else if (operation === "unpublish") {
-      affected = (await prisma.locality.updateMany({ where: { id: { in: localityIds } }, data: { isPublished: false } })).count;
+      affected = await updateManyByRow(localityIds, (id) => prisma.locality.update({ where: { id }, data: { isPublished: false } }));
     } else if (operation === "archive") {
-      affected = (await prisma.locality.updateMany({ where: { id: { in: localityIds } }, data: { isArchived: true, isPublished: false } })).count;
+      affected = await updateManyByRow(localityIds, (id) => prisma.locality.update({ where: { id }, data: { isArchived: true, isPublished: false } }));
     } else if (operation === "unarchive") {
-      affected = (await prisma.locality.updateMany({ where: { id: { in: localityIds } }, data: { isArchived: false } })).count;
+      affected = await updateManyByRow(localityIds, (id) => prisma.locality.update({ where: { id }, data: { isArchived: false } }));
     } else if (operation === "delete") {
-      affected = (
-        await prisma.locality.updateMany({
-          where: { id: { in: localityIds } },
+      affected = await updateManyByRow(localityIds, (id) =>
+        prisma.locality.update({
+          where: { id },
           data: { deletedAt: new Date(), deletedByUserId: session.userId, isPublished: false, isArchived: true },
         })
-      ).count;
+      );
     } else if (operation === "restore") {
-      affected = (
-        await prisma.locality.updateMany({ where: { id: { in: localityIds } }, data: { deletedAt: null, deletedByUserId: null } })
-      ).count;
+      affected = await updateManyByRow(localityIds, (id) =>
+        prisma.locality.update({ where: { id }, data: { deletedAt: null, deletedByUserId: null } })
+      );
     } else if (operation === "permanent-delete") {
       const blocked = await prisma.locality.findMany({
         where: { id: { in: localityIds }, OR: [{ projects: { some: {} } }, { transactions: { some: {} } }] },

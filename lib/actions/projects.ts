@@ -15,7 +15,7 @@ import { syncProjectNearbyInfra } from "@/lib/infra-linking";
 import { buildProjectData, parseHighlights, parseProjectForm, toPaise } from "@/lib/project-data";
 import { completionInputFromSchema, computeProjectCompletionPercent } from "@/lib/project-completion";
 import { uploadBrochureForProject } from "./brochure";
-import { friendlyPrismaError } from "./errors";
+import { friendlyPrismaError, updateManyByRow } from "./errors";
 
 export interface ProjectFormState {
   error?: string;
@@ -502,29 +502,26 @@ export async function bulkProjectAction(
   try {
     let affected = 0;
     if (operation === "publish") {
-      const result = await prisma.project.updateMany({ where: { id: { in: projectIds } }, data: { isPublished: true } });
-      affected = result.count;
+      affected = await updateManyByRow(projectIds, (id) => prisma.project.update({ where: { id }, data: { isPublished: true } }));
     } else if (operation === "unpublish") {
-      const result = await prisma.project.updateMany({ where: { id: { in: projectIds } }, data: { isPublished: false } });
-      affected = result.count;
+      affected = await updateManyByRow(projectIds, (id) => prisma.project.update({ where: { id }, data: { isPublished: false } }));
     } else if (operation === "archive") {
-      const result = await prisma.project.updateMany({ where: { id: { in: projectIds } }, data: { isArchived: true, isPublished: false } });
-      affected = result.count;
+      affected = await updateManyByRow(projectIds, (id) => prisma.project.update({ where: { id }, data: { isArchived: true, isPublished: false } }));
     } else if (operation === "unarchive") {
-      const result = await prisma.project.updateMany({ where: { id: { in: projectIds } }, data: { isArchived: false } });
-      affected = result.count;
+      affected = await updateManyByRow(projectIds, (id) => prisma.project.update({ where: { id }, data: { isArchived: false } }));
     } else if (operation === "delete") {
-      const result = await prisma.project.updateMany({
-        where: { id: { in: projectIds } },
-        data: { deletedAt: new Date(), deletedByUserId: session.userId, isPublished: false, isArchived: true },
-      });
-      affected = result.count;
+      affected = await updateManyByRow(projectIds, (id) =>
+        prisma.project.update({
+          where: { id },
+          data: { deletedAt: new Date(), deletedByUserId: session.userId, isPublished: false, isArchived: true },
+        })
+      );
     } else if (operation === "restore") {
-      const result = await prisma.project.updateMany({
-        where: { id: { in: projectIds }, deletedAt: { not: null } },
-        data: { deletedAt: null, deletedByUserId: null },
-      });
-      affected = result.count;
+      const trashed = await prisma.project.findMany({ where: { id: { in: projectIds }, deletedAt: { not: null } }, select: { id: true } });
+      affected = await updateManyByRow(
+        trashed.map((p) => p.id),
+        (id) => prisma.project.update({ where: { id }, data: { deletedAt: null, deletedByUserId: null } })
+      );
     } else if (operation === "permanent-delete") {
       const trashed = await prisma.project.findMany({
         where: { id: { in: projectIds }, deletedAt: { not: null } },

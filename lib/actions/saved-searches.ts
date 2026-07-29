@@ -45,7 +45,13 @@ export async function deleteSavedSearchAction(id: string): Promise<{ error?: str
 export async function toggleSavedSearchNotifyAction(id: string, notifyOnMatch: boolean): Promise<{ error?: string }> {
   const session = await getPublicSession();
   if (!session) return { error: "Sign in to manage saved searches." };
-  await prisma.savedSearch.updateMany({ where: { id, publicUserId: session.userId }, data: { notifyOnMatch } });
+  // `update` (not `updateMany`) — the Neon HTTP adapter rejects `updateMany`
+  // with "Transactions are not supported in HTTP mode" (see lib/actions/errors.ts's
+  // updateManyByRow). A plain `findFirst` + `update` keeps the same ownership
+  // check as a single statement per query.
+  const owned = await prisma.savedSearch.findFirst({ where: { id, publicUserId: session.userId }, select: { id: true } });
+  if (!owned) return {};
+  await prisma.savedSearch.update({ where: { id: owned.id }, data: { notifyOnMatch } });
   revalidatePath("/account");
   return {};
 }

@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidateTransaction } from "@/lib/cache";
 import { BUYER_TYPES, CONFIDENCE_LEVELS, DATA_SOURCES, TRANSACTION_TYPES } from "@/lib/project-meta";
 import { logAudit } from "@/lib/audit";
-import { friendlyPrismaError } from "./errors";
+import { friendlyPrismaError, updateManyByRow } from "./errors";
 
 const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefined ? undefined : v);
 
@@ -193,21 +193,22 @@ export async function bulkTransactionAction(
   if (transactionIds.length === 0) return { error: "No transactions selected" };
 
   let affected = 0;
-  if (operation === "delete") {
-    affected = (
-      await prisma.transaction.updateMany({
-        where: { id: { in: transactionIds } },
-        data: { deletedAt: new Date(), deletedByUserId: session.userId },
-      })
-    ).count;
-  } else if (operation === "restore") {
-    affected = (
-      await prisma.transaction.updateMany({ where: { id: { in: transactionIds } }, data: { deletedAt: null, deletedByUserId: null } })
-    ).count;
-  } else if (operation === "permanent-delete") {
-    affected = (
-      await prisma.transaction.deleteMany({ where: { id: { in: transactionIds }, deletedAt: { not: null } } })
-    ).count;
+  try {
+    if (operation === "delete") {
+      affected = await updateManyByRow(transactionIds, (id) =>
+        prisma.transaction.update({ where: { id }, data: { deletedAt: new Date(), deletedByUserId: session.userId } })
+      );
+    } else if (operation === "restore") {
+      affected = await updateManyByRow(transactionIds, (id) =>
+        prisma.transaction.update({ where: { id }, data: { deletedAt: null, deletedByUserId: null } })
+      );
+    } else if (operation === "permanent-delete") {
+      affected = (
+        await prisma.transaction.deleteMany({ where: { id: { in: transactionIds }, deletedAt: { not: null } } })
+      ).count;
+    }
+  } catch (error) {
+    return { error: friendlyPrismaError(error) };
   }
 
   await logAudit(session.userId, `transaction.bulk.${operation}`, "Transaction", transactionIds.join(","));
