@@ -8,7 +8,7 @@ import { formatDate } from "@/lib/format";
 import ConfirmButton from "@/app/admin/components/ConfirmButton";
 import FlashMessage from "@/app/admin/components/FlashMessage";
 
-export const metadata: Metadata = { title: "Users — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Users — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function AdminUsersPage({

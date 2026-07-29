@@ -4,7 +4,7 @@ import { getAuditHistory, getLocalitiesForSelect, getProjectsForSelect, getTrans
 import TransactionForm from "@/app/admin/components/TransactionForm";
 import AuditHistory from "@/app/admin/components/AuditHistory";
 
-export const metadata: Metadata = { title: "Edit Transaction — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Edit Transaction — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function EditTransactionPage({ params }: { params: Promise<{ id: string }> }) {

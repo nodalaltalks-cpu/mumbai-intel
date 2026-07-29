@@ -17,12 +17,15 @@ export interface ProjectImageItem {
 }
 
 const KIND_LABEL: Record<string, string> = {
-  hero: "Hero",
+  hero: "Cover Image",
   gallery: "Gallery",
   floorplan: "Floorplan",
   masterplan: "Master Plan",
   elevation: "Elevation",
 };
+
+/** "hero" (Cover Image) is uploaded via the dedicated CoverImageUploader above this component — excluded here so there's only one upload path for it. */
+const SELECTABLE_KINDS = IMAGE_KINDS.filter((kind) => kind !== "hero");
 
 const initialState: ImageActionState = {};
 
@@ -101,7 +104,7 @@ export default function ImageUploader({
               defaultValue="gallery"
               className="rounded-sm border border-border bg-surface px-3 py-2 font-mono text-xs text-foreground focus:border-accent focus:outline-none"
             >
-              {IMAGE_KINDS.map((kind) => (
+              {SELECTABLE_KINDS.map((kind) => (
                 <option key={kind} value={kind}>
                   {KIND_LABEL[kind]}
                 </option>
@@ -131,11 +134,11 @@ export default function ImageUploader({
         </p>
       ) : null}
 
-      {images.length === 0 ? (
+      {images.filter((img) => img.kind !== "hero").length === 0 ? (
         <p className="mt-4 text-xs text-muted">No images uploaded yet.</p>
       ) : (
         <div className="mt-4 flex flex-col gap-4">
-          {IMAGE_KINDS.filter((kind) => images.some((img) => img.kind === kind)).map((kind) => {
+          {SELECTABLE_KINDS.filter((kind) => images.some((img) => img.kind === kind)).map((kind) => {
             const group = images.filter((img) => img.kind === kind).sort((a, b) => a.sortOrder - b.sortOrder);
             return (
               <div key={kind}>

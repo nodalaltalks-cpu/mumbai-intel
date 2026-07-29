@@ -13,7 +13,7 @@ import { STATUS_CHART_COLOR, STATUS_LABEL, type ProjectStatus } from "@/lib/proj
 import BarChart from "@/app/admin/components/charts/BarChart";
 import DonutChart from "@/app/admin/components/charts/DonutChart";
 
-export const metadata: Metadata = { title: "Dashboard — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Dashboard — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 function StatTile({ label, value, href }: { label: string; value: string | number; href: string }) {

@@ -9,7 +9,7 @@ import {
 } from "@/lib/admin-queries";
 import { formatPaise, formatPricePerSqft, formatSignedPercent } from "@/lib/format";
 
-export const metadata: Metadata = { title: "Preview — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Preview — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function LocalityPreviewPage({ params }: { params: Promise<{ id: string }> }) {

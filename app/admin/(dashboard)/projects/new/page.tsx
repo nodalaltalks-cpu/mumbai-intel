@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { getAmenities, getBuildersForSelect, getLocalitiesForSelect } from "@/lib/admin-queries";
 import ProjectForm from "@/app/admin/components/ProjectForm";
 
-export const metadata: Metadata = { title: "New Project — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "New Project — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function NewProjectPage() {

@@ -13,7 +13,7 @@ import {
 } from "@/lib/analytics/brochure-queries";
 import BarChart from "@/app/admin/components/charts/BarChart";
 
-export const metadata: Metadata = { title: "Brochure Analytics — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Brochure Analytics — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 function BreakdownList({ title, items }: { title: string; items: { label: string; count: number }[] }) {

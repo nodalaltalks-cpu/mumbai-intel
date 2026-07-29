@@ -9,6 +9,7 @@ import AuditHistory from "@/app/admin/components/AuditHistory";
 import BrochureUploader from "@/app/admin/components/BrochureUploader";
 import FlashMessage from "@/app/admin/components/FlashMessage";
 import ImageUploader from "@/app/admin/components/ImageUploader";
+import CoverImageUploader from "@/app/admin/components/CoverImageUploader";
 import ProjectForm from "@/app/admin/components/ProjectForm";
 import ConfigurationsManager from "@/app/admin/components/ConfigurationsManager";
 import SpecificationsManager from "@/app/admin/components/SpecificationsManager";
@@ -19,7 +20,7 @@ import ProjectFaqsManager from "@/app/admin/components/ProjectFaqsManager";
 import InvestmentNotesManager from "@/app/admin/components/InvestmentNotesManager";
 import DocumentsManager from "@/app/admin/components/DocumentsManager";
 
-export const metadata: Metadata = { title: "Edit Project — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Edit Project — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function EditProjectPage({
@@ -74,6 +75,8 @@ export default async function EditProjectPage({
       <ProjectTimelineManager projectId={project.id} events={project.timelineEvents} />
       <ProjectFaqsManager projectId={project.id} faqs={project.faqs} />
       <InvestmentNotesManager projectId={project.id} notes={project.investmentNotes} />
+
+      <CoverImageUploader projectId={project.id} images={project.images} />
 
       <ImageUploader projectId={project.id} images={project.images} />
 

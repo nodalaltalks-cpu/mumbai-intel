@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { getIngestBatch, getIngestLogForBatch } from "@/lib/admin-queries";
 import { formatDate } from "@/lib/format";
 
-export const metadata: Metadata = { title: "Sync Batch — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Sync Batch — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 const ACTION_STYLES: Record<string, string> = {

@@ -1,4 +1,4 @@
-# Mumbai Intel — Data Dictionary
+# NoDalalTalks — Data Dictionary
 
 **Status**: generated from `prisma/schema.prisma` (39 models, 10 enums) as of this writing. This is a living document — whoever adds or changes a model **must** update this file in the same change, per the Governance Standards (`docs/governance-standards.md`).
 

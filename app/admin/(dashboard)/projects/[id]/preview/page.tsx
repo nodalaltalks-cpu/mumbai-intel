@@ -5,7 +5,7 @@ import { getProjectForEdit } from "@/lib/admin-queries";
 import { formatDate, formatPriceBand } from "@/lib/format";
 import { CATEGORY_LABEL, SOURCE_CLASS, SOURCE_LABEL, STATUS_CLASS, STATUS_LABEL, type DataSource, type ProjectStatus, type PropertyCategory } from "@/lib/project-meta";
 
-export const metadata: Metadata = { title: "Preview — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Preview — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function ProjectPreviewPage({ params }: { params: Promise<{ id: string }> }) {

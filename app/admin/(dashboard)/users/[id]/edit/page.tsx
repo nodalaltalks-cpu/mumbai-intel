@@ -4,7 +4,7 @@ import { requireSession } from "@/lib/auth/guard";
 import { getUserForEdit } from "@/lib/admin-queries";
 import UserEditForm from "@/app/admin/components/UserEditForm";
 
-export const metadata: Metadata = { title: "Edit User — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Edit User — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function EditUserPage({ params }: { params: Promise<{ id: string }> }) {

@@ -11,7 +11,7 @@ import AuditHistory from "@/app/admin/components/AuditHistory";
 import BrochureStatsCard from "@/app/admin/components/BrochureStatsCard";
 import { getLocalityBrochureStats } from "@/lib/analytics/brochure-queries";
 
-export const metadata: Metadata = { title: "Edit Locality — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Edit Locality — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function EditLocalityPage({ params }: { params: Promise<{ id: string }> }) {

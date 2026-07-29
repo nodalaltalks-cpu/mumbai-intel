@@ -1,4 +1,4 @@
-# Mumbai Intel — Documentation Index
+# NoDalalTalks — Documentation Index
 
 This is the entry point for the platform's governance documentation, written during the Enterprise Governance phase. Start here.
 

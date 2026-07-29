@@ -5,7 +5,7 @@ import { PRIMARY_CITY_SLUG } from "@/lib/queries";
 import type { NormalizedInfraCandidate } from "../types";
 
 const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
-const USER_AGENT = "MumbaiIntel/1.0 (real estate intelligence platform; contact via site)";
+const USER_AGENT = "NoDalalTalks/1.0 (real estate intelligence platform; contact via site)";
 // Degrees around the city centroid — generous enough to cover Greater Mumbai
 // from a single point, without a stored boundary polygon.
 const BBOX_DEGREES = 0.22;

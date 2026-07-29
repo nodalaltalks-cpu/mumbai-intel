@@ -5,7 +5,7 @@ import ImportBuildersForm from "./ImportBuildersForm";
 import ImportLocalitiesForm from "./ImportLocalitiesForm";
 import ImportTransactionsForm from "./ImportTransactionsForm";
 
-export const metadata: Metadata = { title: "Import Data — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Import Data — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 const TABS = [

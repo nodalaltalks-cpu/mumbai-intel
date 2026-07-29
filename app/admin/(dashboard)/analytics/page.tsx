@@ -4,7 +4,7 @@ import { getBuilderScorecards, getDashboardStats, getLocalityDemandRanking, getT
 import { formatMonth } from "@/lib/format";
 import BarChart from "@/app/admin/components/charts/BarChart";
 
-export const metadata: Metadata = { title: "Analytics — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Analytics — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 const DEMAND_CLASS: Record<string, string> = {

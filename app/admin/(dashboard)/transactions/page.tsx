@@ -8,7 +8,7 @@ import { TRANSACTION_TYPE_LABEL, type TransactionType } from "@/lib/project-meta
 import ConfirmButton from "@/app/admin/components/ConfirmButton";
 import FlashMessage from "@/app/admin/components/FlashMessage";
 
-export const metadata: Metadata = { title: "Transaction Management — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Transaction Management — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function AdminTransactionsPage({

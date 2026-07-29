@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/guard";
 import UserForm from "@/app/admin/components/UserForm";
 
-export const metadata: Metadata = { title: "New User — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "New User — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function NewUserPage() {

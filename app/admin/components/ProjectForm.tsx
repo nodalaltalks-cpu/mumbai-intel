@@ -429,14 +429,22 @@ export default function ProjectForm({
         <Field label="360° tour URL" name="tour360Url" type="url" defaultValue={project?.tour360Url ?? ""} />
         {project ? (
           <p className="text-xs text-muted">
-            Images, documents and the brochure PDF are managed in the cards below, after this form. Configurations,
+            Cover Image, Gallery, Floor Plans, Master Plan, the Project Brochure and Documents are each managed in
+            their own card below, after this form — every save there is independent of this form. Configurations,
             specifications, nearby places, custom sections, the construction timeline and FAQs each have their own
-            card too — every save there is independent of this form.
+            card too.
           </p>
         ) : (
-          <p className="rounded-sm border border-dashed border-border p-4 text-xs text-muted">
-            Save the project first — image gallery, documents and brochure upload are available from the edit page.
-          </p>
+          <div className="rounded-sm border border-dashed border-border p-4 text-xs text-muted">
+            <p>Save the project first — Project Media becomes available on the edit page, with its own card for:</p>
+            <ul className="mt-2 flex flex-wrap gap-1.5">
+              {["Cover Image", "Gallery", "Floor Plans", "Master Plan", "Project Brochure", "Documents"].map((label) => (
+                <li key={label} className="rounded-sm border border-border bg-surface px-2 py-1 text-[10px] font-mono uppercase tracking-wide">
+                  {label}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
 

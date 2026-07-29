@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { getAmenities, getZones } from "@/lib/admin-queries";
 import LocalityForm from "@/app/admin/components/LocalityForm";
 
-export const metadata: Metadata = { title: "New Locality — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "New Locality — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function NewLocalityPage() {

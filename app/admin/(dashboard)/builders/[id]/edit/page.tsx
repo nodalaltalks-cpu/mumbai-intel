@@ -10,7 +10,7 @@ import AuditHistory from "@/app/admin/components/AuditHistory";
 import BrochureStatsCard from "@/app/admin/components/BrochureStatsCard";
 import { getBuilderBrochureStats } from "@/lib/analytics/brochure-queries";
 
-export const metadata: Metadata = { title: "Edit Builder — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Edit Builder — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function EditBuilderPage({ params }: { params: Promise<{ id: string }> }) {

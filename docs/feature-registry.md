@@ -1,4 +1,4 @@
-# Mumbai Intel — Feature Registry
+# NoDalalTalks — Feature Registry
 
 This is the official architecture reference for what exists, what it depends on, and where a future module should plug in. Every entry is grounded in the actual codebase as of this writing — nothing here is aspirational unless explicitly marked **[FUTURE]**.
 

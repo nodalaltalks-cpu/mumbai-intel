@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { requireSession } from "@/lib/auth/guard";
 import ChangePasswordForm from "@/app/admin/components/ChangePasswordForm";
 
-export const metadata: Metadata = { title: "Settings — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Settings — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {

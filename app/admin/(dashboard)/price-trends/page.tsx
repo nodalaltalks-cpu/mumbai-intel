@@ -3,7 +3,7 @@ import { getLocalityMarketSnapshot, getMonthlyPriceTrend } from "@/lib/admin-que
 import { formatPricePerSqft, formatSignedPercent } from "@/lib/format";
 import PriceTrendChart from "@/app/components/charts/PriceTrendChart";
 
-export const metadata: Metadata = { title: "Price Trends — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Price Trends — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function PriceTrendsPage() {

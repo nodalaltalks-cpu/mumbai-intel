@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { getAllImagesAdmin, getProjectsForSelect } from "@/lib/admin-queries";
 import AllImagesManager from "@/app/admin/components/AllImagesManager";
 
-export const metadata: Metadata = { title: "Image Upload — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Image Upload — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function AdminImagesPage() {

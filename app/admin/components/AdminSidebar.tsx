@@ -64,7 +64,7 @@ export default function AdminSidebar({ session }: { session: SessionPayload }) {
     <aside className="flex w-full shrink-0 flex-col border-border bg-surface md:h-screen md:w-56 md:sticky md:top-0 md:border-r">
       <div className="border-b border-border px-4 py-4">
         <Link href="/" className="font-mono text-sm font-bold tracking-widest text-foreground">
-          MUMBAI<span className="text-accent">INTEL</span>
+          NODALAL<span className="text-accent">TALKS</span>
         </Link>
         <p className="mt-1 text-[10px] uppercase tracking-wide text-muted">Founder Admin</p>
       </div>

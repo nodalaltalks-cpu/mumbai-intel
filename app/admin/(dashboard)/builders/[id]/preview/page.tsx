@@ -5,7 +5,7 @@ import { getBuilderForEdit } from "@/lib/admin-queries";
 import { formatDate } from "@/lib/format";
 import { SOURCE_CLASS, SOURCE_LABEL, type DataSource } from "@/lib/project-meta";
 
-export const metadata: Metadata = { title: "Preview — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Preview — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function BuilderPreviewPage({ params }: { params: Promise<{ id: string }> }) {

@@ -1,6 +1,6 @@
-# Mumbai Intel — Governance Standards
+# NoDalalTalks — Governance Standards
 
-This document is the binding rulebook for every future change to Mumbai Intel. It exists so the platform can keep growing without needing architectural redesign. Where a rule is **already enforced** by the current codebase, that's stated explicitly with a pointer to the enforcing code. Where a rule is a **standard for future work** that the current codebase doesn't yet fully satisfy, that's stated explicitly too — this document does not claim retroactive compliance it can't back up.
+This document is the binding rulebook for every future change to NoDalalTalks. It exists so the platform can keep growing without needing architectural redesign. Where a rule is **already enforced** by the current codebase, that's stated explicitly with a pointer to the enforcing code. Where a rule is a **standard for future work** that the current codebase doesn't yet fully satisfy, that's stated explicitly too — this document does not claim retroactive compliance it can't back up.
 
 ---
 

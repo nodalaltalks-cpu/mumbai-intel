@@ -10,7 +10,7 @@ import ProjectCardsGrid from "@/app/admin/components/ProjectCardsGrid";
 import ViewToggle from "@/app/admin/components/ViewToggle";
 import SavedFilters from "@/app/admin/components/SavedFilters";
 
-export const metadata: Metadata = { title: "Project Management — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Project Management — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function AdminProjectsPage({

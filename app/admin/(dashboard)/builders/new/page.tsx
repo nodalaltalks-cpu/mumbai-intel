@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { getAmenities } from "@/lib/admin-queries";
 import BuilderForm from "@/app/admin/components/BuilderForm";
 
-export const metadata: Metadata = { title: "New Builder — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "New Builder — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function NewBuilderPage() {

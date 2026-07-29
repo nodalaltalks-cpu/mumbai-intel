@@ -4,7 +4,7 @@ import { getBuilderTrustLeaderboard, getDashboardCharts, getLocalityMarketSnapsh
 import { formatDate, formatSignedPercent } from "@/lib/format";
 import BarChart from "@/app/admin/components/charts/BarChart";
 
-export const metadata: Metadata = { title: "Market Intelligence — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Market Intelligence — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function MarketIntelligencePage() {

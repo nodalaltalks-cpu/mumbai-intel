@@ -1,4 +1,4 @@
-# Mumbai Intel — Architecture Overview
+# NoDalalTalks — Architecture Overview
 
 ## Tech stack
 

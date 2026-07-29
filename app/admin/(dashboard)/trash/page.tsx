@@ -34,7 +34,7 @@ import {
 import { formatPaise } from "@/lib/format";
 import TrashPanel, { type TrashItem } from "@/app/admin/components/TrashPanel";
 
-export const metadata: Metadata = { title: "Trash — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Trash — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 const TABS = [

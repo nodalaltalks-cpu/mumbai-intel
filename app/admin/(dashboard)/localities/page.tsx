@@ -9,7 +9,7 @@ import LocalitiesTable from "@/app/admin/components/LocalitiesTable";
 import LocalityCardsGrid from "@/app/admin/components/LocalityCardsGrid";
 import ViewToggle from "@/app/admin/components/ViewToggle";
 
-export const metadata: Metadata = { title: "Locality Management — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Locality Management — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function AdminLocalitiesPage({

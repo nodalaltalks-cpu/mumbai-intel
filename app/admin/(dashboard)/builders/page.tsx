@@ -9,7 +9,7 @@ import BuildersTable from "@/app/admin/components/BuildersTable";
 import BuilderCardsGrid from "@/app/admin/components/BuilderCardsGrid";
 import ViewToggle from "@/app/admin/components/ViewToggle";
 
-export const metadata: Metadata = { title: "Builder Management — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Builder Management — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function AdminBuildersPage({

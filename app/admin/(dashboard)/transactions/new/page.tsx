@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { getLocalitiesForSelect, getProjectsForSelect } from "@/lib/admin-queries";
 import TransactionForm from "@/app/admin/components/TransactionForm";
 
-export const metadata: Metadata = { title: "New Transaction — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "New Transaction — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function NewTransactionPage() {

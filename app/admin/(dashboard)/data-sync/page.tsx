@@ -6,7 +6,7 @@ import { triggerSyncAction, toggleIngestSourceEnabledAction, retryFailedBatchAct
 import { formatDate } from "@/lib/format";
 import ConfirmButton from "@/app/admin/components/ConfirmButton";
 
-export const metadata: Metadata = { title: "Data Sync — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Data Sync — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 const STATUS_STYLES: Record<string, string> = {

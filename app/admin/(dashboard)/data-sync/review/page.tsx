@@ -7,7 +7,7 @@ import type { BuilderImportPayload, LocalityImportPayload, ProjectImportPayload,
 import ReviewQueueList, { type ReviewRecord } from "@/app/admin/components/ReviewQueueList";
 import EmptyState from "@/app/components/ui/EmptyState";
 
-export const metadata: Metadata = { title: "Review Queue — Mumbai Intel Admin" };
+export const metadata: Metadata = { title: "Review Queue — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 interface InfraStagingPayload {
