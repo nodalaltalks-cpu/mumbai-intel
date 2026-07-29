@@ -113,6 +113,70 @@ async function deleteBuilderMediaAssets(
   }
 }
 
+interface BuilderCreateInput {
+  name: string;
+  slug?: string;
+  logoUrl?: string;
+  coverImageUrl?: string;
+  description?: string;
+  foundedYear?: number;
+  headquarters?: string;
+  websiteUrl?: string;
+  reraNumber?: string;
+  legalNames?: string;
+  awards?: string;
+  dataSource: (typeof DATA_SOURCES)[number];
+  confidence: (typeof CONFIDENCE_LEVELS)[number];
+  isPublished: boolean;
+  isFeatured: boolean;
+  metaTitle?: string;
+  metaDescription?: string;
+  ogImageUrl?: string;
+}
+
+/**
+ * The one place a Builder row is actually created — used by both the full
+ * "New Builder" page (createBuilderAction, every field) and the Project
+ * form's inline "+ New Builder" (createBuilderInlineAction, name only, the
+ * rest defaulted), so there is exactly one create-Builder code path.
+ */
+async function createBuilderRecord(data: BuilderCreateInput, amenityIds: string[], actorId: string): Promise<{ id: string; slug: string }> {
+  const slug = await ensureUniqueSlug(data.slug || data.name, async (candidate) => {
+    const existing = await prisma.builder.findUnique({ where: { slug: candidate } });
+    return Boolean(existing);
+  });
+
+  const created = await prisma.builder.create({
+    data: {
+      slug,
+      name: data.name,
+      logoUrl: data.logoUrl ?? null,
+      coverImageUrl: data.coverImageUrl ?? null,
+      description: data.description ?? null,
+      foundedYear: data.foundedYear ?? null,
+      headquarters: data.headquarters ?? null,
+      websiteUrl: data.websiteUrl ?? null,
+      reraNumber: data.reraNumber ?? null,
+      legalNames: parseLines(data.legalNames),
+      awards: parseLines(data.awards),
+      dataSource: data.dataSource,
+      confidence: data.confidence,
+      isPublished: data.isPublished,
+      isFeatured: data.isFeatured,
+      metaTitle: data.metaTitle ?? null,
+      metaDescription: data.metaDescription ?? null,
+      ogImageUrl: data.ogImageUrl ?? null,
+    },
+    select: { id: true },
+  });
+
+  if (amenityIds.length > 0) await syncBuilderAmenities(created.id, amenityIds);
+
+  await logAudit(actorId, "builder.create", "Builder", created.id);
+  revalidateBuilder({ id: created.id, slug });
+  return { id: created.id, slug };
+}
+
 export async function createBuilderAction(
   _prevState: BuilderFormState,
   formData: FormData
@@ -121,49 +185,39 @@ export async function createBuilderAction(
 
   const parsed = parseBuilderForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
-  const data = parsed.data;
   const amenityIds = formData.getAll("amenityIds").map(String).filter(Boolean);
 
-  const slug = await ensureUniqueSlug(data.slug || data.name, async (candidate) => {
-    const existing = await prisma.builder.findUnique({ where: { slug: candidate } });
-    return Boolean(existing);
-  });
-
-  let builderId: string;
   try {
-    const created = await prisma.builder.create({
-      data: {
-        slug,
-        name: data.name,
-        logoUrl: data.logoUrl ?? null,
-        coverImageUrl: data.coverImageUrl ?? null,
-        description: data.description ?? null,
-        foundedYear: data.foundedYear ?? null,
-        headquarters: data.headquarters ?? null,
-        websiteUrl: data.websiteUrl ?? null,
-        reraNumber: data.reraNumber ?? null,
-        legalNames: parseLines(data.legalNames),
-        awards: parseLines(data.awards),
-        dataSource: data.dataSource,
-        confidence: data.confidence,
-        isPublished: data.isPublished,
-        isFeatured: data.isFeatured,
-        metaTitle: data.metaTitle ?? null,
-        metaDescription: data.metaDescription ?? null,
-        ogImageUrl: data.ogImageUrl ?? null,
-      },
-      select: { id: true },
-    });
-    builderId = created.id;
+    await createBuilderRecord(parsed.data, amenityIds, session.userId);
   } catch (error) {
     return { error: friendlyPrismaError(error) };
   }
 
-  if (amenityIds.length > 0) await syncBuilderAmenities(builderId, amenityIds);
-
-  await logAudit(session.userId, "builder.create", "Builder", builderId);
-  revalidateBuilder({ id: builderId, slug });
   redirect("/admin/builders?created=1");
+}
+
+export interface InlineCreateResult {
+  id?: string;
+  name?: string;
+  error?: string;
+}
+
+/** Minimal create for the Project form's inline "+ New Builder" — same shared creation path as the full form, sensible defaults for everything but name, no redirect (the Project form stays open and auto-selects the new builder). */
+export async function createBuilderInlineAction(name: string): Promise<InlineCreateResult> {
+  const session = await requireMutateSession();
+  const trimmed = name.trim();
+  if (!trimmed) return { error: "Name is required" };
+
+  try {
+    const { id } = await createBuilderRecord(
+      { name: trimmed, dataSource: "MANUALLY_VERIFIED", confidence: "HIGH", isPublished: false, isFeatured: false },
+      [],
+      session.userId
+    );
+    return { id, name: trimmed };
+  } catch (error) {
+    return { error: friendlyPrismaError(error) };
+  }
 }
 
 export async function updateBuilderAction(

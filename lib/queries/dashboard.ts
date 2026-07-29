@@ -24,6 +24,10 @@ export interface WishlistItem {
   priceLabel: string | null;
   href: string;
   dateAdded: Date;
+  /** Only ever set for Project rows — Builder/Locality wishlist items have no brochure. */
+  brochureUrl: string | null;
+  brochureFileName: string | null;
+  projectSlug: string | null;
 }
 
 /**
@@ -63,6 +67,9 @@ export async function getWishlistForUser(publicUserId: string): Promise<Wishlist
       ),
       href: `/projects/${saved.project.slug}`,
       dateAdded: saved.createdAt,
+      brochureUrl: saved.project.brochureUrl,
+      brochureFileName: saved.project.brochureFileName,
+      projectSlug: saved.project.slug,
     };
   });
 
@@ -92,6 +99,9 @@ export async function getWishlistForUser(publicUserId: string): Promise<Wishlist
           priceLabel: null,
           href: `/builders/${b.slug}`,
           dateAdded: row.createdAt,
+          brochureUrl: null,
+          brochureFileName: null,
+          projectSlug: null,
         };
       }
       if (row.entityType === "Locality") {
@@ -108,6 +118,9 @@ export async function getWishlistForUser(publicUserId: string): Promise<Wishlist
           priceLabel: l.avgPricePerSqftPaise !== null ? formatPricePerSqft(l.avgPricePerSqftPaise) : null,
           href: `/localities/${l.slug}`,
           dateAdded: row.createdAt,
+          brochureUrl: null,
+          brochureFileName: null,
+          projectSlug: null,
         };
       }
       return null;
@@ -130,6 +143,10 @@ export interface RecentViewItem {
   subtitle: string;
   href: string;
   viewedAt: Date;
+  /** Only ever set for Project rows. */
+  brochureUrl: string | null;
+  brochureFileName: string | null;
+  projectSlug: string | null;
 }
 
 /** "Continue Research" — the last 25 entities a user opened, across every trackable type, newest first. */
@@ -151,7 +168,10 @@ export async function getRecentViewsForUser(publicUserId: string): Promise<Recen
 
   const [projects, builders, localities, transactions] = await Promise.all([
     idsByType.has("Project")
-      ? prisma.project.findMany({ where: { id: { in: idsByType.get("Project")! } }, select: { id: true, name: true, slug: true, locality: { select: { name: true } } } })
+      ? prisma.project.findMany({
+          where: { id: { in: idsByType.get("Project")! } },
+          select: { id: true, name: true, slug: true, brochureUrl: true, brochureFileName: true, locality: { select: { name: true } } },
+        })
       : Promise.resolve([]),
     idsByType.has("Builder")
       ? prisma.builder.findMany({ where: { id: { in: idsByType.get("Builder")! } }, select: { id: true, name: true, slug: true, headquarters: true } })
@@ -177,17 +197,50 @@ export async function getRecentViewsForUser(publicUserId: string): Promise<Recen
       if (entityType === "Project") {
         const p = projectById.get(row.entityId);
         if (!p) return null;
-        return { id: row.id, entityType, entityId: p.id, title: p.name, subtitle: p.locality.name, href: `/projects/${p.slug}`, viewedAt: row.viewedAt };
+        return {
+          id: row.id,
+          entityType,
+          entityId: p.id,
+          title: p.name,
+          subtitle: p.locality.name,
+          href: `/projects/${p.slug}`,
+          viewedAt: row.viewedAt,
+          brochureUrl: p.brochureUrl,
+          brochureFileName: p.brochureFileName,
+          projectSlug: p.slug,
+        };
       }
       if (entityType === "Builder") {
         const b = builderById.get(row.entityId);
         if (!b) return null;
-        return { id: row.id, entityType, entityId: b.id, title: b.name, subtitle: "Builder Profile", href: `/builders/${b.slug}`, viewedAt: row.viewedAt };
+        return {
+          id: row.id,
+          entityType,
+          entityId: b.id,
+          title: b.name,
+          subtitle: "Builder Profile",
+          href: `/builders/${b.slug}`,
+          viewedAt: row.viewedAt,
+          brochureUrl: null,
+          brochureFileName: null,
+          projectSlug: null,
+        };
       }
       if (entityType === "Locality") {
         const l = localityById.get(row.entityId);
         if (!l) return null;
-        return { id: row.id, entityType, entityId: l.id, title: l.name, subtitle: "Locality Intelligence", href: `/localities/${l.slug}`, viewedAt: row.viewedAt };
+        return {
+          id: row.id,
+          entityType,
+          entityId: l.id,
+          title: l.name,
+          subtitle: "Locality Intelligence",
+          href: `/localities/${l.slug}`,
+          viewedAt: row.viewedAt,
+          brochureUrl: null,
+          brochureFileName: null,
+          projectSlug: null,
+        };
       }
       if (entityType === "Transaction") {
         const t = transactionById.get(row.entityId);
@@ -200,6 +253,9 @@ export async function getRecentViewsForUser(publicUserId: string): Promise<Recen
           subtitle: t.locality.name,
           href: `/transactions/${t.id}`,
           viewedAt: row.viewedAt,
+          brochureUrl: null,
+          brochureFileName: null,
+          projectSlug: null,
         };
       }
       if (entityType === "MarketReport") {
@@ -211,6 +267,9 @@ export async function getRecentViewsForUser(publicUserId: string): Promise<Recen
           subtitle: "Market Intelligence",
           href: "/reports/market",
           viewedAt: row.viewedAt,
+          brochureUrl: null,
+          brochureFileName: null,
+          projectSlug: null,
         };
       }
       return null;

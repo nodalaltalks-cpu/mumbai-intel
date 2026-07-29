@@ -121,14 +121,3 @@ export function documentPublicIdFromUrl(url: string): string | null {
   return match ? match[1] : null;
 }
 
-/**
- * Inserts Cloudinary's `fl_attachment` delivery flag so the browser performs
- * a real file download (Content-Disposition: attachment) instead of
- * navigating to/rendering the PDF inline — used for the public "Download
- * Brochure" button. Falls back to the original URL if it doesn't match the
- * expected `/upload/` shape (still works, just opens inline instead).
- */
-export function toDocumentDownloadUrl(url: string, downloadFileName?: string): string {
-  const flag = downloadFileName ? `fl_attachment:${encodeURIComponent(downloadFileName.replace(/\.[^.]+$/, ""))}` : "fl_attachment";
-  return url.replace("/upload/", `/upload/${flag}/`);
-}

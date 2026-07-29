@@ -24,7 +24,7 @@ export default function AuthCard({
       <div className="w-full max-w-md">
         <div className="mb-8 flex items-center justify-center gap-2">
           <Link href="/" className="text-lg font-semibold tracking-tight text-foreground">
-            Mumbai<span className="text-accent">Intel</span>
+            NoDalal<span className="text-accent">Talks</span>
           </Link>
         </div>
 

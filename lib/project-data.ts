@@ -106,35 +106,6 @@ export function toPaise(rupees: number | undefined): bigint | null {
   return BigInt(Math.round(rupees * 100));
 }
 
-/**
- * Same required-field list ProjectForm.tsx uses for its live client-side
- * ProgressIndicator — kept here too so the persisted `completionPercent`
- * (surfaced in the admin Projects list) never drifts from what the form
- * itself shows while editing.
- */
-const REQUIRED_COMPLETION_FIELDS: (keyof ProjectSchemaInput)[] = [
-  "name",
-  "localityId",
-  "status",
-  "category",
-  "description",
-  "tagline",
-  "address",
-  "priceMinRupees",
-  "launchDate",
-  "totalUnits",
-  "reraNumber",
-  "metaTitle",
-];
-
-export function computeProjectCompletionPercent(data: ProjectSchemaInput): number {
-  const filled = REQUIRED_COMPLETION_FIELDS.filter((key) => {
-    const value = data[key];
-    return value !== undefined && value !== null && value !== "";
-  }).length;
-  return Math.round((filled / REQUIRED_COMPLETION_FIELDS.length) * 100);
-}
-
 export function parseHighlights(raw: string | undefined): string[] {
   if (!raw) return [];
   return raw
@@ -188,6 +159,5 @@ export function buildProjectData(data: ProjectSchemaInput) {
     metaTitle: data.metaTitle ?? null,
     metaDescription: data.metaDescription ?? null,
     ogImageUrl: data.ogImageUrl ?? null,
-    completionPercent: computeProjectCompletionPercent(data),
   };
 }

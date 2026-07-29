@@ -11,6 +11,7 @@ import { deleteImageByPublicId, publicIdFromUrl } from "@/lib/cloudinary";
 import { logAudit } from "@/lib/audit";
 import { emit } from "@/lib/events";
 import { friendlyPrismaError } from "./errors";
+import type { InlineCreateResult } from "./builders";
 
 const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefined ? undefined : v);
 const MAX_META_TITLE = 70;
@@ -150,6 +151,61 @@ async function deleteLocalityMediaAssets(
   }
 }
 
+type LocalityCreateInput = z.infer<typeof localitySchema>;
+
+/**
+ * The one place a Locality row is actually created — used by both the full
+ * "New Locality" page (createLocalityAction, every field) and the Project
+ * form's inline "+ New Locality" (createLocalityInlineAction, name only, the
+ * rest defaulted/omitted), so there is exactly one create-Locality code path.
+ */
+async function createLocalityRecord(data: LocalityCreateInput, amenityIds: string[], actorId: string): Promise<{ id: string; slug: string }> {
+  const city = await prisma.city.findUnique({ where: { slug: PRIMARY_CITY_SLUG } });
+  if (!city) throw new Error("Primary city is not seeded yet");
+
+  const slug = await uniqueLocalitySlug(city.id, data.slug || data.name);
+  const hasMarketData = marketFieldsPresent(data);
+
+  const created = await prisma.locality.create({
+    data: {
+      cityId: city.id,
+      zoneId: data.zoneId || null,
+      name: data.name,
+      slug,
+      pincode: data.pincode ?? null,
+      description: data.description ?? null,
+      coverImageUrl: data.coverImageUrl ?? null,
+      centroidLat: data.centroidLat ?? null,
+      centroidLng: data.centroidLng ?? null,
+      avgPricePerSqftPaise: data.avgPriceRupeesPerSqft !== undefined ? BigInt(Math.round(data.avgPriceRupeesPerSqft * 100)) : null,
+      rentalYieldPercent: data.rentalYieldPercent ?? null,
+      growthPercentYoy: data.growthPercentYoy ?? null,
+      marketDataSource: hasMarketData ? "MANUALLY_VERIFIED" : null,
+      marketAsOf: hasMarketData ? new Date() : null,
+      connectivityNotes: data.connectivityNotes ?? null,
+      investmentScore: data.investmentScore ?? null,
+      endUserScore: data.endUserScore ?? null,
+      luxuryScore: data.luxuryScore ?? null,
+      familyScore: data.familyScore ?? null,
+      advantages: parseLines(data.advantages),
+      disadvantages: parseLines(data.disadvantages),
+      metaTitle: data.metaTitle ?? null,
+      metaDescription: data.metaDescription ?? null,
+      canonicalUrl: data.canonicalUrl ?? null,
+      ogImageUrl: data.ogImageUrl ?? null,
+      isPublished: data.isPublished,
+      isFeatured: data.isFeatured,
+    },
+    select: { id: true },
+  });
+
+  if (amenityIds.length > 0) await syncLocalityAmenities(created.id, amenityIds);
+
+  await logAudit(actorId, "locality.create", "Locality", created.id);
+  revalidateLocality({ id: created.id, slug });
+  return { id: created.id, slug };
+}
+
 export async function createLocalityAction(
   _prevState: LocalityFormState,
   formData: FormData
@@ -158,59 +214,29 @@ export async function createLocalityAction(
 
   const parsed = parseLocalityForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
-  const data = parsed.data;
   const amenityIds = formData.getAll("amenityIds").map(String).filter(Boolean);
 
-  const city = await prisma.city.findUnique({ where: { slug: PRIMARY_CITY_SLUG } });
-  if (!city) return { error: "Primary city is not seeded yet" };
-
-  const slug = await uniqueLocalitySlug(city.id, data.slug || data.name);
-  const hasMarketData = marketFieldsPresent(data);
-
-  let localityId: string;
   try {
-    const created = await prisma.locality.create({
-      data: {
-        cityId: city.id,
-        zoneId: data.zoneId || null,
-        name: data.name,
-        slug,
-        pincode: data.pincode ?? null,
-        description: data.description ?? null,
-        coverImageUrl: data.coverImageUrl ?? null,
-        centroidLat: data.centroidLat ?? null,
-        centroidLng: data.centroidLng ?? null,
-        avgPricePerSqftPaise: data.avgPriceRupeesPerSqft !== undefined ? BigInt(Math.round(data.avgPriceRupeesPerSqft * 100)) : null,
-        rentalYieldPercent: data.rentalYieldPercent ?? null,
-        growthPercentYoy: data.growthPercentYoy ?? null,
-        marketDataSource: hasMarketData ? "MANUALLY_VERIFIED" : null,
-        marketAsOf: hasMarketData ? new Date() : null,
-        connectivityNotes: data.connectivityNotes ?? null,
-        investmentScore: data.investmentScore ?? null,
-        endUserScore: data.endUserScore ?? null,
-        luxuryScore: data.luxuryScore ?? null,
-        familyScore: data.familyScore ?? null,
-        advantages: parseLines(data.advantages),
-        disadvantages: parseLines(data.disadvantages),
-        metaTitle: data.metaTitle ?? null,
-        metaDescription: data.metaDescription ?? null,
-        canonicalUrl: data.canonicalUrl ?? null,
-        ogImageUrl: data.ogImageUrl ?? null,
-        isPublished: data.isPublished,
-        isFeatured: data.isFeatured,
-      },
-      select: { id: true },
-    });
-    localityId = created.id;
+    await createLocalityRecord(parsed.data, amenityIds, session.userId);
   } catch (error) {
     return { error: friendlyPrismaError(error) };
   }
 
-  if (amenityIds.length > 0) await syncLocalityAmenities(localityId, amenityIds);
-
-  await logAudit(session.userId, "locality.create", "Locality", localityId);
-  revalidateLocality({ id: localityId, slug });
   redirect("/admin/localities?created=1");
+}
+
+/** Minimal create for the Project form's inline "+ New Locality" — same shared creation path as the full form, everything but name omitted/defaulted, no redirect. */
+export async function createLocalityInlineAction(name: string): Promise<InlineCreateResult> {
+  const session = await requireMutateSession();
+  const trimmed = name.trim();
+  if (!trimmed) return { error: "Name is required" };
+
+  try {
+    const { id } = await createLocalityRecord({ name: trimmed, isPublished: false, isFeatured: false }, [], session.userId);
+    return { id, name: trimmed };
+  } catch (error) {
+    return { error: friendlyPrismaError(error) };
+  }
 }
 
 export async function updateLocalityAction(

@@ -24,9 +24,14 @@ export default async function AdminAnalyticsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="font-mono text-lg font-semibold text-foreground">Analytics</h1>
-        <p className="text-xs text-muted">Transaction velocity, builder scorecards and locality demand — computed by the analytics engine from curated data.</p>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="font-mono text-lg font-semibold text-foreground">Analytics</h1>
+          <p className="text-xs text-muted">Transaction velocity, builder scorecards and locality demand — computed by the analytics engine from curated data.</p>
+        </div>
+        <Link href="/admin/analytics/brochures" className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
+          Brochure Analytics →
+        </Link>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">

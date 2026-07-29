@@ -52,9 +52,9 @@ export default function TermsPage() {
 
       <h2>6. Intellectual property</h2>
       <p>
-        The Service&apos;s design, software, and our own curated analysis, scores, and summaries are owned by Mumbai
-        Intel. Underlying factual data (e.g. government transaction records) remains subject to its original source&apos;s
-        terms where applicable.
+        The Service&apos;s design, software, and our own curated analysis, scores, and summaries are owned by
+        NoDalalTalks. Underlying factual data (e.g. government transaction records) remains subject to its original
+        source&apos;s terms where applicable.
       </p>
 
       <h2>7. Termination</h2>

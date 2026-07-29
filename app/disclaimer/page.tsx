@@ -26,7 +26,7 @@ export default function DisclaimerPage() {
         real estate agent, lawyer, or financial advisor).
       </p>
 
-      <h2>Data accuracy and provenance</h2>
+      <h2>Data accuracy and sources</h2>
       <p>
         Every figure on the platform is tagged with a data source (Govt Verified, Builder Data, Analyst Verified, AI
         Estimate, or Community) and a confidence level, so you can judge how much weight to give it. AI-estimated and

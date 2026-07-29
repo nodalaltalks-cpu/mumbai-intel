@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getAmenities, getAuditHistory, getBrochureVersions, getBuildersForSelect, getInfraAssetsForCity, getLocalitiesForSelect, getProjectForEdit } from "@/lib/admin-queries";
 import { requireSession } from "@/lib/auth/guard";
+import { getProjectBrochureStats } from "@/lib/analytics/brochure-queries";
+import BrochureStatsCard from "@/app/admin/components/BrochureStatsCard";
 import AuditHistory from "@/app/admin/components/AuditHistory";
 import BrochureUploader from "@/app/admin/components/BrochureUploader";
 import FlashMessage from "@/app/admin/components/FlashMessage";
@@ -31,7 +33,7 @@ export default async function EditProjectPage({
   const query = await searchParams;
   const session = await requireSession();
 
-  const [project, localities, builders, amenities, infraOptions, history, brochureVersions] = await Promise.all([
+  const [project, localities, builders, amenities, infraOptions, history, brochureVersions, brochureStats] = await Promise.all([
     getProjectForEdit(id),
     getLocalitiesForSelect(),
     getBuildersForSelect(),
@@ -39,6 +41,7 @@ export default async function EditProjectPage({
     getInfraAssetsForCity(),
     getAuditHistory("Project", id),
     getBrochureVersions(id),
+    getProjectBrochureStats(id),
   ]);
 
   if (!project) notFound();
@@ -61,7 +64,7 @@ export default async function EditProjectPage({
       <FlashMessage type={query.created ? "created" : query.saved ? "saved" : null} />
 
       <div className="rounded-sm border border-border bg-surface p-4">
-        <ProjectForm project={project} localities={localities} builders={builders} amenities={amenities} />
+        <ProjectForm project={project} localities={localities} builders={builders} amenities={amenities} imageCount={project.images.length} />
       </div>
 
       <ConfigurationsManager projectId={project.id} configurations={project.configurations} />
@@ -86,6 +89,8 @@ export default async function EditProjectPage({
         isAdmin={session.role === "ADMIN"}
         maxSizeMB={Math.round(Number(process.env.BROCHURE_MAX_SIZE_MB || 15))}
       />
+
+      <BrochureStatsCard title="Brochure Downloads" stats={brochureStats} />
 
       <AuditHistory logs={history} />
     </div>

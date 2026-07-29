@@ -24,6 +24,8 @@ export interface CompareProject {
   possessionLabel: string;
   reraNumber: string | null;
   amenityCount: number;
+  brochureUrl: string | null;
+  brochureFileName: string | null;
 }
 
 export async function getProjectsForCompare(slugs: string[]): Promise<CompareProject[]> {
@@ -80,6 +82,8 @@ export async function getProjectsForCompare(slugs: string[]): Promise<ComparePro
             : "--",
         reraNumber: project.reraNumber,
         amenityCount: project.amenities.length,
+        brochureUrl: project.brochureUrl,
+        brochureFileName: project.brochureFileName,
       };
     });
 }

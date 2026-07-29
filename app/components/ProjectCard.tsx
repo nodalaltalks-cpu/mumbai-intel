@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import Button from "@/app/components/ui/Button";
 import CompareToggleButton from "@/app/components/CompareToggleButton";
+import BrochureDownloadLink from "@/app/components/BrochureDownloadLink";
 import { IconClose } from "@/app/components/ui/icons";
 import { formatDate, formatPriceBand, formatPricePerSqft } from "@/lib/format";
 import {
@@ -35,6 +36,8 @@ export interface ProjectCardData {
   constructionPercent?: number | null;
   dataSource: DataSource;
   imageUrl?: string | null;
+  brochureUrl?: string | null;
+  brochureFileName?: string | null;
 }
 
 function initials(name: string): string {
@@ -115,11 +118,18 @@ export default function ProjectCard({ project }: { project: ProjectCardData }) {
               ) : null}
             </div>
 
-            <span
-              className={`w-fit rounded-sm border px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider ${SOURCE_CLASS[project.dataSource]}`}
-            >
-              {SOURCE_LABEL[project.dataSource]}
-            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span
+                className={`w-fit rounded-sm border px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider ${SOURCE_CLASS[project.dataSource]}`}
+              >
+                {SOURCE_LABEL[project.dataSource]}
+              </span>
+              {project.brochureUrl ? (
+                <span className="w-fit rounded-sm border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider text-accent">
+                  📄 Brochure available
+                </span>
+              ) : null}
+            </div>
           </div>
         </Link>
 
@@ -139,6 +149,17 @@ export default function ProjectCard({ project }: { project: ProjectCardData }) {
           slug={project.slug}
           className="absolute bottom-2 right-2 z-10 opacity-0 transition-opacity group-hover:opacity-100"
         />
+
+        {project.brochureUrl ? (
+          <BrochureDownloadLink
+            slug={project.slug}
+            brochureUrl={project.brochureUrl}
+            brochureFileName={project.brochureFileName}
+            className="absolute bottom-2 left-2 z-10 rounded-sm border border-border bg-background/80 px-2 py-1 text-[9px] font-mono uppercase tracking-wide text-muted opacity-0 backdrop-blur transition-opacity hover:border-accent hover:text-accent group-hover:opacity-100"
+          >
+            Brochure
+          </BrochureDownloadLink>
+        ) : null}
       </div>
 
       {quickViewOpen ? <QuickViewModal project={project} onClose={() => setQuickViewOpen(false)} /> : null}
@@ -224,9 +245,21 @@ function QuickViewModal({ project, onClose }: { project: ProjectCardData; onClos
             ) : null}
           </div>
 
-          <Button href={`/projects/${project.slug}`} size="sm" fullWidth className="mt-1">
-            Open full details
-          </Button>
+          <div className="mt-1 flex gap-2">
+            <Button href={`/projects/${project.slug}`} size="sm" fullWidth>
+              Open full details
+            </Button>
+            {project.brochureUrl ? (
+              <BrochureDownloadLink
+                slug={project.slug}
+                brochureUrl={project.brochureUrl}
+                brochureFileName={project.brochureFileName}
+                className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-border bg-transparent px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:border-accent hover:text-accent"
+              >
+                Brochure
+              </BrochureDownloadLink>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>

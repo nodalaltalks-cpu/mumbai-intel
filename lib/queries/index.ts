@@ -157,6 +157,8 @@ export async function getFeaturedProjects(limit = 6) {
       constructionPercent: project.constructionPercent,
       dataSource: project.dataSource,
       imageUrl: project.images[0]?.url ?? null,
+      brochureUrl: project.brochureUrl,
+      brochureFileName: project.brochureFileName,
     };
   });
 }
@@ -199,6 +201,8 @@ export async function getSavedProjectsForUser(publicUserId: string) {
       constructionPercent: project.constructionPercent,
       dataSource: project.dataSource,
       imageUrl: project.images[0]?.url ?? null,
+      brochureUrl: project.brochureUrl,
+      brochureFileName: project.brochureFileName,
     };
   });
 }
@@ -242,6 +246,8 @@ export async function getLatestLaunches(limit = 6) {
       constructionPercent: project.constructionPercent,
       dataSource: project.dataSource,
       imageUrl: project.images[0]?.url ?? null,
+      brochureUrl: project.brochureUrl,
+      brochureFileName: project.brochureFileName,
     };
   });
 }
@@ -631,6 +637,8 @@ export async function getPublicProjectsPaged(filters: PublicProjectFilters) {
         constructionPercent: project.constructionPercent,
         dataSource: project.dataSource,
         imageUrl: project.images[0]?.url ?? null,
+        brochureUrl: project.brochureUrl,
+        brochureFileName: project.brochureFileName,
       };
     }),
     total,
@@ -735,6 +743,8 @@ export async function getRelatedProjects(project: { id: string; localityId: stri
         constructionPercent: p.constructionPercent,
         dataSource: p.dataSource,
         imageUrl: p.images[0]?.url ?? null,
+        brochureUrl: p.brochureUrl,
+        brochureFileName: p.brochureFileName,
       };
     })
   );
@@ -937,6 +947,8 @@ export const getPublicBuilderBySlug = cache(async (slug: string) => {
       constructionPercent: p.constructionPercent,
       dataSource: p.dataSource,
       imageUrl: p.images[0]?.url ?? null,
+      brochureUrl: p.brochureUrl,
+      brochureFileName: p.brochureFileName,
       cityId: p.cityId,
       cityName: p.city.name,
     };
@@ -1144,6 +1156,8 @@ export const getPublicLocalityBySlug = cache(async (slug: string) => {
         constructionPercent: p.constructionPercent,
         dataSource: p.dataSource,
         imageUrl: p.images[0]?.url ?? null,
+        brochureUrl: p.brochureUrl,
+        brochureFileName: p.brochureFileName,
       };
     }),
   };

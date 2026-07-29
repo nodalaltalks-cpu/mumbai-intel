@@ -24,6 +24,9 @@ import SubmitButton from "./SubmitButton";
 import FormTabs, { type FormTab } from "./FormTabs";
 import MapEmbed from "./MapEmbed";
 import AmenitiesPicker, { type AmenityOption } from "./AmenitiesPicker";
+import InlineEntityCreate from "./InlineEntityCreate";
+import { createBuilderInlineAction } from "@/lib/actions/builders";
+import { createLocalityInlineAction } from "@/lib/actions/localities";
 import type { ConfigurationRow } from "./ConfigurationsManager";
 import type { SpecificationRow } from "./SpecificationsManager";
 import type { NearbyLinkRow } from "./NearbyPlacesManager";
@@ -108,19 +111,26 @@ const TABS: FormTab[] = [
   { id: "publishing", label: "Publishing" },
 ];
 
-const REQUIRED_PROGRESS_FIELDS = [
-  "name",
-  "localityId",
-  "status",
-  "category",
-  "description",
-  "tagline",
-  "address",
-  "priceMinRupees",
-  "launchDate",
-  "totalUnits",
-  "reraNumber",
-  "metaTitle",
+/**
+ * Client-side mirror of lib/project-completion.ts's section list — kept in
+ * sync by hand (the server module is server-only and can't be imported from
+ * a Client Component) so the live indicator never drifts from what actually
+ * gets persisted. Status/Category are deliberately NOT part of this list:
+ * both are `<select>`s that always have SOME value once rendered, so
+ * counting "has a value" would count their default as user-entered data —
+ * exactly the bug that made a brand-new project start at 17% instead of 0%.
+ */
+type ProgressSection = { key: string; check: (data: FormData, ctx: { amenityCount: number; imageCount: number }) => boolean };
+
+const PROGRESS_SECTIONS: ProgressSection[] = [
+  { key: "general", check: (d) => Boolean(d.get("name")) && Boolean(d.get("description")) },
+  { key: "location", check: (d) => Boolean(d.get("localityId")) && Boolean(d.get("address")) },
+  { key: "pricing", check: (d) => Boolean(d.get("priceMinRupees")) && Boolean(d.get("reraNumber")) },
+  { key: "construction", check: (d) => Boolean(d.get("launchDate")) && Boolean(d.get("totalUnits")) },
+  { key: "amenities", check: (_d, ctx) => ctx.amenityCount > 0 },
+  { key: "media", check: (d, ctx) => ctx.imageCount > 0 || Boolean(d.get("videoUrl")) || Boolean(d.get("tour360Url")) },
+  { key: "seo", check: (d) => Boolean(d.get("metaTitle")) && Boolean(d.get("metaDescription")) },
+  { key: "publishing", check: (d) => d.get("isPublished") === "on" },
 ];
 
 function toDateInputValue(date: Date | null): string {
@@ -132,11 +142,14 @@ export default function ProjectForm({
   localities,
   builders,
   amenities,
+  imageCount = 0,
 }: {
   project?: ProjectFormData;
   localities: LocalityOption[];
   builders: SelectOption[];
   amenities: AmenityOption[];
+  /** Images live in a separate table (ImageUploader), not this form's own fields — passed in so the Media section counts correctly. Always 0 for a not-yet-created project. */
+  imageCount?: number;
 }) {
   const action = project ? updateProjectAction.bind(null, project.id) : createProjectAction;
   const [state, formAction] = useActionState(action, initialState);
@@ -146,8 +159,11 @@ export default function ProjectForm({
   const [isReviewPending, startReviewTransition] = useTransition();
   const [lat, setLat] = useState<number | null>(project?.latitude ?? null);
   const [lng, setLng] = useState<number | null>(project?.longitude ?? null);
+  const [localityOptions, setLocalityOptions] = useState(localities);
+  const [builderOptions, setBuilderOptions] = useState(builders);
   const [selectedLocalityId, setSelectedLocalityId] = useState(project?.localityId ?? "");
-  const microMarketOptions = localities.find((l) => l.id === selectedLocalityId)?.microMarkets ?? [];
+  const [selectedBuilderId, setSelectedBuilderId] = useState(project?.builderId ?? "");
+  const microMarketOptions = localityOptions.find((l) => l.id === selectedLocalityId)?.microMarkets ?? [];
   const formRef = useRef<HTMLFormElement>(null);
   const dirtyRef = useRef(false);
   const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved">("idle");
@@ -156,12 +172,9 @@ export default function ProjectForm({
   function recomputeProgress() {
     if (!formRef.current) return;
     const data = new FormData(formRef.current);
-    let filled = 0;
-    for (const key of REQUIRED_PROGRESS_FIELDS) {
-      const value = data.get(key);
-      if (value && String(value).trim().length > 0) filled += 1;
-    }
-    setProgress(Math.round((filled / REQUIRED_PROGRESS_FIELDS.length) * 100));
+    const ctx = { amenityCount: data.getAll("amenityIds").length, imageCount };
+    const complete = PROGRESS_SECTIONS.filter((s) => s.check(data, ctx)).length;
+    setProgress(Math.round((complete / PROGRESS_SECTIONS.length) * 100));
   }
 
   function handleFormChange(event: ChangeEvent<HTMLFormElement>) {
@@ -190,6 +203,23 @@ export default function ProjectForm({
   useEffect(() => {
     recomputeProgress();
   }, []);
+
+  // Inline-created Builder/Locality selections update React state directly
+  // (setSelectedBuilderId/setSelectedLocalityId), which does NOT dispatch a
+  // native <select> change event — so handleFormChange's onChange listener
+  // never sees it. This effect runs after the DOM commits the new value
+  // (so recomputeProgress reads the correct FormData) and covers both the
+  // inline-create path and normal manual selection uniformly.
+  const skipNextRef = useRef(true);
+  useEffect(() => {
+    if (skipNextRef.current) {
+      skipNextRef.current = false;
+      return;
+    }
+    dirtyRef.current = true;
+    recomputeProgress();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBuilderId, selectedLocalityId]);
 
   return (
     <form ref={formRef} action={formAction} onChange={handleFormChange} onBlur={scheduleAutosave} className="flex flex-col gap-4">
@@ -238,25 +268,48 @@ export default function ProjectForm({
         </FieldGroup>
         <Field label="Tagline" name="tagline" defaultValue={project?.tagline ?? ""} placeholder="One-line pitch" />
         <FieldGroup>
-          <SelectField label="Builder (optional)" name="builderId" defaultValue={project?.builderId ?? ""}>
-            <option value="">No builder</option>
-            {builders.map((builder) => (
-              <option key={builder.id} value={builder.id}>
-                {builder.name}
-              </option>
-            ))}
-          </SelectField>
+          <div>
+            <SelectField label="Builder (optional)" name="builderId" value={selectedBuilderId} onChange={(e) => setSelectedBuilderId(e.target.value)}>
+              <option value="">No builder</option>
+              {builderOptions.map((builder) => (
+                <option key={builder.id} value={builder.id}>
+                  {builder.name}
+                </option>
+              ))}
+            </SelectField>
+            <InlineEntityCreate
+              label="Builder"
+              action={async (name) => {
+                const result = await createBuilderInlineAction(name);
+                return result;
+              }}
+              onCreated={({ id, name }) => {
+                setBuilderOptions((prev) => [...prev, { id, name }]);
+                setSelectedBuilderId(id);
+              }}
+            />
+          </div>
           <Field label="Developer group (optional)" name="developerGroup" defaultValue={project?.developerGroup ?? ""} placeholder="SPV / holding entity, if different" />
         </FieldGroup>
         <FieldGroup>
-          <SelectField label="Status" name="status" defaultValue={project?.status ?? "ANNOUNCED"}>
+          <SelectField label="Status" name="status" required defaultValue={project?.status ?? ""}>
+            {!project ? (
+              <option value="" disabled>
+                Select a status
+              </option>
+            ) : null}
             {PROJECT_STATUSES.map((status) => (
               <option key={status} value={status}>
                 {STATUS_LABEL[status]}
               </option>
             ))}
           </SelectField>
-          <SelectField label="Category" name="category" defaultValue={project?.category ?? "RESIDENTIAL"}>
+          <SelectField label="Category" name="category" required defaultValue={project?.category ?? ""}>
+            {!project ? (
+              <option value="" disabled>
+                Select a category
+              </option>
+            ) : null}
             {PROPERTY_CATEGORIES.map((category) => (
               <option key={category} value={category}>
                 {CATEGORY_LABEL[category]}
@@ -275,22 +328,35 @@ export default function ProjectForm({
 
       <div className={activeTab === "location" ? "flex flex-col gap-4" : "hidden"}>
         <FieldGroup>
-          <SelectField
-            label="Locality"
-            name="localityId"
-            required
-            defaultValue={project?.localityId ?? ""}
-            onChange={(e) => setSelectedLocalityId(e.target.value)}
-          >
-            <option value="" disabled>
-              Select a locality
-            </option>
-            {localities.map((locality) => (
-              <option key={locality.id} value={locality.id}>
-                {locality.name}
+          <div>
+            <SelectField
+              label="Locality"
+              name="localityId"
+              required
+              value={selectedLocalityId}
+              onChange={(e) => setSelectedLocalityId(e.target.value)}
+            >
+              <option value="" disabled>
+                Select a locality
               </option>
-            ))}
-          </SelectField>
+              {localityOptions.map((locality) => (
+                <option key={locality.id} value={locality.id}>
+                  {locality.name}
+                </option>
+              ))}
+            </SelectField>
+            <InlineEntityCreate
+              label="Locality"
+              action={async (name) => {
+                const result = await createLocalityInlineAction(name);
+                return result;
+              }}
+              onCreated={({ id, name }) => {
+                setLocalityOptions((prev) => [...prev, { id, name, microMarkets: [] }]);
+                setSelectedLocalityId(id);
+              }}
+            />
+          </div>
           <SelectField label="Micro market (optional)" name="microMarketId" defaultValue={project?.microMarketId ?? ""}>
             <option value="">
               {microMarketOptions.length === 0 ? "None catalogued for this locality" : "None"}

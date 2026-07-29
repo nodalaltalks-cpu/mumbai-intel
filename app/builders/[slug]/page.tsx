@@ -11,6 +11,7 @@ import {
 } from "@/lib/queries";
 import { formatDate, formatPaise, formatPricePerSqft } from "@/lib/format";
 import { AMENITY_CATEGORY_LABEL, SOURCE_CLASS, SOURCE_LABEL, STATUS_LABEL, type AmenityCategoryValue, type ProjectStatus } from "@/lib/project-meta";
+import JsonLd from "@/app/components/JsonLd";
 import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 import ProjectCard from "@/app/components/ProjectCard";
@@ -81,8 +82,20 @@ export default async function BuilderDetailPage({ params }: { params: Promise<{ 
     (a, b) => (a.launchDate ?? a.possessionDate ?? new Date(0)).getTime() - (b.launchDate ?? b.possessionDate ?? new Date(0)).getTime()
   );
 
+  const organizationSchema = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: builder.name,
+    description: builder.metaDescription || undefined,
+    url: `${process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "http://localhost:3000"}/builders/${builder.slug}`,
+    logo: builder.logoUrl || undefined,
+    foundingDate: builder.foundedYear ? String(builder.foundedYear) : undefined,
+    sameAs: builder.websiteUrl ? [builder.websiteUrl] : undefined,
+  };
+
   return (
     <div className="flex min-h-screen flex-1 flex-col bg-background">
+      <JsonLd data={organizationSchema} />
       <Navbar />
 
       <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: "Developers", href: "/builders" }, { label: builder.name }]} />

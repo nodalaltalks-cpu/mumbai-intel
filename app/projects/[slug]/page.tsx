@@ -15,7 +15,8 @@ import {
   getTransactionStats,
 } from "@/lib/queries";
 import { formatDate, formatMonth, formatPaise, formatPriceBand, formatPricePerSqft } from "@/lib/format";
-import { toDocumentDownloadUrl } from "@/lib/cloudinary";
+import BrochureDownloadLink from "@/app/components/BrochureDownloadLink";
+import { recordBrochureViewed } from "@/lib/analytics/brochure-events";
 import {
   AMENITY_CATEGORY_LABEL,
   CATEGORY_LABEL,
@@ -107,6 +108,9 @@ export default async function ProjectDetailPage({
   if (!project) notFound();
 
   await recordRecentViewAction("Project", project.id);
+  if (project.brochureUrl) {
+    await recordBrochureViewed({ id: project.id, builderId: project.builderId, localityId: project.localityId, microMarketId: project.microMarketId });
+  }
 
   const page = Math.max(1, Number(sp.page ?? 1) || 1);
   const txFilters = { projectId: project.id };
@@ -139,6 +143,8 @@ export default async function ProjectDetailPage({
 
   const investmentScore = computeProjectInvestmentScore(project.localityInvestmentScore, project.builderOverallScore, txStats.totalTransactions);
   const latestRegistration = latestTx[0]?.registrationDate ?? null;
+  const latestTransactionPricePaise = latestTx[0]?.valuePaise ?? null;
+  const latestTransactionPricePerSqftPaise = latestTx[0]?.pricePerSqftPaise ?? null;
   const otherNearbyBuilders = nearbyBuilders.filter((b) => b.slug !== project.builder?.slug);
   const summaryNotes = project.investmentNotes.filter((n) => n.kind === "summary");
   const proNotes = project.investmentNotes.filter((n) => n.kind === "pro");
@@ -224,6 +230,16 @@ export default async function ProjectDetailPage({
               defaultName={publicSession?.name}
               defaultEmail={publicSession?.email}
             />
+            {project.brochureUrl ? (
+              <BrochureDownloadLink
+                slug={project.slug}
+                brochureUrl={project.brochureUrl}
+                brochureFileName={project.brochureFileName}
+                className="flex items-center gap-1.5 rounded-sm border border-accent/40 bg-accent/10 px-2.5 py-1.5 text-[11px] font-mono uppercase tracking-wide text-accent transition-colors hover:bg-accent/20"
+              >
+                📄 Download Brochure
+              </BrochureDownloadLink>
+            ) : null}
           </div>
           <h1 className="mt-2 font-mono text-2xl font-bold text-foreground sm:text-3xl">{project.name}</h1>
           <p className="mt-1 text-sm text-muted">
@@ -620,10 +636,12 @@ export default async function ProjectDetailPage({
             ) : null}
           </div>
 
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard label="Highest sale" value={formatPaise(txStats.highestPricePaise)} accent size="md" />
-            <StatCard label="Lowest sale" value={formatPaise(txStats.lowestPricePaise)} size="md" />
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <StatCard label="Latest transaction price" value={formatPaise(latestTransactionPricePaise)} accent size="md" />
+            <StatCard label="Latest price / sqft" value={formatPricePerSqft(latestTransactionPricePerSqftPaise)} accent size="md" />
             <StatCard label="Latest registration" value={latestRegistration ? formatDate(latestRegistration) : "--"} size="md" />
+            <StatCard label="Highest sale" value={formatPaise(txStats.highestPricePaise)} size="md" />
+            <StatCard label="Lowest sale" value={formatPaise(txStats.lowestPricePaise)} size="md" />
             <StatCard label="Total transactions" value={String(totalTransactions)} size="md" />
           </div>
 
@@ -757,13 +775,14 @@ export default async function ProjectDetailPage({
             <ul className="mt-3 flex flex-col gap-1.5">
               {project.brochureUrl ? (
                 <li>
-                  <a
-                    href={toDocumentDownloadUrl(project.brochureUrl, project.brochureFileName ?? `${project.slug}-brochure.pdf`)}
-                    rel="noopener noreferrer"
+                  <BrochureDownloadLink
+                    slug={project.slug}
+                    brochureUrl={project.brochureUrl}
+                    brochureFileName={project.brochureFileName}
                     className="text-sm text-accent hover:underline"
                   >
                     Download Brochure
-                  </a>
+                  </BrochureDownloadLink>
                 </li>
               ) : null}
               {project.documents.map((doc) => (

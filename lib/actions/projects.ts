@@ -12,7 +12,8 @@ import { deleteDocumentByPublicId, deleteImageByPublicId, documentPublicIdFromUr
 import { logAudit } from "@/lib/audit";
 import { emit } from "@/lib/events";
 import { syncProjectNearbyInfra } from "@/lib/infra-linking";
-import { buildProjectData, computeProjectCompletionPercent, parseHighlights, parseProjectForm, toPaise } from "@/lib/project-data";
+import { buildProjectData, parseHighlights, parseProjectForm, toPaise } from "@/lib/project-data";
+import { completionInputFromSchema, computeProjectCompletionPercent } from "@/lib/project-completion";
 import { friendlyPrismaError } from "./errors";
 
 export interface ProjectFormState {
@@ -110,10 +111,14 @@ export async function createProjectAction(
     return Boolean(existing);
   });
 
+  // A brand-new project can't have images yet — imageCount is always 0 here, so
+  // Media (and therefore 100% overall) is only reachable after the first save.
+  const completionPercent = computeProjectCompletionPercent(completionInputFromSchema(data, amenityIds.length, 0));
+
   let projectId: string;
   try {
     const created = await prisma.project.create({
-      data: { slug, cityId: city.id, ...buildProjectData(data) },
+      data: { slug, cityId: city.id, ...buildProjectData(data), completionPercent },
       select: { id: true },
     });
     projectId = created.id;
@@ -142,7 +147,10 @@ export async function updateProjectAction(
   const data = parsed.data;
   const amenityIds = formData.getAll("amenityIds").map(String).filter(Boolean);
 
-  const existing = await prisma.project.findUnique({ where: { id: projectId } });
+  const [existing, imageCount] = await Promise.all([
+    prisma.project.findUnique({ where: { id: projectId } }),
+    prisma.projectImage.count({ where: { projectId } }),
+  ]);
   if (!existing) return { error: "Project not found" };
 
   let slug = existing.slug;
@@ -158,7 +166,8 @@ export async function updateProjectAction(
     }
   }
 
-  const nextData = { slug, ...buildProjectData(data) };
+  const completionPercent = computeProjectCompletionPercent(completionInputFromSchema(data, amenityIds.length, imageCount));
+  const nextData = { slug, ...buildProjectData(data), completionPercent };
   try {
     await prisma.project.update({
       where: { id: projectId },
@@ -184,7 +193,10 @@ export async function autosaveProjectAction(projectId: string, formData: FormDat
   const data = parsed.data;
   const amenityIds = formData.getAll("amenityIds").map(String).filter(Boolean);
 
-  const existing = await prisma.project.findUnique({ where: { id: projectId }, select: { slug: true } });
+  const [existing, imageCount] = await Promise.all([
+    prisma.project.findUnique({ where: { id: projectId }, select: { slug: true } }),
+    prisma.projectImage.count({ where: { projectId } }),
+  ]);
   if (!existing) return { error: "Project not found" };
 
   try {
@@ -224,7 +236,7 @@ export async function autosaveProjectAction(projectId: string, formData: FormDat
         metaTitle: data.metaTitle ?? null,
         metaDescription: data.metaDescription ?? null,
         ogImageUrl: data.ogImageUrl ?? null,
-        completionPercent: computeProjectCompletionPercent(data),
+        completionPercent: computeProjectCompletionPercent(completionInputFromSchema(data, amenityIds.length, imageCount)),
       },
     });
     await syncProjectAmenities(projectId, amenityIds);

@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState, useTransition, type ReactNode } from "react";
 import EmptyState from "@/app/components/ui/EmptyState";
 import Button from "@/app/components/ui/Button";
 import { clearCompareList, removeCompareItem, useCompareList } from "@/lib/compare-list";
 import { getProjectsForCompareAction } from "@/lib/actions/compare";
+import BrochureDownloadLink from "@/app/components/BrochureDownloadLink";
 import type { CompareProject } from "@/lib/queries/compare";
 
-const ROWS: { label: string; render: (p: CompareProject) => string | number }[] = [
+const ROWS: { label: string; render: (p: CompareProject) => ReactNode }[] = [
   { label: "Locality", render: (p) => p.localityName },
   { label: "Builder", render: (p) => p.builderName ?? "--" },
   { label: "Status", render: (p) => p.status },
@@ -22,6 +23,17 @@ const ROWS: { label: string; render: (p: CompareProject) => string | number }[] 
   { label: "Possession", render: (p) => p.possessionLabel },
   { label: "RERA number", render: (p) => p.reraNumber ?? "--" },
   { label: "Amenities", render: (p) => p.amenityCount },
+  {
+    label: "Brochure",
+    render: (p) =>
+      p.brochureUrl ? (
+        <BrochureDownloadLink slug={p.slug} brochureUrl={p.brochureUrl} brochureFileName={p.brochureFileName} className="text-accent hover:underline">
+          Download
+        </BrochureDownloadLink>
+      ) : (
+        "--"
+      ),
+  },
 ];
 
 /** The client-only body of /compare — split out of the page itself so the page can stay a Server Component and render Navbar/Footer (which read server-only session cookies) without pulling them into a client bundle. */

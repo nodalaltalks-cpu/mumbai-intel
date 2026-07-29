@@ -21,6 +21,7 @@ import { removeRecentViewAction, clearRecentViewsAction } from "@/lib/actions/re
 import { deleteSavedSearchAction } from "@/lib/actions/saved-searches";
 import { clearSearchHistoryAction } from "@/lib/actions/search-history";
 import { formatDate, formatRelativeTime } from "@/lib/format";
+import BrochureDownloadLink from "@/app/components/BrochureDownloadLink";
 import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 import { Fact } from "@/app/components/ui/StatCard";
@@ -127,6 +128,16 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                       </p>
                     </Link>
                     <div className="flex shrink-0 items-center gap-1.5">
+                      {item.brochureUrl && item.projectSlug ? (
+                        <BrochureDownloadLink
+                          slug={item.projectSlug}
+                          brochureUrl={item.brochureUrl}
+                          brochureFileName={item.brochureFileName}
+                          className="rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+                        >
+                          Brochure
+                        </BrochureDownloadLink>
+                      ) : null}
                       <Link href={item.href} className="rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
                         Open
                       </Link>
@@ -172,6 +183,16 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                         <td className="px-3 py-2 text-muted">{formatDate(item.dateAdded)}</td>
                         <td className="px-3 py-2">
                           <div className="flex items-center justify-end gap-1.5">
+                            {item.brochureUrl && item.projectSlug ? (
+                              <BrochureDownloadLink
+                                slug={item.projectSlug}
+                                brochureUrl={item.brochureUrl}
+                                brochureFileName={item.brochureFileName}
+                                className="rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+                              >
+                                Brochure
+                              </BrochureDownloadLink>
+                            ) : null}
                             <Link href={item.href} className="rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
                               Open
                             </Link>

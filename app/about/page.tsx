@@ -23,13 +23,13 @@ export default function AboutPage() {
         for anyone.
       </p>
 
-      <h2>Why provenance is the whole point</h2>
+      <h2>Why we always show our sources</h2>
       <p>
-        Most property listing sites blend verified facts, builder marketing copy, and rough estimates into a single
-        undifferentiated feed. NoDalalTalks doesn&apos;t. Every figure on this platform — a price, a possession date, a
-        builder&apos;s track record, a locality&apos;s growth rate — carries a visible data source (government records,
-        builder-supplied information, analyst verification, AI estimate, or community submission) and a confidence
-        level. Nothing renders on screen whose origin can&apos;t be named.
+        Most property listing sites mix verified facts, builder marketing, and rough guesses into one feed with no
+        way to tell them apart. NoDalalTalks doesn&apos;t. Every figure on this platform — a price, a possession date, a
+        builder&apos;s track record, a locality&apos;s growth rate — comes labeled with where it came from (government
+        records, the builder, our own analysts, an estimate, or a community submission) and how confident we are in
+        it. We never show you a number without telling you where it came from.
       </p>
 
       <h2>What&apos;s on the platform today</h2>

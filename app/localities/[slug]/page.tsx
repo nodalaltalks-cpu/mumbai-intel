@@ -17,6 +17,7 @@ import {
 import { getLocalityNearbyInfra, getLocalityPriceTrend } from "@/lib/admin-queries";
 import { formatMonth, formatPricePerSqft, formatSignedPercent } from "@/lib/format";
 import { AMENITY_CATEGORY_LABEL, INFRA_TYPE_LABEL, type AmenityCategoryValue, type InfraTypeValue } from "@/lib/project-meta";
+import JsonLd from "@/app/components/JsonLd";
 import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 import ProjectCard from "@/app/components/ProjectCard";
@@ -45,11 +46,15 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const locality = await getPublicLocalityBySlug(slug);
   if (!locality) return { title: "Locality not found — NoDalalTalks" };
+  const title = locality.metaTitle || `${locality.name} — NoDalalTalks`;
+  const description = locality.metaDescription || undefined;
+  const image = locality.ogImageUrl || locality.coverImageUrl || undefined;
   return {
-    title: locality.metaTitle || `${locality.name} — NoDalalTalks`,
-    description: locality.metaDescription || undefined,
+    title,
+    description,
     alternates: locality.canonicalUrl ? { canonical: locality.canonicalUrl } : undefined,
-    openGraph: locality.ogImageUrl || locality.coverImageUrl ? { images: [locality.ogImageUrl || locality.coverImageUrl!] } : undefined,
+    openGraph: { title, description, type: "website", images: image ? [image] : undefined },
+    twitter: { card: "summary_large_image", title, description, images: image ? [image] : undefined },
   };
 }
 
@@ -147,8 +152,23 @@ export default async function LocalityDetailPage({
   const airport = nearbyInfra.find((i) => i.type === "AIRPORT");
   const topProjects = locality.projects.slice(0, 6);
 
+  const placeSchema = {
+    "@context": "https://schema.org",
+    "@type": "Place",
+    name: locality.name,
+    description: locality.metaDescription || undefined,
+    url: `${process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "http://localhost:3000"}/localities/${locality.slug}`,
+    image: locality.ogImageUrl || locality.coverImageUrl || undefined,
+    geo:
+      locality.centroidLat !== null && locality.centroidLng !== null
+        ? { "@type": "GeoCoordinates", latitude: locality.centroidLat, longitude: locality.centroidLng }
+        : undefined,
+    address: { "@type": "PostalAddress", addressLocality: locality.name, addressRegion: "Maharashtra", addressCountry: "IN" },
+  };
+
   return (
     <div className="flex min-h-screen flex-1 flex-col bg-background">
+      <JsonLd data={placeSchema} />
       <Navbar />
 
       <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: "Localities", href: "/localities" }, { label: locality.name }]} />
