@@ -102,11 +102,13 @@ export default function RichTextEditor({
   label,
   defaultValue,
   hint,
+  important,
 }: {
   name: string;
   label: string;
   defaultValue?: string | null;
   hint?: string;
+  important?: boolean;
 }) {
   const [html, setHtml] = useState(defaultValue ?? "");
 
@@ -126,7 +128,9 @@ export default function RichTextEditor({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-[11px] uppercase tracking-wide text-muted">{label}</span>
+      <span className="text-[11px] uppercase tracking-wide text-muted">
+        {label} {important ? <span className="text-negative">*</span> : null}
+      </span>
       <input type="hidden" name={name} value={html === "<p></p>" ? "" : html} />
       <div className="overflow-hidden rounded-sm border border-border bg-surface">
         {editor ? <Toolbar editor={editor} /> : null}

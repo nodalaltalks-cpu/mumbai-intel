@@ -18,6 +18,7 @@ import {
   SOURCE_LABEL,
   STATUS_LABEL,
 } from "@/lib/project-meta";
+import { formatPaise } from "@/lib/format";
 import { CheckboxField, Field, FieldGroup, FormError, SelectField, TextareaField } from "./FormField";
 import RichTextEditor from "./RichTextEditor";
 import SubmitButton from "./SubmitButton";
@@ -25,6 +26,7 @@ import FormTabs, { type FormTab } from "./FormTabs";
 import MapEmbed from "./MapEmbed";
 import AmenitiesPicker, { type AmenityOption } from "./AmenitiesPicker";
 import InlineEntityCreate from "./InlineEntityCreate";
+import ProjectReviewModal, { type ReviewSection } from "./ProjectReviewModal";
 import { createBuilderInlineAction } from "@/lib/actions/builders";
 import { createLocalityInlineAction } from "@/lib/actions/localities";
 import type { ConfigurationRow } from "./ConfigurationsManager";
@@ -164,11 +166,14 @@ export default function ProjectForm({
   const [selectedLocalityId, setSelectedLocalityId] = useState(project?.localityId ?? "");
   const [selectedBuilderId, setSelectedBuilderId] = useState(project?.builderId ?? "");
   const [brochureFileName, setBrochureFileName] = useState<string | null>(null);
+  const brochureFileInputRef = useRef<HTMLInputElement>(null);
   const microMarketOptions = localityOptions.find((l) => l.id === selectedLocalityId)?.microMarkets ?? [];
   const formRef = useRef<HTMLFormElement>(null);
   const dirtyRef = useRef(false);
   const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [, startAutosaveTransition] = useTransition();
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewSections, setReviewSections] = useState<ReviewSection[]>([]);
 
   function recomputeProgress() {
     if (!formRef.current) return;
@@ -176,6 +181,106 @@ export default function ProjectForm({
     const ctx = { amenityCount: data.getAll("amenityIds").length, imageCount };
     const complete = PROGRESS_SECTIONS.filter((s) => s.check(data, ctx)).length;
     setProgress(Math.round((complete / PROGRESS_SECTIONS.length) * 100));
+  }
+
+  function openReview() {
+    if (!formRef.current) return;
+    const data = new FormData(formRef.current);
+    const g = (name: string) => (data.get(name) as string) ?? "";
+    const label = <T extends string,>(map: Record<T, string>, key: string) => (map as Record<string, string>)[key] ?? key;
+    const builderName = builderOptions.find((b) => b.id === selectedBuilderId)?.name ?? "";
+    const localityName = localityOptions.find((l) => l.id === selectedLocalityId)?.name ?? "";
+    const microMarketName = microMarketOptions.find((m) => m.id === g("microMarketId"))?.name ?? "";
+    const amenityCount = data.getAll("amenityIds").length;
+    const highlightsCount = g("highlights").split("\n").map((s) => s.trim()).filter(Boolean).length;
+    const priceMin = g("priceMinRupees");
+    const priceMax = g("priceMaxRupees");
+
+    setReviewSections([
+      {
+        title: "General",
+        rows: [
+          { label: "Name", value: g("name"), important: true },
+          { label: "Slug", value: g("slug") },
+          { label: "Tagline", value: g("tagline") },
+          { label: "Builder", value: builderName || "No builder" },
+          { label: "Developer group", value: g("developerGroup") },
+          { label: "Status", value: g("status") ? label(STATUS_LABEL, g("status")) : "" },
+          { label: "Category", value: g("category") ? label(CATEGORY_LABEL, g("category")) : "" },
+          { label: "Highlights", value: highlightsCount ? `${highlightsCount} listed` : "" },
+        ],
+      },
+      {
+        title: "Location",
+        rows: [
+          { label: "Locality", value: localityName, important: true },
+          { label: "Micro market", value: microMarketName },
+          { label: "Address", value: g("address"), important: true },
+          { label: "Latitude", value: g("latitude") },
+          { label: "Longitude", value: g("longitude") },
+        ],
+      },
+      {
+        title: "Pricing",
+        rows: [
+          { label: "Price min", value: priceMin ? formatPaise(Number(priceMin) * 100) : "", important: true },
+          { label: "Price max", value: priceMax ? formatPaise(Number(priceMax) * 100) : "" },
+          { label: "RERA number", value: g("reraNumber"), important: true },
+          { label: "RERA status", value: g("reraStatus") },
+        ],
+      },
+      {
+        title: "Construction",
+        rows: [
+          { label: "Launch date", value: g("launchDate"), important: true },
+          { label: "Promised possession", value: g("promisedPossession") },
+          { label: "Actual possession", value: g("actualPossession") },
+          { label: "Construction complete", value: g("constructionPercent") ? `${g("constructionPercent")}%` : "" },
+          { label: "Land area", value: g("landAreaAcres") ? `${g("landAreaAcres")} acres` : "" },
+          { label: "Total units", value: g("totalUnits"), important: true },
+          { label: "Total towers", value: g("totalTowers") },
+        ],
+      },
+      {
+        title: "Amenities",
+        rows: [{ label: "Selected", value: amenityCount ? `${amenityCount} amenities` : "", important: true }],
+      },
+      {
+        title: "Description",
+        rows: [{ label: "Description", value: g("description") ? "Provided" : "", important: true }],
+      },
+      {
+        title: "Media",
+        rows: [
+          { label: "Video URL", value: g("videoUrl") },
+          { label: "360° tour URL", value: g("tour360Url") },
+          ...(!project ? [{ label: "Brochure", value: brochureFileName ?? "" }] : []),
+          { label: "Images", value: imageCount ? `${imageCount} uploaded` : "", important: true },
+        ],
+      },
+      {
+        title: "SEO",
+        rows: [
+          { label: "Meta title", value: g("metaTitle"), important: true },
+          { label: "Meta description", value: g("metaDescription"), important: true },
+          { label: "OG image URL", value: g("ogImageUrl") },
+        ],
+      },
+      {
+        title: "Publishing",
+        rows: [
+          { label: "Published", value: data.get("isPublished") === "on" ? "Yes" : "No", important: true },
+          { label: "Featured", value: data.get("isFeatured") === "on" ? "Yes" : "No" },
+          { label: "Trending", value: data.get("isTrending") === "on" ? "Yes" : "No" },
+          { label: "Luxury", value: data.get("isLuxury") === "on" ? "Yes" : "No" },
+          { label: "Affordable", value: data.get("isAffordable") === "on" ? "Yes" : "No" },
+          { label: "Data source", value: g("dataSource") ? label(SOURCE_LABEL, g("dataSource")) : "" },
+          { label: "Confidence", value: g("confidence") },
+          { label: "Source reference", value: g("sourceRef") },
+        ],
+      },
+    ]);
+    setReviewOpen(true);
   }
 
   function handleFormChange(event: ChangeEvent<HTMLFormElement>) {
@@ -205,6 +310,14 @@ export default function ProjectForm({
     recomputeProgress();
   }, []);
 
+  // If the server action comes back with an error, close the review modal —
+  // otherwise it would sit on top of FormError's message and hide the very
+  // thing the admin needs to fix.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing UI to the server action's outcome, not derivable from render
+    if (state.error) setReviewOpen(false);
+  }, [state.error]);
+
   // Inline-created Builder/Locality selections update React state directly
   // (setSelectedBuilderId/setSelectedLocalityId), which does NOT dispatch a
   // native <select> change event — so handleFormChange's onChange listener
@@ -225,6 +338,11 @@ export default function ProjectForm({
   return (
     <form ref={formRef} action={formAction} onChange={handleFormChange} onBlur={scheduleAutosave} className="flex flex-col gap-4">
       <FormError message={state.error} />
+
+      <p className="rounded-sm border border-accent/30 bg-accent/5 px-3 py-2 text-[11px] text-muted">
+        Fields marked <span className="text-negative">*</span> are important. If the information genuinely isn&apos;t
+        available yet, type <span className="font-mono text-foreground">NA</span> instead of leaving it blank.
+      </p>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <ProgressIndicator percent={progress} />
@@ -264,7 +382,7 @@ export default function ProjectForm({
 
       <div className={activeTab === "general" ? "flex flex-col gap-4" : "hidden"}>
         <FieldGroup>
-          <Field label="Name" name="name" required defaultValue={project?.name} placeholder="Lodha Park" />
+          <Field label="Name" name="name" required important defaultValue={project?.name} placeholder="Lodha Park" />
           <Field label="Slug (optional)" name="slug" defaultValue={project?.slug} placeholder="auto-generated from name" />
         </FieldGroup>
         <Field label="Tagline" name="tagline" defaultValue={project?.tagline ?? ""} placeholder="One-line pitch" />
@@ -334,6 +452,7 @@ export default function ProjectForm({
               label="Locality"
               name="localityId"
               required
+              important
               value={selectedLocalityId}
               onChange={(e) => setSelectedLocalityId(e.target.value)}
             >
@@ -369,7 +488,7 @@ export default function ProjectForm({
             ))}
           </SelectField>
         </FieldGroup>
-        <Field label="Address" name="address" defaultValue={project?.address ?? ""} />
+        <Field label="Address" name="address" important defaultValue={project?.address ?? ""} />
         <FieldGroup>
           <Field label="Latitude" name="latitude" type="number" step="any" defaultValue={project?.latitude ?? ""} />
           <Field label="Longitude" name="longitude" type="number" step="any" defaultValue={project?.longitude ?? ""} />
@@ -384,6 +503,7 @@ export default function ProjectForm({
             name="priceMinRupees"
             type="number"
             step="any"
+            important
             defaultValue={project?.priceMinPaise !== null && project?.priceMinPaise !== undefined ? Number(project.priceMinPaise) / 100 : ""}
             placeholder="e.g. 45000000 for ₹4.5 Cr"
           />
@@ -396,14 +516,14 @@ export default function ProjectForm({
           />
         </FieldGroup>
         <FieldGroup>
-          <Field label="RERA number" name="reraNumber" defaultValue={project?.reraNumber ?? ""} />
+          <Field label="RERA number" name="reraNumber" important defaultValue={project?.reraNumber ?? ""} />
           <Field label="RERA status" name="reraStatus" defaultValue={project?.reraStatus ?? ""} />
         </FieldGroup>
       </div>
 
       <div className={activeTab === "construction" ? "flex flex-col gap-4" : "hidden"}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Field label="Launch date" name="launchDate" type="date" defaultValue={toDateInputValue(project?.launchDate ?? null)} />
+          <Field label="Launch date" name="launchDate" type="date" important defaultValue={toDateInputValue(project?.launchDate ?? null)} />
           <Field label="Promised possession" name="promisedPossession" type="date" defaultValue={toDateInputValue(project?.promisedPossession ?? null)} />
           <Field label="Actual possession" name="actualPossession" type="date" defaultValue={toDateInputValue(project?.actualPossession ?? null)} />
         </div>
@@ -412,17 +532,28 @@ export default function ProjectForm({
           <Field label="Land area (acres)" name="landAreaAcres" type="number" step="any" defaultValue={project?.landAreaAcres ?? ""} />
         </FieldGroup>
         <FieldGroup>
-          <Field label="Total units" name="totalUnits" type="number" min={0} defaultValue={project?.totalUnits ?? ""} />
+          <Field label="Total units" name="totalUnits" type="number" min={0} important defaultValue={project?.totalUnits ?? ""} />
           <Field label="Total towers" name="totalTowers" type="number" min={0} defaultValue={project?.totalTowers ?? ""} />
         </FieldGroup>
       </div>
 
       <div className={activeTab === "amenities" ? "flex flex-col gap-4" : "hidden"}>
-        <AmenitiesPicker amenities={amenities} defaultSelectedIds={project?.amenityIds ?? []} />
+        <p className="text-[11px] text-muted">
+          <span className="text-negative">*</span> Important — select at least one amenity, or add a project-specific
+          one below if it&apos;s not in the list yet.
+        </p>
+        <AmenitiesPicker
+          amenities={amenities}
+          defaultSelectedIds={project?.amenityIds ?? []}
+          onSelectionChange={() => {
+            dirtyRef.current = true;
+            recomputeProgress();
+          }}
+        />
       </div>
 
       <div className={activeTab === "description" ? "flex flex-col gap-4" : "hidden"}>
-        <RichTextEditor label="Description" name="description" defaultValue={project?.description ?? ""} />
+        <RichTextEditor label="Description" name="description" important defaultValue={project?.description ?? ""} />
       </div>
 
       <div className={activeTab === "media" ? "flex flex-col gap-4" : "hidden"}>
@@ -440,15 +571,32 @@ export default function ProjectForm({
             <label className="flex flex-col gap-1.5">
               <span className="text-[11px] uppercase tracking-wide text-muted">Project brochure (optional, PDF)</span>
               <input
+                ref={brochureFileInputRef}
                 type="file"
                 name="brochureFile"
                 accept="application/pdf"
                 onChange={(e) => setBrochureFileName(e.target.files?.[0]?.name ?? null)}
                 className="rounded-sm border border-border bg-surface px-3 py-2 text-xs text-foreground file:mr-3 file:rounded-sm file:border-0 file:bg-accent file:px-2.5 file:py-1 file:text-xs file:font-mono file:font-semibold file:uppercase file:text-white"
               />
-              <span className="text-[10px] text-muted">
-                {brochureFileName ? `${brochureFileName} will upload once you save.` : "Uploaded when you save this project — no need to come back to the edit page just for the brochure."}
-              </span>
+              {brochureFileName ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted">{brochureFileName} will upload once you save.</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (brochureFileInputRef.current) brochureFileInputRef.current.value = "";
+                      setBrochureFileName(null);
+                    }}
+                    className="rounded-sm border border-negative/40 px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wide text-negative hover:bg-negative/10"
+                  >
+                    Delete &amp; choose another
+                  </button>
+                </div>
+              ) : (
+                <span className="text-[10px] text-muted">
+                  Uploaded when you save this project — no need to come back to the edit page just for the brochure.
+                </span>
+              )}
             </label>
             <div className="rounded-sm border border-dashed border-border p-4 text-xs text-muted">
               <p>Cover Image, Gallery, Floor Plans, Master Plan and Documents need the project saved first — each gets its own card on the edit page:</p>
@@ -469,6 +617,7 @@ export default function ProjectForm({
           label="Meta title"
           name="metaTitle"
           maxLength={70}
+          important
           defaultValue={project?.metaTitle ?? ""}
           placeholder="Defaults to the project name"
           hint="Up to 70 characters — shown as the browser tab / search result title"
@@ -477,6 +626,7 @@ export default function ProjectForm({
           label="Meta description"
           name="metaDescription"
           maxLength={160}
+          important
           defaultValue={project?.metaDescription ?? ""}
           placeholder="Defaults to the tagline"
           hint="Up to 160 characters — shown as the search result snippet"
@@ -520,8 +670,22 @@ export default function ProjectForm({
       </div>
 
       <div>
-        <SubmitButton>{project ? (project.isPublished ? "Save changes" : "Save Draft") : "Save Draft"}</SubmitButton>
+        <button
+          type="button"
+          onClick={openReview}
+          className="rounded-sm bg-accent px-4 py-2 text-xs font-mono font-semibold uppercase tracking-wide text-white transition-colors hover:bg-accent-dim"
+        >
+          Review before submitting
+        </button>
       </div>
+
+      {reviewOpen ? (
+        <ProjectReviewModal
+          sections={reviewSections}
+          onClose={() => setReviewOpen(false)}
+          actions={<SubmitButton>{project ? (project.isPublished ? "Save changes" : "Save Draft") : "Save Draft"}</SubmitButton>}
+        />
+      ) : null}
     </form>
   );
 }

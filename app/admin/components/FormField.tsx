@@ -3,14 +3,27 @@ import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTML
 const inputClass =
   "rounded-sm border border-border bg-surface px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none";
 
+/** Red asterisk marking a field as important — distinct from HTML `required`, since "NA" is an accepted answer when the information genuinely isn't available; this only flags that the field matters, it never blocks submission. */
+function ImportantMark({ important }: { important?: boolean }) {
+  if (!important) return null;
+  return (
+    <span className="text-negative" title="Important — write NA if this information isn't available">
+      *
+    </span>
+  );
+}
+
 export function Field({
   label,
   hint,
+  important,
   ...props
-}: { label: string; hint?: string } & InputHTMLAttributes<HTMLInputElement>) {
+}: { label: string; hint?: string; important?: boolean } & InputHTMLAttributes<HTMLInputElement>) {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-[11px] uppercase tracking-wide text-muted">{label}</span>
+      <span className="text-[11px] uppercase tracking-wide text-muted">
+        {label} <ImportantMark important={important} />
+      </span>
       <input {...props} className={`${inputClass} ${props.className ?? ""}`} />
       {hint ? <span className="text-[10px] text-muted">{hint}</span> : null}
     </label>
@@ -20,12 +33,15 @@ export function Field({
 export function SelectField({
   label,
   hint,
+  important,
   children,
   ...props
-}: { label: string; hint?: string; children: ReactNode } & SelectHTMLAttributes<HTMLSelectElement>) {
+}: { label: string; hint?: string; important?: boolean; children: ReactNode } & SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-[11px] uppercase tracking-wide text-muted">{label}</span>
+      <span className="text-[11px] uppercase tracking-wide text-muted">
+        {label} <ImportantMark important={important} />
+      </span>
       <select {...props} className={`${inputClass} ${props.className ?? ""}`}>
         {children}
       </select>
@@ -37,11 +53,14 @@ export function SelectField({
 export function TextareaField({
   label,
   hint,
+  important,
   ...props
-}: { label: string; hint?: string } & TextareaHTMLAttributes<HTMLTextAreaElement>) {
+}: { label: string; hint?: string; important?: boolean } & TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-[11px] uppercase tracking-wide text-muted">{label}</span>
+      <span className="text-[11px] uppercase tracking-wide text-muted">
+        {label} <ImportantMark important={important} />
+      </span>
       <textarea {...props} className={`${inputClass} min-h-24 resize-y ${props.className ?? ""}`} />
       {hint ? <span className="text-[10px] text-muted">{hint}</span> : null}
     </label>
