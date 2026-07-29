@@ -1,9 +1,14 @@
-export default function FlashMessage({ type }: { type: "created" | "saved" | null }) {
-  if (!type) return null;
-  const message = type === "created" ? "Created successfully." : "Saved successfully.";
+export default function FlashMessage({ type, warning }: { type: "created" | "saved" | null; warning?: string }) {
   return (
-    <div className="mb-4 rounded-sm border border-positive/40 bg-positive/10 px-3 py-2 text-xs text-positive">
-      {message}
-    </div>
+    <>
+      {type ? (
+        <div className="mb-4 rounded-sm border border-positive/40 bg-positive/10 px-3 py-2 text-xs text-positive">
+          {type === "created" ? "Created successfully." : "Saved successfully."}
+        </div>
+      ) : null}
+      {warning ? (
+        <div className="mb-4 rounded-sm border border-negative/40 bg-negative/10 px-3 py-2 text-xs text-negative">{warning}</div>
+      ) : null}
+    </>
   );
 }

@@ -163,6 +163,7 @@ export default function ProjectForm({
   const [builderOptions, setBuilderOptions] = useState(builders);
   const [selectedLocalityId, setSelectedLocalityId] = useState(project?.localityId ?? "");
   const [selectedBuilderId, setSelectedBuilderId] = useState(project?.builderId ?? "");
+  const [brochureFileName, setBrochureFileName] = useState<string | null>(null);
   const microMarketOptions = localityOptions.find((l) => l.id === selectedLocalityId)?.microMarkets ?? [];
   const formRef = useRef<HTMLFormElement>(null);
   const dirtyRef = useRef(false);
@@ -435,16 +436,31 @@ export default function ProjectForm({
             card too.
           </p>
         ) : (
-          <div className="rounded-sm border border-dashed border-border p-4 text-xs text-muted">
-            <p>Save the project first — Project Media becomes available on the edit page, with its own card for:</p>
-            <ul className="mt-2 flex flex-wrap gap-1.5">
-              {["Cover Image", "Gallery", "Floor Plans", "Master Plan", "Project Brochure", "Documents"].map((label) => (
-                <li key={label} className="rounded-sm border border-border bg-surface px-2 py-1 text-[10px] font-mono uppercase tracking-wide">
-                  {label}
-                </li>
-              ))}
-            </ul>
-          </div>
+          <>
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[11px] uppercase tracking-wide text-muted">Project brochure (optional, PDF)</span>
+              <input
+                type="file"
+                name="brochureFile"
+                accept="application/pdf"
+                onChange={(e) => setBrochureFileName(e.target.files?.[0]?.name ?? null)}
+                className="rounded-sm border border-border bg-surface px-3 py-2 text-xs text-foreground file:mr-3 file:rounded-sm file:border-0 file:bg-accent file:px-2.5 file:py-1 file:text-xs file:font-mono file:font-semibold file:uppercase file:text-white"
+              />
+              <span className="text-[10px] text-muted">
+                {brochureFileName ? `${brochureFileName} will upload once you save.` : "Uploaded when you save this project — no need to come back to the edit page just for the brochure."}
+              </span>
+            </label>
+            <div className="rounded-sm border border-dashed border-border p-4 text-xs text-muted">
+              <p>Cover Image, Gallery, Floor Plans, Master Plan and Documents need the project saved first — each gets its own card on the edit page:</p>
+              <ul className="mt-2 flex flex-wrap gap-1.5">
+                {["Cover Image", "Gallery", "Floor Plans", "Master Plan", "Documents"].map((label) => (
+                  <li key={label} className="rounded-sm border border-border bg-surface px-2 py-1 text-[10px] font-mono uppercase tracking-wide">
+                    {label}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </>
         )}
       </div>
 

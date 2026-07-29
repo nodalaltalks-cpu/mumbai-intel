@@ -133,8 +133,12 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                           slug={item.projectSlug}
                           brochureUrl={item.brochureUrl}
                           brochureFileName={item.brochureFileName}
-                          className="rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+                          className="flex items-center gap-1.5 rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
                         >
+                          {item.brochureThumbnailUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={item.brochureThumbnailUrl} alt="" className="h-5 w-4 rounded-sm object-cover" />
+                          ) : null}
                           Brochure
                         </BrochureDownloadLink>
                       ) : null}
@@ -188,8 +192,12 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                                 slug={item.projectSlug}
                                 brochureUrl={item.brochureUrl}
                                 brochureFileName={item.brochureFileName}
-                                className="rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+                                className="flex items-center gap-1.5 rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
                               >
+                                {item.brochureThumbnailUrl ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={item.brochureThumbnailUrl} alt="" className="h-5 w-4 rounded-sm object-cover" />
+                                ) : null}
                                 Brochure
                               </BrochureDownloadLink>
                             ) : null}

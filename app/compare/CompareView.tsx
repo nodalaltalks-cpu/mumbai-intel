@@ -27,7 +27,16 @@ const ROWS: { label: string; render: (p: CompareProject) => ReactNode }[] = [
     label: "Brochure",
     render: (p) =>
       p.brochureUrl ? (
-        <BrochureDownloadLink slug={p.slug} brochureUrl={p.brochureUrl} brochureFileName={p.brochureFileName} className="text-accent hover:underline">
+        <BrochureDownloadLink
+          slug={p.slug}
+          brochureUrl={p.brochureUrl}
+          brochureFileName={p.brochureFileName}
+          className="flex items-center gap-2 text-accent hover:underline"
+        >
+          {p.brochureThumbnailUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={p.brochureThumbnailUrl} alt="" className="h-8 w-6 rounded-sm border border-border object-cover" />
+          ) : null}
           Download
         </BrochureDownloadLink>
       ) : (

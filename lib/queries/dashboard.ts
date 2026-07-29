@@ -27,6 +27,7 @@ export interface WishlistItem {
   /** Only ever set for Project rows — Builder/Locality wishlist items have no brochure. */
   brochureUrl: string | null;
   brochureFileName: string | null;
+  brochureThumbnailUrl: string | null;
   projectSlug: string | null;
 }
 
@@ -69,6 +70,7 @@ export async function getWishlistForUser(publicUserId: string): Promise<Wishlist
       dateAdded: saved.createdAt,
       brochureUrl: saved.project.brochureUrl,
       brochureFileName: saved.project.brochureFileName,
+      brochureThumbnailUrl: saved.project.brochureThumbnailUrl,
       projectSlug: saved.project.slug,
     };
   });
@@ -101,6 +103,7 @@ export async function getWishlistForUser(publicUserId: string): Promise<Wishlist
           dateAdded: row.createdAt,
           brochureUrl: null,
           brochureFileName: null,
+          brochureThumbnailUrl: null,
           projectSlug: null,
         };
       }
@@ -120,6 +123,7 @@ export async function getWishlistForUser(publicUserId: string): Promise<Wishlist
           dateAdded: row.createdAt,
           brochureUrl: null,
           brochureFileName: null,
+          brochureThumbnailUrl: null,
           projectSlug: null,
         };
       }
@@ -146,6 +150,7 @@ export interface RecentViewItem {
   /** Only ever set for Project rows. */
   brochureUrl: string | null;
   brochureFileName: string | null;
+  brochureThumbnailUrl: string | null;
   projectSlug: string | null;
 }
 
@@ -170,7 +175,15 @@ export async function getRecentViewsForUser(publicUserId: string): Promise<Recen
     idsByType.has("Project")
       ? prisma.project.findMany({
           where: { id: { in: idsByType.get("Project")! } },
-          select: { id: true, name: true, slug: true, brochureUrl: true, brochureFileName: true, locality: { select: { name: true } } },
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            brochureUrl: true,
+            brochureFileName: true,
+            brochureThumbnailUrl: true,
+            locality: { select: { name: true } },
+          },
         })
       : Promise.resolve([]),
     idsByType.has("Builder")
@@ -207,6 +220,7 @@ export async function getRecentViewsForUser(publicUserId: string): Promise<Recen
           viewedAt: row.viewedAt,
           brochureUrl: p.brochureUrl,
           brochureFileName: p.brochureFileName,
+          brochureThumbnailUrl: p.brochureThumbnailUrl,
           projectSlug: p.slug,
         };
       }
@@ -223,6 +237,7 @@ export async function getRecentViewsForUser(publicUserId: string): Promise<Recen
           viewedAt: row.viewedAt,
           brochureUrl: null,
           brochureFileName: null,
+          brochureThumbnailUrl: null,
           projectSlug: null,
         };
       }
@@ -239,6 +254,7 @@ export async function getRecentViewsForUser(publicUserId: string): Promise<Recen
           viewedAt: row.viewedAt,
           brochureUrl: null,
           brochureFileName: null,
+          brochureThumbnailUrl: null,
           projectSlug: null,
         };
       }
@@ -255,6 +271,7 @@ export async function getRecentViewsForUser(publicUserId: string): Promise<Recen
           viewedAt: row.viewedAt,
           brochureUrl: null,
           brochureFileName: null,
+          brochureThumbnailUrl: null,
           projectSlug: null,
         };
       }
@@ -269,6 +286,7 @@ export async function getRecentViewsForUser(publicUserId: string): Promise<Recen
           viewedAt: row.viewedAt,
           brochureUrl: null,
           brochureFileName: null,
+          brochureThumbnailUrl: null,
           projectSlug: null,
         };
       }

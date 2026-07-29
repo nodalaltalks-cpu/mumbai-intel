@@ -462,6 +462,11 @@ model Project {
   brochureUploadedAt DateTime?
   brochureUploadedBy String?
   brochureVersion    Int      @default(0)
+  /// Clickable preview image for the brochure download card — a normal
+  /// Cloudinary `image` upload (reuses uploadImageFile/deleteImageByPublicId),
+  /// distinct from the PDF itself. Optional; falls back to a text/icon
+  /// treatment on the public site when absent.
+  brochureThumbnailUrl String?
   brochureVersions   ProjectBrochureVersion[]
   brochureDownloadEvents BrochureDownloadEvent[]
 

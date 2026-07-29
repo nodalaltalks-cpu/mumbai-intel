@@ -28,7 +28,7 @@ export default async function EditProjectPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ created?: string; saved?: string }>;
+  searchParams: Promise<{ created?: string; saved?: string; brochureError?: string }>;
 }) {
   const { id } = await params;
   const query = await searchParams;
@@ -62,7 +62,7 @@ export default async function EditProjectPage({
         </Link>
       </div>
 
-      <FlashMessage type={query.created ? "created" : query.saved ? "saved" : null} />
+      <FlashMessage type={query.created ? "created" : query.saved ? "saved" : null} warning={query.brochureError} />
 
       <div className="rounded-sm border border-border bg-surface p-4">
         <ProjectForm project={project} localities={localities} builders={builders} amenities={amenities} imageCount={project.images.length} />
@@ -88,6 +88,7 @@ export default async function EditProjectPage({
         brochureFileName={project.brochureFileName}
         brochureFileSize={project.brochureFileSize}
         brochureUploadedAt={project.brochureUploadedAt}
+        brochureThumbnailUrl={project.brochureThumbnailUrl}
         versions={brochureVersions}
         isAdmin={session.role === "ADMIN"}
         maxSizeMB={Math.round(Number(process.env.BROCHURE_MAX_SIZE_MB || 15))}

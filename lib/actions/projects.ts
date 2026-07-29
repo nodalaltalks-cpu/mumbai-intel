@@ -14,6 +14,7 @@ import { emit } from "@/lib/events";
 import { syncProjectNearbyInfra } from "@/lib/infra-linking";
 import { buildProjectData, parseHighlights, parseProjectForm, toPaise } from "@/lib/project-data";
 import { completionInputFromSchema, computeProjectCompletionPercent } from "@/lib/project-completion";
+import { uploadBrochureForProject } from "./brochure";
 import { friendlyPrismaError } from "./errors";
 
 export interface ProjectFormState {
@@ -129,8 +130,25 @@ export async function createProjectAction(
   if (amenityIds.length > 0) await syncProjectAmenities(projectId, amenityIds);
   await syncProjectNearbyInfra(projectId);
 
+  // Optional brochure attached directly on the New Project form — the project
+  // row now exists, so Cloudinary/ProjectBrochureVersion have somewhere to
+  // attach to. A failure here (bad file, upload hiccup) never blocks project
+  // creation itself; it's surfaced as a warning on the redirect instead, and
+  // the admin can retry from the BrochureUploader on the same edit page.
+  const brochureFile = formData.get("brochureFile");
+  let brochureWarning: string | undefined;
+  if (brochureFile instanceof File && brochureFile.size > 0) {
+    const result = await uploadBrochureForProject(
+      { id: projectId, slug, brochureUrl: null, brochureFileName: null, brochureFileSize: null, brochureVersion: 0 },
+      brochureFile,
+      session.userId
+    );
+    if (result.error) brochureWarning = result.error;
+  }
+
   await emit("ProjectCreated", { projectId, slug, actorId: session.userId });
-  redirect(`/admin/projects/${projectId}/edit?created=1`);
+  const query = brochureWarning ? `created=1&brochureError=${encodeURIComponent(brochureWarning)}` : "created=1";
+  redirect(`/admin/projects/${projectId}/edit?${query}`);
 }
 
 export async function updateProjectAction(

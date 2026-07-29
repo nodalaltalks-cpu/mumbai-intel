@@ -38,6 +38,7 @@ export interface ProjectCardData {
   imageUrl?: string | null;
   brochureUrl?: string | null;
   brochureFileName?: string | null;
+  brochureThumbnailUrl?: string | null;
 }
 
 function initials(name: string): string {
@@ -249,7 +250,7 @@ function QuickViewModal({ project, onClose }: { project: ProjectCardData; onClos
             <Button href={`/projects/${project.slug}`} size="sm" fullWidth>
               Open full details
             </Button>
-            {project.brochureUrl ? (
+            {project.brochureUrl && !project.brochureThumbnailUrl ? (
               <BrochureDownloadLink
                 slug={project.slug}
                 brochureUrl={project.brochureUrl}
@@ -260,6 +261,23 @@ function QuickViewModal({ project, onClose }: { project: ProjectCardData; onClos
               </BrochureDownloadLink>
             ) : null}
           </div>
+          {project.brochureUrl && project.brochureThumbnailUrl ? (
+            <BrochureDownloadLink
+              slug={project.slug}
+              brochureUrl={project.brochureUrl}
+              brochureFileName={project.brochureFileName}
+              className="flex items-center gap-3 rounded-sm border border-accent/30 bg-accent/5 p-2.5 transition-colors hover:bg-accent/10"
+            >
+              <Image
+                src={project.brochureThumbnailUrl}
+                alt={`${project.name} brochure thumbnail`}
+                width={40}
+                height={52}
+                className="h-[52px] w-10 shrink-0 rounded-sm border border-border object-cover"
+              />
+              <span className="min-w-0 text-xs font-semibold text-foreground">Download Brochure</span>
+            </BrochureDownloadLink>
+          ) : null}
         </div>
       </div>
     </div>

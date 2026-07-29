@@ -1,7 +1,13 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { removeProjectBrochureAction, uploadProjectBrochureAction, type BrochureActionState } from "@/lib/actions/brochure";
+import {
+  removeBrochureThumbnailAction,
+  removeProjectBrochureAction,
+  uploadBrochureThumbnailAction,
+  uploadProjectBrochureAction,
+  type BrochureActionState,
+} from "@/lib/actions/brochure";
 import type { BrochureVersionItem } from "@/lib/admin-queries";
 import { formatBytes, formatDate } from "@/lib/format";
 import Dialog from "@/app/components/ui/Dialog";
@@ -16,6 +22,7 @@ export default function BrochureUploader({
   brochureFileName,
   brochureFileSize,
   brochureUploadedAt,
+  brochureThumbnailUrl,
   versions,
   isAdmin,
   maxSizeMB,
@@ -25,12 +32,15 @@ export default function BrochureUploader({
   brochureFileName: string | null;
   brochureFileSize: number | null;
   brochureUploadedAt: Date | null;
+  brochureThumbnailUrl: string | null;
   versions: BrochureVersionItem[];
   isAdmin: boolean;
   maxSizeMB: number;
 }) {
   const action = uploadProjectBrochureAction.bind(null, projectId);
   const [state, formAction] = useActionState(action, initialState);
+  const thumbnailAction = uploadBrochureThumbnailAction.bind(null, projectId);
+  const [thumbnailState, thumbnailFormAction] = useActionState(thumbnailAction, initialState);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
 
@@ -137,6 +147,55 @@ export default function BrochureUploader({
           ) : null}
         </div>
       ) : null}
+
+      <div className="mt-4 border-t border-border pt-3">
+        <h4 className="font-mono text-xs font-semibold text-foreground">Brochure Thumbnail</h4>
+        <p className="mt-1 text-[11px] text-muted">
+          The clickable preview image shown with the Download Brochure card on the public site.
+        </p>
+
+        {!brochureUrl ? (
+          <p className="mt-2 text-xs text-muted">Upload a brochure first to enable a thumbnail.</p>
+        ) : (
+          <>
+            {brochureThumbnailUrl ? (
+              <div className="mt-2 flex items-center gap-3 rounded-sm border border-border bg-background px-3 py-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={brochureThumbnailUrl}
+                  alt="Brochure thumbnail"
+                  className="h-16 w-16 rounded-sm border border-border object-cover"
+                />
+                <p className="flex-1 text-[11px] text-muted">Shown on the project page and brochure download card.</p>
+                {isAdmin ? <ConfirmButton action={removeBrochureThumbnailAction.bind(null, projectId)} label="Remove" /> : null}
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-muted">No thumbnail uploaded yet.</p>
+            )}
+
+            <form action={thumbnailFormAction} className="mt-3 flex items-end gap-3">
+              <label className="flex flex-1 flex-col gap-1.5">
+                <span className="text-[11px] uppercase tracking-wide text-muted">
+                  {brochureThumbnailUrl ? "Replace thumbnail" : "Upload thumbnail"}
+                </span>
+                <input
+                  type="file"
+                  name="file"
+                  accept="image/jpeg,image/png,image/webp,image/avif"
+                  required
+                  className="rounded-sm border border-border bg-surface px-3 py-2 text-xs text-foreground file:mr-3 file:rounded-sm file:border-0 file:bg-accent file:px-2.5 file:py-1 file:text-xs file:font-mono file:font-semibold file:uppercase file:text-white"
+                />
+              </label>
+              <SubmitButton pendingText="Uploading...">{brochureThumbnailUrl ? "Replace" : "Upload"}</SubmitButton>
+            </form>
+            {thumbnailState.error ? (
+              <p className="mt-2 rounded-sm border border-negative/40 bg-negative/10 px-3 py-2 text-xs text-negative">
+                {thumbnailState.error}
+              </p>
+            ) : null}
+          </>
+        )}
+      </div>
 
       {previewUrl ? (
         <Dialog title="Brochure preview" onClose={() => setPreviewUrl(null)} maxWidth="max-w-3xl">

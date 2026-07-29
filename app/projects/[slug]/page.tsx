@@ -14,7 +14,7 @@ import {
   getTransactionMonthlyTrend,
   getTransactionStats,
 } from "@/lib/queries";
-import { formatDate, formatMonth, formatPaise, formatPriceBand, formatPricePerSqft } from "@/lib/format";
+import { formatBytes, formatDate, formatMonth, formatPaise, formatPriceBand, formatPricePerSqft } from "@/lib/format";
 import BrochureDownloadLink from "@/app/components/BrochureDownloadLink";
 import { recordBrochureViewed } from "@/lib/analytics/brochure-events";
 import {
@@ -772,19 +772,38 @@ export default async function ProjectDetailPage({
         <section id="downloads" className="scroll-mt-32">
           <h2 className="font-mono text-lg font-semibold text-foreground">Downloads</h2>
           {project.brochureUrl || project.documents.length > 0 ? (
-            <ul className="mt-3 flex flex-col gap-1.5">
+            <div className="mt-3 flex flex-col gap-3">
               {project.brochureUrl ? (
-                <li>
-                  <BrochureDownloadLink
-                    slug={project.slug}
-                    brochureUrl={project.brochureUrl}
-                    brochureFileName={project.brochureFileName}
-                    className="text-sm text-accent hover:underline"
-                  >
-                    Download Brochure
-                  </BrochureDownloadLink>
-                </li>
+                <BrochureDownloadLink
+                  slug={project.slug}
+                  brochureUrl={project.brochureUrl}
+                  brochureFileName={project.brochureFileName}
+                  className="flex items-center gap-4 rounded-sm border border-accent/30 bg-accent/5 p-4 transition-colors hover:bg-accent/10"
+                >
+                  {project.brochureThumbnailUrl ? (
+                    <Image
+                      src={project.brochureThumbnailUrl}
+                      alt={`${project.name} brochure thumbnail`}
+                      width={72}
+                      height={96}
+                      className="h-24 w-[72px] shrink-0 rounded-sm border border-border object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-24 w-[72px] shrink-0 items-center justify-center rounded-sm border border-border bg-surface text-2xl">
+                      📄
+                    </span>
+                  )}
+                  <span className="min-w-0">
+                    <span className="block font-mono text-[10px] uppercase tracking-wide text-accent">Official Project Brochure</span>
+                    <span className="mt-0.5 block text-sm font-semibold text-foreground">Download Latest Brochure</span>
+                    <span className="mt-1 block text-xs text-muted">
+                      {project.brochureUploadedAt ? `Updated ${formatDate(project.brochureUploadedAt)}` : null}
+                      {project.brochureFileSize ? ` · ${formatBytes(project.brochureFileSize)}` : null} · PDF
+                    </span>
+                  </span>
+                </BrochureDownloadLink>
               ) : null}
+              <ul className="flex flex-col gap-1.5">
               {project.documents.map((doc) => (
                 <li key={doc.id}>
                   <a href={doc.url} target="_blank" rel="noreferrer" className="text-sm text-accent hover:underline">
@@ -792,7 +811,8 @@ export default async function ProjectDetailPage({
                   </a>
                 </li>
               ))}
-            </ul>
+              </ul>
+            </div>
           ) : (
             <p className="mt-3 text-sm text-muted">No downloads available yet.</p>
           )}

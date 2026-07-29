@@ -159,6 +159,7 @@ export async function getFeaturedProjects(limit = 6) {
       imageUrl: project.images[0]?.url ?? null,
       brochureUrl: project.brochureUrl,
       brochureFileName: project.brochureFileName,
+      brochureThumbnailUrl: project.brochureThumbnailUrl,
     };
   });
 }
@@ -203,6 +204,7 @@ export async function getSavedProjectsForUser(publicUserId: string) {
       imageUrl: project.images[0]?.url ?? null,
       brochureUrl: project.brochureUrl,
       brochureFileName: project.brochureFileName,
+      brochureThumbnailUrl: project.brochureThumbnailUrl,
     };
   });
 }
@@ -248,6 +250,7 @@ export async function getLatestLaunches(limit = 6) {
       imageUrl: project.images[0]?.url ?? null,
       brochureUrl: project.brochureUrl,
       brochureFileName: project.brochureFileName,
+      brochureThumbnailUrl: project.brochureThumbnailUrl,
     };
   });
 }
@@ -639,6 +642,7 @@ export async function getPublicProjectsPaged(filters: PublicProjectFilters) {
         imageUrl: project.images[0]?.url ?? null,
         brochureUrl: project.brochureUrl,
         brochureFileName: project.brochureFileName,
+        brochureThumbnailUrl: project.brochureThumbnailUrl,
       };
     }),
     total,
@@ -745,6 +749,7 @@ export async function getRelatedProjects(project: { id: string; localityId: stri
         imageUrl: p.images[0]?.url ?? null,
         brochureUrl: p.brochureUrl,
         brochureFileName: p.brochureFileName,
+        brochureThumbnailUrl: p.brochureThumbnailUrl,
       };
     })
   );
@@ -949,6 +954,7 @@ export const getPublicBuilderBySlug = cache(async (slug: string) => {
       imageUrl: p.images[0]?.url ?? null,
       brochureUrl: p.brochureUrl,
       brochureFileName: p.brochureFileName,
+      brochureThumbnailUrl: p.brochureThumbnailUrl,
       cityId: p.cityId,
       cityName: p.city.name,
     };
@@ -1158,6 +1164,7 @@ export const getPublicLocalityBySlug = cache(async (slug: string) => {
         imageUrl: p.images[0]?.url ?? null,
         brochureUrl: p.brochureUrl,
         brochureFileName: p.brochureFileName,
+        brochureThumbnailUrl: p.brochureThumbnailUrl,
       };
     }),
   };

@@ -26,6 +26,7 @@ export interface CompareProject {
   amenityCount: number;
   brochureUrl: string | null;
   brochureFileName: string | null;
+  brochureThumbnailUrl: string | null;
 }
 
 export async function getProjectsForCompare(slugs: string[]): Promise<CompareProject[]> {
@@ -84,6 +85,7 @@ export async function getProjectsForCompare(slugs: string[]): Promise<ComparePro
         amenityCount: project.amenities.length,
         brochureUrl: project.brochureUrl,
         brochureFileName: project.brochureFileName,
+        brochureThumbnailUrl: project.brochureThumbnailUrl,
       };
     });
 }
