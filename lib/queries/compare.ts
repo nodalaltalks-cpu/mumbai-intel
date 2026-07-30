@@ -32,14 +32,30 @@ export interface CompareProject {
 export async function getProjectsForCompare(slugs: string[]): Promise<CompareProject[]> {
   if (slugs.length === 0) return [];
 
+  // `select` (not `include`) — only the fields the mapped row below reads;
+  // `amenities` only ever needs a count, not the full join rows.
   const projects = await prisma.project.findMany({
     where: { slug: { in: slugs }, isPublished: true, isArchived: false },
-    include: {
+    select: {
+      slug: true,
+      name: true,
+      status: true,
+      category: true,
+      priceMinPaise: true,
+      priceMaxPaise: true,
+      totalUnits: true,
+      constructionPercent: true,
+      actualPossession: true,
+      promisedPossession: true,
+      reraNumber: true,
+      brochureUrl: true,
+      brochureFileName: true,
+      brochureThumbnailUrl: true,
       builder: { select: { name: true } },
       locality: { select: { name: true } },
-      images: { orderBy: { sortOrder: "asc" }, take: 1 },
-      configurations: { orderBy: { sortOrder: "asc" } },
-      amenities: true,
+      images: { orderBy: { sortOrder: "asc" }, take: 1, select: { url: true } },
+      configurations: { orderBy: { sortOrder: "asc" }, select: { carpetSqft: true, priceMinPaise: true, label: true } },
+      _count: { select: { amenities: true } },
     },
   });
 
@@ -82,7 +98,7 @@ export async function getProjectsForCompare(slugs: string[]): Promise<ComparePro
             ? formatDate(project.promisedPossession)
             : "--",
         reraNumber: project.reraNumber,
-        amenityCount: project.amenities.length,
+        amenityCount: project._count.amenities,
         brochureUrl: project.brochureUrl,
         brochureFileName: project.brochureFileName,
         brochureThumbnailUrl: project.brochureThumbnailUrl,

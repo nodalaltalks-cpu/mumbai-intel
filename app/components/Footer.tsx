@@ -256,9 +256,10 @@ export default async function Footer() {
           </div>
 
           <div className="mt-6 max-w-[22rem]">
-            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-foreground">Stay Updated</h3>
+            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-foreground">Stay Ahead of the Market</h3>
             <p className="mt-2 text-xs leading-relaxed text-muted">
-              Receive weekly Mumbai real estate intelligence, market reports and project insights.
+              Receive our weekly research covering new launches, market trends, transaction insights and buyer
+              intelligence.
             </p>
             <NewsletterForm />
           </div>

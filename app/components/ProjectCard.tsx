@@ -141,14 +141,15 @@ export default function ProjectCard({ project }: { project: ProjectCardData }) {
             e.stopPropagation();
             setQuickViewOpen(true);
           }}
-          className="absolute right-2 top-2 z-10 rounded-sm border border-border bg-background/80 px-2 py-1 text-[9px] font-mono uppercase tracking-wide text-muted opacity-0 backdrop-blur transition-opacity hover:border-accent hover:text-accent group-hover:opacity-100"
+          className="absolute right-2 top-2 z-10 rounded-sm border border-border bg-background/80 px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-wide text-muted backdrop-blur transition-opacity md:opacity-0 md:hover:border-accent md:hover:text-accent md:group-hover:opacity-100"
         >
           Quick view
         </button>
 
+        {/* Below md: always visible (no touch equivalent for hover) — desktop keeps the hover-reveal. */}
         <CompareToggleButton
           slug={project.slug}
-          className="absolute bottom-2 right-2 z-10 opacity-0 transition-opacity group-hover:opacity-100"
+          className="absolute bottom-2 right-2 z-10 transition-opacity md:opacity-0 md:group-hover:opacity-100"
         />
 
         {project.brochureUrl ? (
@@ -156,7 +157,7 @@ export default function ProjectCard({ project }: { project: ProjectCardData }) {
             slug={project.slug}
             brochureUrl={project.brochureUrl}
             brochureFileName={project.brochureFileName}
-            className="absolute bottom-2 left-2 z-10 rounded-sm border border-border bg-background/80 px-2 py-1 text-[9px] font-mono uppercase tracking-wide text-muted opacity-0 backdrop-blur transition-opacity hover:border-accent hover:text-accent group-hover:opacity-100"
+            className="absolute bottom-2 left-2 z-10 rounded-sm border border-border bg-background/80 px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-wide text-muted backdrop-blur transition-opacity md:opacity-0 md:hover:border-accent md:hover:text-accent md:group-hover:opacity-100"
           >
             Brochure
           </BrochureDownloadLink>

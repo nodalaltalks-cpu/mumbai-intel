@@ -17,6 +17,7 @@ import {
 import { formatBytes, formatDate, formatMonth, formatPaise, formatPriceBand, formatPricePerSqft } from "@/lib/format";
 import BrochureDownloadLink from "@/app/components/BrochureDownloadLink";
 import { recordBrochureViewed } from "@/lib/analytics/brochure-events";
+import { recordResearchEvent } from "@/lib/analytics/research-events";
 import {
   AMENITY_CATEGORY_LABEL,
   CATEGORY_LABEL,
@@ -108,6 +109,7 @@ export default async function ProjectDetailPage({
   if (!project) notFound();
 
   await recordRecentViewAction("Project", project.id);
+  await recordResearchEvent("PROJECT_VIEWED", { entityType: "Project", entityId: project.id });
   if (project.brochureUrl) {
     await recordBrochureViewed({ id: project.id, builderId: project.builderId, localityId: project.localityId, microMarketId: project.microMarketId });
   }

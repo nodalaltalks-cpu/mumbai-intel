@@ -22,6 +22,7 @@ import { deleteSavedSearchAction } from "@/lib/actions/saved-searches";
 import { clearSearchHistoryAction } from "@/lib/actions/search-history";
 import { formatDate, formatRelativeTime } from "@/lib/format";
 import BrochureDownloadLink from "@/app/components/BrochureDownloadLink";
+import ContinueResearchLink from "@/app/components/ContinueResearchLink";
 import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 import { Fact } from "@/app/components/ui/StatCard";
@@ -32,6 +33,9 @@ import RemoveItemButton from "@/app/components/RemoveItemButton";
 import ClearAllButton from "@/app/components/ClearAllButton";
 import PreferencesForm from "./PreferencesForm";
 import NotificationPreferencesForm from "./NotificationPreferencesForm";
+import ProfileForm from "./ProfileForm";
+import ProfileCompletionBar from "@/app/components/ui/ProfileCompletionBar";
+import { recordResearchEvent } from "@/lib/analytics/research-events";
 
 export const metadata: Metadata = { title: "My Dashboard — NoDalalTalks" };
 export const dynamic = "force-dynamic";
@@ -51,20 +55,29 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
   const sp = await searchParams;
   const tab = (TABS.some((t) => t.key === sp.tab) ? sp.tab : "research") as TabKey;
 
+  // Each query below is gated to the active tab — viewing "Continue Research"
+  // shouldn't also pay for the Wishlist join, Saved Searches, Search History,
+  // Popular Searches, preferences, notification-preferences, and
+  // getLocalitiesForSelect() queries that only the Profile tab needs. `user`
+  // is the one exception: the header (name/avatar) renders on every tab.
   const [user, savedProjects, wishlist, recentViews, savedSearches, searchHistory, popularSearches, preferences, notificationPreferences, localities] =
     await Promise.all([
       prisma.publicUser.findUnique({ where: { id: session.userId } }),
-      getSavedProjectsForUser(session.userId),
-      getWishlistForUser(session.userId),
-      getRecentViewsForUser(session.userId),
-      getSavedSearchesForUser(session.userId),
-      getSearchHistoryForUser(session.userId),
-      getPopularSearches(8),
-      getUserPreferences(session.userId),
-      getNotificationPreferences(session.userId),
-      getLocalitiesForSelect(),
+      tab === "profile" ? getSavedProjectsForUser(session.userId) : Promise.resolve([]),
+      tab === "wishlist" ? getWishlistForUser(session.userId) : Promise.resolve([]),
+      tab === "research" ? getRecentViewsForUser(session.userId) : Promise.resolve([]),
+      tab === "searches" ? getSavedSearchesForUser(session.userId) : Promise.resolve([]),
+      tab === "history" ? getSearchHistoryForUser(session.userId) : Promise.resolve([]),
+      tab === "history" ? getPopularSearches(8) : Promise.resolve([]),
+      tab === "profile" ? getUserPreferences(session.userId) : Promise.resolve(null),
+      tab === "profile" ? getNotificationPreferences(session.userId) : Promise.resolve(null),
+      tab === "profile" ? getLocalitiesForSelect() : Promise.resolve([]),
     ]);
   if (!user) notFound();
+
+  if (tab === "profile") {
+    await recordResearchEvent("PROFILE_VIEWED", { entityType: "PublicUser", entityId: user.id });
+  }
 
   function tabHref(key: TabKey) {
     return `/account?tab=${key}`;
@@ -121,19 +134,19 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               <ul className="flex flex-col gap-2">
                 {recentViews.map((item) => (
                   <li key={item.id} className="flex items-center justify-between gap-3 rounded-sm border border-border bg-surface p-3">
-                    <Link href={item.href} className="min-w-0 flex-1">
+                    <ContinueResearchLink href={item.href} entityType={item.entityType} entityId={item.entityId} className="min-w-0 flex-1">
                       <p className="truncate font-mono text-sm text-foreground hover:text-accent">{item.title}</p>
                       <p className="truncate text-xs text-muted">
                         {item.subtitle} · Viewed {formatRelativeTime(item.viewedAt)}
                       </p>
-                    </Link>
+                    </ContinueResearchLink>
                     <div className="flex shrink-0 items-center gap-1.5">
                       {item.brochureUrl && item.projectSlug ? (
                         <BrochureDownloadLink
                           slug={item.projectSlug}
                           brochureUrl={item.brochureUrl}
                           brochureFileName={item.brochureFileName}
-                          className="flex items-center gap-1.5 rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+                          className="flex items-center gap-1.5 rounded-sm border border-border px-2.5 py-1.5 text-[11px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
                         >
                           {item.brochureThumbnailUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
@@ -142,9 +155,14 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                           Brochure
                         </BrochureDownloadLink>
                       ) : null}
-                      <Link href={item.href} className="rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
+                      <ContinueResearchLink
+                        href={item.href}
+                        entityType={item.entityType}
+                        entityId={item.entityId}
+                        className="rounded-sm border border-border px-2.5 py-1.5 text-[11px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+                      >
                         Open
-                      </Link>
+                      </ContinueResearchLink>
                       <RemoveItemButton action={removeRecentViewAction.bind(null, item.id)} />
                     </div>
                   </li>
@@ -192,7 +210,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                                 slug={item.projectSlug}
                                 brochureUrl={item.brochureUrl}
                                 brochureFileName={item.brochureFileName}
-                                className="flex items-center gap-1.5 rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+                                className="flex items-center gap-1.5 rounded-sm border border-border px-2.5 py-1.5 text-[11px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
                               >
                                 {item.brochureThumbnailUrl ? (
                                   // eslint-disable-next-line @next/next/no-img-element
@@ -201,7 +219,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                                 Brochure
                               </BrochureDownloadLink>
                             ) : null}
-                            <Link href={item.href} className="rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
+                            <Link href={item.href} className="rounded-sm border border-border px-2.5 py-1.5 text-[11px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
                               Open
                             </Link>
                             <RemoveItemButton
@@ -237,7 +255,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                         <p className="text-xs text-muted">Saved {formatDate(search.createdAt)}</p>
                       </Link>
                       <div className="flex shrink-0 items-center gap-1.5">
-                        <Link href={search.href} className="rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
+                        <Link href={search.href} className="rounded-sm border border-border px-2.5 py-1.5 text-[11px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
                           Run
                         </Link>
                         <RemoveItemButton action={deleteSavedSearchAction.bind(null, search.id)} />
@@ -300,14 +318,19 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
         {tab === "profile" ? (
           <section className="flex flex-col gap-6">
             <div className="rounded-sm border border-border bg-surface p-4">
+              <ProfileCompletionBar percent={user.profileCompletionPercent} />
+            </div>
+
+            <div className="rounded-sm border border-border bg-surface p-4">
               <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Account Details</h2>
               <div className="mt-3 grid grid-cols-2 gap-3">
-                <Fact label="Name" value={user.name ?? "--"} />
                 <Fact label="Email" value={user.email} />
-                <Fact label="Phone" value={user.phone ?? "Not added"} />
                 <Fact label="Sign-in method" value={user.provider === "GOOGLE" ? "Google" : "Email & password"} />
                 <Fact label="Member since" value={formatDate(user.createdAt)} />
                 <Fact label="Last sign-in" value={user.lastLoginAt ? formatDate(user.lastLoginAt) : "--"} />
+              </div>
+              <div className="mt-4 border-t border-border pt-4">
+                <ProfileForm name={user.name} phone={user.phone} />
               </div>
             </div>
 

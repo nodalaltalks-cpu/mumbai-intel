@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -38,6 +38,15 @@ export const metadata: Metadata = {
     title: `${SITE_NAME} — Real Estate Intelligence`,
     description: SITE_DESCRIPTION,
   },
+};
+
+// `viewportFit: "cover"` lets public-site fixed/bottom UI reach under a
+// notch/gesture-nav area using `env(safe-area-inset-*)` padding — harmless
+// on desktop (only affects mobile browser chrome), so safe at the root.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

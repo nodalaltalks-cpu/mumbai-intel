@@ -26,6 +26,7 @@ import ShareButton from "@/app/components/ShareButton";
 import ReportIssueButton from "@/app/components/ReportIssueButton";
 import { isWishlisted } from "@/lib/actions/wishlist";
 import { recordRecentViewAction } from "@/lib/actions/recent-views";
+import { recordResearchEvent } from "@/lib/analytics/research-events";
 import { getPublicSession } from "@/lib/public-auth/session";
 
 export const dynamic = "force-dynamic";
@@ -63,6 +64,7 @@ export default async function BuilderDetailPage({ params }: { params: Promise<{ 
   if (!builder) notFound();
 
   await recordRecentViewAction("Builder", builder.id);
+  await recordResearchEvent("BUILDER_VIEWED", { entityType: "Builder", entityId: builder.id });
 
   const latestScore = builder.scoreSnapshots[0] ?? null;
   const filters = { builderId: builder.id };

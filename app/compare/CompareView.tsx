@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, useTransition, type ReactNode } from "react";
 import EmptyState from "@/app/components/ui/EmptyState";
 import Button from "@/app/components/ui/Button";
+import { SkeletonBlock } from "@/app/components/ui/Skeleton";
 import { clearCompareList, removeCompareItem, useCompareList } from "@/lib/compare-list";
 import { getProjectsForCompareAction } from "@/lib/actions/compare";
 import BrochureDownloadLink from "@/app/components/BrochureDownloadLink";
@@ -76,7 +77,14 @@ export default function CompareView() {
       {slugs.length === 0 ? (
         <EmptyState title="Nothing to compare yet" message="Tap “+ Compare” on any project card or project page to add it here." />
       ) : isPending || projects === null ? (
-        <p className="text-sm text-muted">Loading comparison…</p>
+        <div className="overflow-hidden rounded-sm border border-border">
+          <SkeletonBlock className="h-10 w-full rounded-none" />
+          <div className="flex flex-col gap-px bg-border">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <SkeletonBlock key={i} className="h-9 w-full rounded-none" />
+            ))}
+          </div>
+        </div>
       ) : projects.length === 0 ? (
         <EmptyState title="These projects are no longer available" message="They may have been unpublished or removed since you added them." />
       ) : (
@@ -94,7 +102,7 @@ export default function CompareView() {
                       <button
                         type="button"
                         onClick={() => removeCompareItem(p.slug)}
-                        className="w-fit rounded-sm border border-border px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wide text-muted hover:border-negative hover:text-negative"
+                        className="w-fit rounded-sm border border-border px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-negative hover:text-negative"
                       >
                         Remove
                       </button>

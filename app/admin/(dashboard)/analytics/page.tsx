@@ -29,9 +29,20 @@ export default async function AdminAnalyticsPage() {
           <h1 className="font-mono text-lg font-semibold text-foreground">Analytics</h1>
           <p className="text-xs text-muted">Transaction velocity, builder scorecards and locality demand — computed by the analytics engine from curated data.</p>
         </div>
-        <Link href="/admin/analytics/brochures" className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
-          Brochure Analytics →
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/admin/analytics/brochures" className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
+            Brochure Analytics →
+          </Link>
+          <Link href="/admin/analytics/profile-completion" className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
+            Profile Completion →
+          </Link>
+          <Link href="/admin/analytics/newsletter" className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
+            Newsletter →
+          </Link>
+          <Link href="/admin/analytics/research" className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
+            Research Intent →
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">

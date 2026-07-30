@@ -7,6 +7,7 @@ import ProjectFilters from "@/app/components/ProjectFilters";
 import ProjectCard from "@/app/components/ProjectCard";
 import Pagination from "@/app/admin/components/Pagination";
 import EmptyState from "@/app/components/ui/EmptyState";
+import { recordResearchEvent } from "@/lib/analytics/research-events";
 
 export const metadata: Metadata = {
   title: "Projects — NoDalalTalks",
@@ -59,6 +60,16 @@ export default async function ProjectsPage({
     getLocalitiesForSelect(),
     getBuildersForSelect(),
   ]);
+
+  if (params.q) {
+    await recordResearchEvent("SEARCH_PERFORMED", { metadata: { query: params.q } });
+  }
+  const activeFilterKeys = (["locality", "builder", "status", "category", "bedrooms", "priceMin", "priceMax", "possession", "rera", "luxury", "affordable"] as const).filter(
+    (key) => Boolean(params[key])
+  );
+  if (activeFilterKeys.length > 0) {
+    await recordResearchEvent("FILTERS_USED", { metadata: { filters: activeFilterKeys } });
+  }
 
   function buildHref(targetPage: number) {
     const qs = new URLSearchParams();

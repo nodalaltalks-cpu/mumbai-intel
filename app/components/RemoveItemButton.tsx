@@ -24,7 +24,7 @@ export default function RemoveItemButton({
           router.refresh();
         })
       }
-      className="rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted transition-colors hover:border-negative hover:text-negative disabled:opacity-60"
+      className="rounded-sm border border-border px-2.5 py-1.5 text-[11px] font-mono uppercase tracking-wide text-muted transition-colors hover:border-negative hover:text-negative disabled:opacity-60"
     >
       {isPending ? "…" : label}
     </button>

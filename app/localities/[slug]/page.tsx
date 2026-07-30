@@ -38,6 +38,7 @@ import ShareButton from "@/app/components/ShareButton";
 import ReportIssueButton from "@/app/components/ReportIssueButton";
 import { isWishlisted } from "@/lib/actions/wishlist";
 import { recordRecentViewAction } from "@/lib/actions/recent-views";
+import { recordResearchEvent } from "@/lib/analytics/research-events";
 import { getPublicSession } from "@/lib/public-auth/session";
 
 export const dynamic = "force-dynamic";
@@ -95,6 +96,7 @@ export default async function LocalityDetailPage({
   if (!locality) notFound();
 
   await recordRecentViewAction("Locality", locality.id);
+  await recordResearchEvent("LOCALITY_VIEWED", { entityType: "Locality", entityId: locality.id });
 
   const page = Math.max(1, Number(sp.page ?? 1) || 1);
   const filters: PublicTransactionFilters = {

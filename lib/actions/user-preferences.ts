@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getPublicSession } from "@/lib/public-auth/session";
 import { PROPERTY_CATEGORIES } from "@/lib/project-meta";
+import { recalculatePublicUserCompletion } from "@/lib/profile-completion";
 
 const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefined ? undefined : v);
 
@@ -51,6 +52,8 @@ export async function updatePreferencesAction(_prevState: PreferencesFormState, 
   } else {
     await prisma.userPreferences.create({ data: { publicUserId: session.userId, ...data } });
   }
+
+  await recalculatePublicUserCompletion(session.userId);
 
   revalidatePath("/account");
   return { success: "Preferences saved." };

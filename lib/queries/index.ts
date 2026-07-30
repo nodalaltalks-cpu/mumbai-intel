@@ -166,15 +166,33 @@ export async function getFeaturedProjects(limit = 6) {
 
 /** A public user's bookmarked projects for the /account "Saved Projects" list, newest bookmark first. */
 export async function getSavedProjectsForUser(publicUserId: string) {
+  // `select` (not `include`) at every level — only the ~15 fields the mapped
+  // card output below actually reads, not every scalar column of Project
+  // plus full builder/locality.zone rows (this page's queries are on the hot
+  // path for "feels slow" navigations between account tabs).
   const saved = await prisma.savedProject.findMany({
     where: { publicUserId },
     orderBy: { createdAt: "desc" },
-    include: {
+    select: {
       project: {
-        include: {
-          locality: { include: { zone: true } },
-          builder: true,
-          images: { orderBy: { sortOrder: "asc" as const }, take: 1 },
+        select: {
+          id: true,
+          slug: true,
+          name: true,
+          tagline: true,
+          status: true,
+          category: true,
+          priceMinPaise: true,
+          priceMaxPaise: true,
+          promisedPossession: true,
+          constructionPercent: true,
+          dataSource: true,
+          brochureUrl: true,
+          brochureFileName: true,
+          brochureThumbnailUrl: true,
+          locality: { select: { name: true, zone: { select: { name: true } } } },
+          builder: { select: { name: true, logoUrl: true } },
+          images: { orderBy: { sortOrder: "asc" as const }, take: 1, select: { url: true } },
           configurations: { select: { bedrooms: true, carpetSqft: true, priceMinPaise: true } },
         },
       },

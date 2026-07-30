@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getPublicSession } from "@/lib/public-auth/session";
+import { recordResearchEvent } from "@/lib/analytics/research-events";
 
 export type WishlistEntityType = "Builder" | "Locality";
 
@@ -27,6 +28,7 @@ export async function toggleWishlistAction(entityType: WishlistEntityType, entit
   }
 
   await prisma.wishlist.create({ data: { publicUserId: session.userId, entityType, entityId } });
+  await recordResearchEvent("WISHLIST_ADDED", { entityType, entityId });
   revalidatePath("/account");
   return { saved: true };
 }

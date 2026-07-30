@@ -998,6 +998,10 @@ model PublicUser {
   image         String?
   emailVerifiedAt DateTime?
   lastLoginAt   DateTime?
+  /// Recomputed by lib/profile-completion.ts whenever a scored field changes
+  /// (name/phone/emailVerifiedAt here, or UserPreferences' budget/locality/
+  /// category) — never hand-edited elsewhere.
+  profileCompletionPercent Int @default(0)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
@@ -1009,6 +1013,8 @@ model PublicUser {
   searchHistory SearchHistory[]
   preferences   UserPreferences?
   notificationPreferences NotificationPreferences?
+  newsletterSubscription  NewsletterSubscriber?
+  researchEvents          ResearchEvent[]
 
   @@index([provider])
 }
@@ -1227,9 +1233,77 @@ model NotificationPreferences {
   updatedAt         DateTime   @updatedAt
 }
 
+enum NewsletterStatus {
+  SUBSCRIBED
+  UNSUBSCRIBED
+}
+
+/// The "Stay Ahead of the Market" weekly research newsletter — email-only
+/// signup (Footer). Separate from PublicUser (subscribing never requires an
+/// account); `publicUserId` links it when the subscriber happens to also be
+/// signed in, purely for the founder-dashboard "how many subscribers are
+/// also registered users" view, not a functional dependency.
+model NewsletterSubscriber {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  status         NewsletterStatus @default(SUBSCRIBED)
+  publicUserId   String?   @unique
+  publicUser     PublicUser? @relation(fields: [publicUserId], references: [id], onDelete: SetNull)
+  /// Which surface subscribed them — "footer" today; kept open for a future
+  /// dedicated placement without a schema change.
+  source         String?
+  subscribedAt   DateTime  @default(now())
+  unsubscribedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status])
+  @@index([subscribedAt])
+}
+
+enum ResearchEventType {
+  PROJECT_VIEWED
+  BUILDER_VIEWED
+  LOCALITY_VIEWED
+  SEARCH_PERFORMED
+  FILTERS_USED
+  COMPARE_USED
+  WISHLIST_ADDED
+  CONTINUE_RESEARCH_CLICKED
+  PROFILE_VIEWED
+  PROFILE_UPDATED
+  NEWSLETTER_VIEWED
+  NEWSLETTER_SUBSCRIBED
+  NEWSLETTER_UNSUBSCRIBED
+}
+
+/// Site-wide "research intent" log — a deliberately generic single table
+/// (not one model per event type) covering every behavioral signal in
+/// docs/... analytics ask, mirroring BrochureDownloadEvent's identity model
+/// (publicUserId when signed in, sessionId from the same anonymous cookie
+/// otherwise) without duplicating its device/browser/UTM richness, since
+/// none of these events need that level of detail. `metadata` stays small
+/// and non-PII (e.g. a search query string, a list of active filter keys).
+model ResearchEvent {
+  id           String            @id @default(cuid())
+  eventType    ResearchEventType
+  /// "Project" | "Builder" | "Locality" | null for non-entity events (search, profile, newsletter).
+  entityType   String?
+  entityId     String?
+  publicUserId String?
+  publicUser   PublicUser?       @relation(fields: [publicUserId], references: [id], onDelete: SetNull)
+  sessionId    String?
+  metadata     Json?
+  createdAt    DateTime          @default(now())
+
+  @@index([eventType, createdAt])
+  @@index([entityType, entityId])
+  @@index([publicUserId])
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // END OF SCHEMA
 // If this comment is missing from your copy, the file was truncated during
-// download. Complete file: 10 enums + 47 models, ending with NotificationPreferences.
+// download. Complete file: 12 enums + 49 models, ending with ResearchEvent.
 // Verify with:  grep -c '^model ' prisma/schema.prisma   → must print 47
 // ═══════════════════════════════════════════════════════════════════════════
