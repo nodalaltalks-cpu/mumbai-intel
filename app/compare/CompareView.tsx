@@ -5,7 +5,7 @@ import { useEffect, useState, useTransition, type ReactNode } from "react";
 import EmptyState from "@/app/components/ui/EmptyState";
 import Button from "@/app/components/ui/Button";
 import { SkeletonBlock } from "@/app/components/ui/Skeleton";
-import { clearCompareList, removeCompareItem, useCompareList } from "@/lib/compare-list";
+import { clearCompareList, pruneCompareList, removeCompareItem, useCompareList } from "@/lib/compare-list";
 import { getProjectsForCompareAction } from "@/lib/actions/compare";
 import BrochureDownloadLink from "@/app/components/BrochureDownloadLink";
 import type { CompareProject } from "@/lib/queries/compare";
@@ -56,6 +56,12 @@ export default function CompareView() {
     startTransition(async () => {
       const result = await getProjectsForCompareAction(slugs);
       setProjects(result);
+      // Self-heal stale entries (unpublished/deleted since being added) so
+      // the Navbar badge — which reads the same localStorage-backed store —
+      // never shows a count higher than what's actually comparable.
+      if (result.length !== slugs.length) {
+        pruneCompareList(result.map((p) => p.slug));
+      }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slugs.join(",")]);

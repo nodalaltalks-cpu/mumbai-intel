@@ -38,15 +38,15 @@ export default function NavbarActions({ publicUser }: { publicUser: NavbarPublic
       </Button>
       <span className="hidden font-mono text-[10px] uppercase tracking-wide text-muted lg:inline">Mumbai · IST</span>
 
-      {compareList.length > 0 ? (
-        <Link
-          href="/compare"
-          className="flex items-center gap-1 rounded-sm border border-border px-2 py-1.5 text-[10px] font-mono uppercase tracking-wide text-muted transition-colors hover:border-accent hover:text-accent"
-        >
-          Compare
+      <Link
+        href="/compare"
+        className="flex items-center gap-1 rounded-sm border border-border px-2 py-1.5 text-[10px] font-mono uppercase tracking-wide text-muted transition-colors hover:border-accent hover:text-accent"
+      >
+        Compare
+        {compareList.length > 0 ? (
           <span className="flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[9px] text-white">{compareList.length}</span>
-        </Link>
-      ) : null}
+        ) : null}
+      </Link>
 
       {publicUser ? (
         <ProfileMenu user={publicUser} />

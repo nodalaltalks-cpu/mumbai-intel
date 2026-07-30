@@ -53,6 +53,23 @@ export function clearCompareList() {
   write([]);
 }
 
+/**
+ * Drops slugs that no longer resolve to a real, comparable project (e.g.
+ * unpublished/deleted since being added) — called once /compare's server
+ * lookup comes back with fewer projects than requested slugs. Only writes
+ * (and only fires the store-updated event, which is what keeps the Navbar
+ * badge in sync) when the list actually shrinks, so a normal render never
+ * triggers an extra write.
+ */
+export function pruneCompareList(validSlugs: string[]) {
+  const current = readCompareList();
+  const validSet = new Set(validSlugs);
+  const next = current.filter((slug) => validSet.has(slug));
+  if (next.length !== current.length) {
+    write(next);
+  }
+}
+
 function subscribe(onStoreChange: () => void) {
   window.addEventListener(EVENT, onStoreChange);
   window.addEventListener("storage", onStoreChange);
