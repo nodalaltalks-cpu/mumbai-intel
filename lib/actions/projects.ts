@@ -15,6 +15,7 @@ import { syncProjectNearbyInfra } from "@/lib/infra-linking";
 import { buildProjectData, parseHighlights, parseProjectForm, toPaise } from "@/lib/project-data";
 import { completionInputFromSchema, computeProjectCompletionPercent } from "@/lib/project-completion";
 import { uploadBrochureForProject } from "./brochure";
+import { addProjectImageAction } from "./images";
 import { friendlyPrismaError, updateManyByRow } from "./errors";
 
 export interface ProjectFormState {
@@ -130,6 +131,23 @@ export async function createProjectAction(
   if (amenityIds.length > 0) await syncProjectAmenities(projectId, amenityIds);
   await syncProjectNearbyInfra(projectId);
 
+  // Optional cover image attached directly on the New Project form — the
+  // project row now exists, so it can be uploaded exactly like a normal
+  // edit-page cover image upload (addProjectImageAction, kind="hero"), no
+  // separate upload path. A failure here never blocks project creation
+  // itself; it's surfaced as a warning on the redirect, and the admin can
+  // retry from the Cover Image card on the same edit page.
+  const coverImageFile = formData.get("coverImageFile");
+  let coverImageWarning: string | undefined;
+  if (coverImageFile instanceof File && coverImageFile.size > 0) {
+    const coverImageFormData = new FormData();
+    coverImageFormData.set("projectId", projectId);
+    coverImageFormData.set("kind", "hero");
+    coverImageFormData.set("file", coverImageFile);
+    const result = await addProjectImageAction({}, coverImageFormData);
+    if (result.error) coverImageWarning = result.error;
+  }
+
   // Optional brochure attached directly on the New Project form — the project
   // row now exists, so Cloudinary/ProjectBrochureVersion have somewhere to
   // attach to. A failure here (bad file, upload hiccup) never blocks project
@@ -147,7 +165,8 @@ export async function createProjectAction(
   }
 
   await emit("ProjectCreated", { projectId, slug, actorId: session.userId });
-  const query = brochureWarning ? `created=1&brochureError=${encodeURIComponent(brochureWarning)}` : "created=1";
+  const warning = [coverImageWarning, brochureWarning].filter(Boolean).join(" ");
+  const query = warning ? `created=1&brochureError=${encodeURIComponent(warning)}` : "created=1";
   redirect(`/admin/projects/${projectId}/edit?${query}`);
 }
 

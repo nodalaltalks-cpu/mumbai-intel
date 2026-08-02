@@ -37,6 +37,8 @@ import type { FaqRow } from "./ProjectFaqsManager";
 import type { SectionRow } from "./ProjectSectionsManager";
 import type { ProjectDocumentRow } from "./DocumentsManager";
 import ProgressIndicator from "./ProgressIndicator";
+import CoverImageUploader from "./CoverImageUploader";
+import type { ProjectImageItem } from "./ImageUploader";
 
 export interface ProjectFormData {
   id: string;
@@ -144,15 +146,18 @@ export default function ProjectForm({
   localities,
   builders,
   amenities,
-  imageCount = 0,
+  images = [],
+  imageCount,
 }: {
   project?: ProjectFormData;
   localities: LocalityOption[];
   builders: SelectOption[];
   amenities: AmenityOption[];
-  /** Images live in a separate table (ImageUploader), not this form's own fields — passed in so the Media section counts correctly. Always 0 for a not-yet-created project. */
+  /** Images live in a separate table, not this form's own fields — passed in so CoverImageUploader/ImageUploader and the Media section's completion count work correctly. Always empty for a not-yet-created project. */
+  images?: ProjectImageItem[];
   imageCount?: number;
 }) {
+  const resolvedImageCount = imageCount ?? images.length;
   const action = project ? updateProjectAction.bind(null, project.id) : createProjectAction;
   const [state, formAction] = useActionState(action, initialState);
   const [activeTab, setActiveTab] = useState("general");
@@ -167,6 +172,9 @@ export default function ProjectForm({
   const [selectedBuilderId, setSelectedBuilderId] = useState(project?.builderId ?? "");
   const [brochureFileName, setBrochureFileName] = useState<string | null>(null);
   const brochureFileInputRef = useRef<HTMLInputElement>(null);
+  const [coverImageFileName, setCoverImageFileName] = useState<string | null>(null);
+  const [coverImagePreviewUrl, setCoverImagePreviewUrl] = useState<string | null>(null);
+  const coverImageFileInputRef = useRef<HTMLInputElement>(null);
   const microMarketOptions = localityOptions.find((l) => l.id === selectedLocalityId)?.microMarkets ?? [];
   const formRef = useRef<HTMLFormElement>(null);
   const dirtyRef = useRef(false);
@@ -178,7 +186,7 @@ export default function ProjectForm({
   function recomputeProgress() {
     if (!formRef.current) return;
     const data = new FormData(formRef.current);
-    const ctx = { amenityCount: data.getAll("amenityIds").length, imageCount };
+    const ctx = { amenityCount: data.getAll("amenityIds").length, imageCount: resolvedImageCount };
     const complete = PROGRESS_SECTIONS.filter((s) => s.check(data, ctx)).length;
     setProgress(Math.round((complete / PROGRESS_SECTIONS.length) * 100));
   }
@@ -254,8 +262,13 @@ export default function ProjectForm({
         rows: [
           { label: "Video URL", value: g("videoUrl") },
           { label: "360° tour URL", value: g("tour360Url") },
-          ...(!project ? [{ label: "Brochure", value: brochureFileName ?? "" }] : []),
-          { label: "Images", value: imageCount ? `${imageCount} uploaded` : "", important: true },
+          ...(!project
+            ? [
+                { label: "Cover image", value: coverImageFileName ?? "", important: true },
+                { label: "Brochure", value: brochureFileName ?? "" },
+              ]
+            : []),
+          { label: "Images", value: resolvedImageCount ? `${resolvedImageCount} uploaded` : "", important: true },
         ],
       },
       {
@@ -557,14 +570,75 @@ export default function ProjectForm({
       </div>
 
       <div className={activeTab === "media" ? "flex flex-col gap-4" : "hidden"}>
+        {project ? (
+          <CoverImageUploader projectId={project.id} images={images} />
+        ) : (
+          <div className="rounded-sm border border-border bg-surface p-4">
+            <h3 className="font-mono text-sm font-semibold text-foreground">
+              Cover Image <span className="text-negative">*</span>
+            </h3>
+            <p className="mt-1 text-xs text-muted">
+              The primary image shown on Project Cards, search results, Compare, Wishlist, Recently Viewed and
+              everywhere this project is listed.
+            </p>
+
+            {coverImagePreviewUrl ? (
+              <div className="mt-3 overflow-hidden rounded-sm border border-border bg-background" style={{ width: "12rem" }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={coverImagePreviewUrl} alt="" className="h-32 w-48 object-cover" />
+              </div>
+            ) : null}
+
+            <label className="mt-3 flex flex-col gap-1.5">
+              <span className="text-[11px] uppercase tracking-wide text-muted">
+                {coverImageFileName ? "Replace Image" : "Upload Cover Image"}
+              </span>
+              <input
+                ref={coverImageFileInputRef}
+                type="file"
+                name="coverImageFile"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] ?? null;
+                  if (coverImagePreviewUrl) URL.revokeObjectURL(coverImagePreviewUrl);
+                  setCoverImageFileName(file?.name ?? null);
+                  setCoverImagePreviewUrl(file ? URL.createObjectURL(file) : null);
+                }}
+                className="rounded-sm border border-border bg-surface px-3 py-2 text-xs text-foreground file:mr-3 file:rounded-sm file:border-0 file:bg-accent file:px-2.5 file:py-1 file:text-xs file:font-mono file:font-semibold file:uppercase file:text-white"
+              />
+              <span className="text-[10px] text-muted">Allowed: JPG, PNG, WEBP · Recommended: 1600×900 · Max size: 5MB</span>
+            </label>
+            {coverImageFileName ? (
+              <div className="mt-2 flex items-center gap-2">
+                <span className="text-[10px] text-muted">{coverImageFileName} will upload once you save.</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (coverImageFileInputRef.current) coverImageFileInputRef.current.value = "";
+                    if (coverImagePreviewUrl) URL.revokeObjectURL(coverImagePreviewUrl);
+                    setCoverImageFileName(null);
+                    setCoverImagePreviewUrl(null);
+                  }}
+                  className="rounded-sm border border-negative/40 px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wide text-negative hover:bg-negative/10"
+                >
+                  Remove Image
+                </button>
+              </div>
+            ) : (
+              <span className="mt-2 block text-[10px] text-muted">
+                Uploaded when you save this project — no need to come back to the edit page just for the cover image.
+              </span>
+            )}
+          </div>
+        )}
+
         <Field label="Video URL" name="videoUrl" type="url" defaultValue={project?.videoUrl ?? ""} placeholder="YouTube / Vimeo link" />
         <Field label="360° tour URL" name="tour360Url" type="url" defaultValue={project?.tour360Url ?? ""} />
         {project ? (
           <p className="text-xs text-muted">
-            Cover Image, Gallery, Floor Plans, Master Plan, the Project Brochure and Documents are each managed in
-            their own card below, after this form — every save there is independent of this form. Configurations,
-            specifications, nearby places, custom sections, the construction timeline and FAQs each have their own
-            card too.
+            Gallery, Floor Plans, Master Plan, the Project Brochure and Documents are each managed in their own card
+            below, after this form — every save there is independent of this form. Configurations, specifications,
+            nearby places, custom sections, the construction timeline and FAQs each have their own card too.
           </p>
         ) : (
           <>
@@ -599,9 +673,9 @@ export default function ProjectForm({
               )}
             </label>
             <div className="rounded-sm border border-dashed border-border p-4 text-xs text-muted">
-              <p>Cover Image, Gallery, Floor Plans, Master Plan and Documents need the project saved first — each gets its own card on the edit page:</p>
+              <p>Gallery, Floor Plans, Master Plan and Documents need the project saved first — each gets its own card on the edit page:</p>
               <ul className="mt-2 flex flex-wrap gap-1.5">
-                {["Cover Image", "Gallery", "Floor Plans", "Master Plan", "Documents"].map((label) => (
+                {["Gallery", "Floor Plans", "Master Plan", "Documents"].map((label) => (
                   <li key={label} className="rounded-sm border border-border bg-surface px-2 py-1 text-[10px] font-mono uppercase tracking-wide">
                     {label}
                   </li>

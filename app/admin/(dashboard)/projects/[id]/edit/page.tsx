@@ -9,7 +9,6 @@ import AuditHistory from "@/app/admin/components/AuditHistory";
 import BrochureUploader from "@/app/admin/components/BrochureUploader";
 import FlashMessage from "@/app/admin/components/FlashMessage";
 import ImageUploader from "@/app/admin/components/ImageUploader";
-import CoverImageUploader from "@/app/admin/components/CoverImageUploader";
 import ProjectForm from "@/app/admin/components/ProjectForm";
 import BackButton from "@/app/admin/components/BackButton";
 import ConfigurationsManager from "@/app/admin/components/ConfigurationsManager";
@@ -67,7 +66,7 @@ export default async function EditProjectPage({
       <FlashMessage type={query.created ? "created" : query.saved ? "saved" : null} warning={query.brochureError} />
 
       <div className="rounded-sm border border-border bg-surface p-4">
-        <ProjectForm project={project} localities={localities} builders={builders} amenities={amenities} imageCount={project.images.length} />
+        <ProjectForm project={project} localities={localities} builders={builders} amenities={amenities} images={project.images} />
       </div>
 
       <ConfigurationsManager projectId={project.id} configurations={project.configurations} />
@@ -77,8 +76,6 @@ export default async function EditProjectPage({
       <ProjectTimelineManager projectId={project.id} events={project.timelineEvents} />
       <ProjectFaqsManager projectId={project.id} faqs={project.faqs} />
       <InvestmentNotesManager projectId={project.id} notes={project.investmentNotes} />
-
-      <CoverImageUploader projectId={project.id} images={project.images} />
 
       <ImageUploader projectId={project.id} images={project.images} />
 
