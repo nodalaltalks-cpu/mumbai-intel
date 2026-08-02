@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useActionState } from "react";
 import { createLocalityAction, updateLocalityAction, type LocalityFormState } from "@/lib/actions/localities";
 import { CheckboxField, Field, FieldGroup, FormError, SelectField, TextareaField } from "./FormField";
-import SingleImageUploadField from "./SingleImageUploadField";
 import RichTextEditor from "./RichTextEditor";
 import FormTabs, { type FormTab } from "./FormTabs";
 import AmenitiesPicker, { type AmenityOption } from "./AmenitiesPicker";
@@ -108,7 +107,12 @@ export default function LocalityForm({
       </div>
 
       <div className={activeTab === "media" ? "flex flex-col gap-4" : "hidden"}>
-        <SingleImageUploadField name="coverImageUrl" label="Cover image" defaultValue={locality?.coverImageUrl} />
+        <input type="hidden" name="coverImageUrl" value={locality?.coverImageUrl ?? ""} />
+        <p className="text-xs text-muted">
+          Cover image upload now lives on the Project — Project → Media → Cover Image is the image shown on Project
+          Cards, search results and everywhere a project is listed. This locality&apos;s own existing cover image
+          (used on its locality page) is kept as-is.
+        </p>
         {locality ? (
           <p className="text-xs text-muted">A multi-image gallery is available below, after this form.</p>
         ) : (

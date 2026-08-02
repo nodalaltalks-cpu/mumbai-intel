@@ -115,7 +115,7 @@ export async function getFeaturedProjects(limit = 6) {
   const include = {
     locality: { include: { zone: true } },
     builder: true,
-    images: { orderBy: { sortOrder: "asc" as const }, take: 1 },
+    images: { where: { kind: "hero" }, orderBy: { sortOrder: "asc" as const }, take: 1 },
     configurations: { select: { bedrooms: true, carpetSqft: true, priceMinPaise: true } },
   };
 
@@ -192,7 +192,7 @@ export async function getSavedProjectsForUser(publicUserId: string) {
           brochureThumbnailUrl: true,
           locality: { select: { name: true, zone: { select: { name: true } } } },
           builder: { select: { name: true, logoUrl: true } },
-          images: { orderBy: { sortOrder: "asc" as const }, take: 1, select: { url: true } },
+          images: { where: { kind: "hero" }, orderBy: { sortOrder: "asc" as const }, take: 1, select: { url: true } },
           configurations: { select: { bedrooms: true, carpetSqft: true, priceMinPaise: true } },
         },
       },
@@ -241,7 +241,7 @@ export async function getLatestLaunches(limit = 6) {
     include: {
       locality: { include: { zone: true } },
       builder: true,
-      images: { orderBy: { sortOrder: "asc" }, take: 1 },
+      images: { where: { kind: "hero" }, orderBy: { sortOrder: "asc" }, take: 1 },
       configurations: { select: { bedrooms: true, carpetSqft: true, priceMinPaise: true } },
     },
   });
@@ -630,7 +630,7 @@ export async function getPublicProjectsPaged(filters: PublicProjectFilters) {
       include: {
         locality: { include: { zone: true } },
         builder: true,
-        images: { orderBy: { sortOrder: "asc" }, take: 1 },
+        images: { where: { kind: "hero" }, orderBy: { sortOrder: "asc" }, take: 1 },
         configurations: { select: { bedrooms: true, carpetSqft: true, priceMinPaise: true } },
       },
     }),
@@ -741,7 +741,7 @@ export async function getRelatedProjects(project: { id: string; localityId: stri
     include: {
       locality: { include: { zone: true } },
       builder: true,
-      images: { orderBy: { sortOrder: "asc" }, take: 1 },
+      images: { where: { kind: "hero" }, orderBy: { sortOrder: "asc" }, take: 1 },
       configurations: { select: { bedrooms: true, carpetSqft: true, priceMinPaise: true } },
     },
   }).then((projects) =>
@@ -944,7 +944,7 @@ export const getPublicBuilderBySlug = cache(async (slug: string) => {
       locality: { include: { zone: true } },
       city: true,
       builder: true,
-      images: { orderBy: { sortOrder: "asc" }, take: 1 },
+      images: { where: { kind: "hero" }, orderBy: { sortOrder: "asc" }, take: 1 },
       configurations: { select: { bedrooms: true, carpetSqft: true, priceMinPaise: true } },
     },
   });
@@ -1147,7 +1147,7 @@ export const getPublicLocalityBySlug = cache(async (slug: string) => {
     include: {
       locality: { include: { zone: true } },
       builder: true,
-      images: { orderBy: { sortOrder: "asc" }, take: 1 },
+      images: { where: { kind: "hero" }, orderBy: { sortOrder: "asc" }, take: 1 },
       configurations: { select: { bedrooms: true, carpetSqft: true, priceMinPaise: true } },
     },
   });

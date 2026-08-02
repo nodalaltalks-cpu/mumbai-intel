@@ -63,7 +63,7 @@ export async function getTopProjectsByActivity(limit = 6) {
     include: {
       locality: { include: { zone: true } },
       builder: true,
-      images: { orderBy: { sortOrder: "asc" }, take: 1 },
+      images: { where: { kind: "hero" }, orderBy: { sortOrder: "asc" }, take: 1 },
       configurations: { select: { bedrooms: true, carpetSqft: true, priceMinPaise: true } },
     },
   });

@@ -134,11 +134,17 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               <ul className="flex flex-col gap-2">
                 {recentViews.map((item) => (
                   <li key={item.id} className="flex items-center justify-between gap-3 rounded-sm border border-border bg-surface p-3">
-                    <ContinueResearchLink href={item.href} entityType={item.entityType} entityId={item.entityId} className="min-w-0 flex-1">
-                      <p className="truncate font-mono text-sm text-foreground hover:text-accent">{item.title}</p>
-                      <p className="truncate text-xs text-muted">
-                        {item.subtitle} · Viewed {formatRelativeTime(item.viewedAt)}
-                      </p>
+                    <ContinueResearchLink href={item.href} entityType={item.entityType} entityId={item.entityId} className="flex min-w-0 flex-1 items-center gap-3">
+                      {item.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={item.imageUrl} alt="" className="h-10 w-10 shrink-0 rounded-sm border border-border object-cover" />
+                      ) : null}
+                      <span className="min-w-0">
+                        <p className="truncate font-mono text-sm text-foreground hover:text-accent">{item.title}</p>
+                        <p className="truncate text-xs text-muted">
+                          {item.subtitle} · Viewed {formatRelativeTime(item.viewedAt)}
+                        </p>
+                      </span>
                     </ContinueResearchLink>
                     <div className="flex shrink-0 items-center gap-1.5">
                       {item.brochureUrl && item.projectSlug ? (
@@ -194,7 +200,11 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                     {wishlist.map((item) => (
                       <tr key={item.id} className="border-b border-border last:border-b-0 hover:bg-surface-raised">
                         <td className="px-3 py-2">
-                          <Link href={item.href} className="font-mono text-foreground hover:text-accent">
+                          <Link href={item.href} className="flex items-center gap-2 font-mono text-foreground hover:text-accent">
+                            {item.imageUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={item.imageUrl} alt="" className="h-8 w-8 shrink-0 rounded-sm border border-border object-cover" />
+                            ) : null}
                             {item.name}
                           </Link>
                           {item.status ? <span className="ml-1.5 rounded-sm border border-border px-1 py-0.5 text-[9px] uppercase text-muted">{item.status}</span> : null}

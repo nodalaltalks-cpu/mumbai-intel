@@ -53,7 +53,7 @@ export async function getProjectsForCompare(slugs: string[]): Promise<ComparePro
       brochureThumbnailUrl: true,
       builder: { select: { name: true } },
       locality: { select: { name: true } },
-      images: { orderBy: { sortOrder: "asc" }, take: 1, select: { url: true } },
+      images: { where: { kind: "hero" }, orderBy: { sortOrder: "asc" }, take: 1, select: { url: true } },
       configurations: { orderBy: { sortOrder: "asc" }, select: { carpetSqft: true, priceMinPaise: true, label: true } },
       _count: { select: { amenities: true } },
     },

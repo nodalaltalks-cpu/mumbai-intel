@@ -45,7 +45,7 @@ export async function getWishlistForUser(publicUserId: string): Promise<Wishlist
           include: {
             locality: true,
             builder: true,
-            images: { orderBy: { sortOrder: "asc" as const }, take: 1 },
+            images: { where: { kind: "hero" }, orderBy: { sortOrder: "asc" as const }, take: 1 },
           },
         },
       },
@@ -152,6 +152,8 @@ export interface RecentViewItem {
   brochureFileName: string | null;
   brochureThumbnailUrl: string | null;
   projectSlug: string | null;
+  /** Project cover image — only ever set for Project rows. */
+  imageUrl: string | null;
 }
 
 /** "Continue Research" — the last 25 entities a user opened, across every trackable type, newest first. */
@@ -183,6 +185,7 @@ export async function getRecentViewsForUser(publicUserId: string): Promise<Recen
             brochureFileName: true,
             brochureThumbnailUrl: true,
             locality: { select: { name: true } },
+            images: { where: { kind: "hero" }, take: 1, select: { url: true } },
           },
         })
       : Promise.resolve([]),
@@ -222,6 +225,7 @@ export async function getRecentViewsForUser(publicUserId: string): Promise<Recen
           brochureFileName: p.brochureFileName,
           brochureThumbnailUrl: p.brochureThumbnailUrl,
           projectSlug: p.slug,
+          imageUrl: p.images[0]?.url ?? null,
         };
       }
       if (entityType === "Builder") {
@@ -239,6 +243,7 @@ export async function getRecentViewsForUser(publicUserId: string): Promise<Recen
           brochureFileName: null,
           brochureThumbnailUrl: null,
           projectSlug: null,
+          imageUrl: null,
         };
       }
       if (entityType === "Locality") {
@@ -256,6 +261,7 @@ export async function getRecentViewsForUser(publicUserId: string): Promise<Recen
           brochureFileName: null,
           brochureThumbnailUrl: null,
           projectSlug: null,
+          imageUrl: null,
         };
       }
       if (entityType === "Transaction") {
@@ -273,6 +279,7 @@ export async function getRecentViewsForUser(publicUserId: string): Promise<Recen
           brochureFileName: null,
           brochureThumbnailUrl: null,
           projectSlug: null,
+          imageUrl: null,
         };
       }
       if (entityType === "MarketReport") {
@@ -288,6 +295,7 @@ export async function getRecentViewsForUser(publicUserId: string): Promise<Recen
           brochureFileName: null,
           brochureThumbnailUrl: null,
           projectSlug: null,
+          imageUrl: null,
         };
       }
       return null;

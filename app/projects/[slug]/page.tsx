@@ -63,7 +63,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   if (!project) return { title: "Project not found — NoDalalTalks" };
   const title = project.metaTitle || `${project.name} — NoDalalTalks`;
   const description = project.metaDescription || project.tagline || undefined;
-  const image = project.images[0]?.url;
+  const image = (project.images.find((i) => i.kind === "hero") ?? project.images[0])?.url;
   return {
     title,
     description,
@@ -156,12 +156,14 @@ export default async function ProjectDetailPage({
     return targetPage > 1 ? `/projects/${slug}?page=${targetPage}#transactions` : `/projects/${slug}#transactions`;
   }
 
+  const heroImage = project.images.find((i) => i.kind === "hero") ?? project.images[0] ?? null;
+
   const productSchema = {
     "@context": "https://schema.org",
     "@type": "Product",
     name: project.name,
     description: project.tagline || project.metaDescription || undefined,
-    image: project.images[0]?.url ? [project.images[0].url] : undefined,
+    image: heroImage ? [heroImage.url] : undefined,
     brand: project.builder ? { "@type": "Organization", name: project.builder.name } : undefined,
     ...(project.priceMinPaise !== null
       ? {
@@ -176,7 +178,6 @@ export default async function ProjectDetailPage({
       : {}),
   };
 
-  const heroImage = project.images.find((i) => i.kind === "hero") ?? project.images[0] ?? null;
   const galleryImages = project.images.filter((i) => i.id !== heroImage?.id);
   const floorPlanImages = project.images.filter((i) => i.kind === "floorplan");
   const masterPlanImages = project.images.filter((i) => i.kind === "masterplan");

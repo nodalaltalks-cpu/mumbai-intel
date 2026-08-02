@@ -23,7 +23,7 @@ export async function getProjectMapMarkers(): Promise<ProjectMapMarker[]> {
     include: {
       locality: true,
       builder: true,
-      images: { orderBy: { sortOrder: "asc" }, take: 1 },
+      images: { where: { kind: "hero" }, orderBy: { sortOrder: "asc" }, take: 1 },
       configurations: { select: { bedrooms: true, carpetSqft: true, priceMinPaise: true } },
     },
   });
