@@ -32,7 +32,7 @@ export default function GlobalSignInModal() {
         role="dialog"
         aria-modal="true"
         aria-label={PREMIUM_CARD_TITLE}
-        className="mi-pop-in flex w-full flex-col gap-5 rounded-t-2xl border border-border bg-surface p-6 shadow-2xl sm:max-w-sm sm:rounded-2xl sm:p-7"
+        className="mi-pop-in flex w-full max-h-[90vh] flex-col gap-5 overflow-y-auto rounded-t-2xl border border-border bg-surface p-6 shadow-2xl sm:max-w-sm sm:rounded-2xl sm:p-7"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
