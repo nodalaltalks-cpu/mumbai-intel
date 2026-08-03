@@ -29,6 +29,9 @@ import MarketSummaryCard from "@/app/components/reports/MarketSummaryCard";
 import ComparisonStat from "@/app/components/reports/ComparisonStat";
 import HistoricalTable from "@/app/components/reports/HistoricalTable";
 import RelatedSection from "@/app/components/reports/RelatedSection";
+import PremiumGate from "@/app/components/premium/PremiumGate";
+import { getPublicSession } from "@/lib/public-auth/session";
+import { gated, maskPaise, maskPricePerSqft, maskProjectBrochure, maskScore } from "@/lib/premium/mask";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +63,7 @@ export default async function ProjectReportPage({ params }: { params: Promise<{ 
   if (!project) notFound();
 
   const filters = { projectId: project.id };
-  const [priceHistory, txStats, monthlyTrend, configDistribution, related, nearbyBuilders, nearbyLocalities, baseline] = await Promise.all([
+  const [priceHistory, txStats, monthlyTrend, configDistribution, related, nearbyBuilders, nearbyLocalities, baseline, session] = await Promise.all([
     getProjectPriceHistory(project.id),
     getTransactionStats(filters),
     getTransactionMonthlyTrend(filters, 12),
@@ -69,7 +72,10 @@ export default async function ProjectReportPage({ params }: { params: Promise<{ 
     getTopBuildersForLocality(project.localityId, 4),
     getNearbyLocalities(project.localityId, 4),
     getMarketBaseline(),
+    getPublicSession(),
   ]);
+  const locked = session === null;
+  const next = `/reports/projects/${project.slug}`;
 
   const investmentScore = computeProjectInvestmentScore(project.localityInvestmentScore, project.builderOverallScore, txStats.totalTransactions);
   const otherNearbyBuilders = nearbyBuilders.filter((b) => b.slug !== project.builder?.slug);
@@ -101,8 +107,8 @@ export default async function ProjectReportPage({ params }: { params: Promise<{ 
         subtitle={`${project.locality.name}${project.builder ? ` · ${project.builder.name}` : ""} · ${STATUS_LABEL[project.status]}`}
         meta={[
           { label: "Price band", value: formatPriceBand(project.priceMinPaise, project.priceMaxPaise) },
-          { label: "Price/sqft", value: formatPricePerSqft(project.configPricePerSqftPaise) },
-          { label: "Investment score", value: investmentScore !== null ? `${investmentScore.toFixed(1)}/10` : "--" },
+          { label: "Price/sqft", value: gated(locked, formatPricePerSqft(project.configPricePerSqftPaise), maskPricePerSqft()) },
+          { label: "Investment score", value: gated(locked, investmentScore !== null ? `${investmentScore.toFixed(1)}/10` : "--", maskScore()) },
         ]}
       />
 
@@ -118,86 +124,92 @@ export default async function ProjectReportPage({ params }: { params: Promise<{ 
 
       <main id="main-content" className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-4 py-8 sm:px-6">
         <ReportSection id="summary" title="Market Summary">
-          <MarketSummaryCard summary={summary} />
+          <MarketSummaryCard summary={summary} locked={locked} />
         </ReportSection>
 
         <ReportSection id="kpis" title="Key Performance Indicators">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <StatCard label="Price band" value={formatPriceBand(project.priceMinPaise, project.priceMaxPaise)} accent />
-            <StatCard label="Price/sqft" value={formatPricePerSqft(project.configPricePerSqftPaise)} />
+            <StatCard label="Price/sqft" value={gated(locked, formatPricePerSqft(project.configPricePerSqftPaise), maskPricePerSqft())} />
             <StatCard label="Category" value={CATEGORY_LABEL[project.category]} />
-            <StatCard label="Investment score" value={investmentScore !== null ? `${investmentScore.toFixed(1)}/10` : "--"} />
+            <StatCard label="Investment score" value={gated(locked, investmentScore !== null ? `${investmentScore.toFixed(1)}/10` : "--", maskScore())} />
             <StatCard label="Construction" value={project.constructionPercent !== null ? `${project.constructionPercent}%` : "--"} />
             <StatCard label="RERA" value={project.reraNumber ? "Registered" : "Not disclosed"} />
             <StatCard label="Total transactions" value={String(txStats.totalTransactions)} />
-            <StatCard label="Avg transaction value" value={formatPaise(txStats.avgPricePaise)} />
+            <StatCard label="Avg transaction value" value={gated(locked, formatPaise(txStats.avgPricePaise), maskPaise())} />
           </div>
         </ReportSection>
 
         <ReportSection id="charts" title="Charts & Trends">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Price Trend</p>
-              <div className="mt-3">
-                <TransactionLineChart points={monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.avgPricePerSqftPaise }))} ariaLabel="Average price per square foot trend" />
+          <PremiumGate locked={locked} feature="market-analytics" next={next}>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div className="rounded-sm border border-border bg-surface p-4">
+                <p className="font-mono text-xs uppercase tracking-wide text-muted">Price Trend</p>
+                <div className="mt-3">
+                  <TransactionLineChart points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.avgPricePerSqftPaise }))} ariaLabel="Average price per square foot trend" />
+                </div>
+              </div>
+              <div className="rounded-sm border border-border bg-surface p-4">
+                <p className="font-mono text-xs uppercase tracking-wide text-muted">Transaction Volume</p>
+                <div className="mt-3">
+                  <TransactionVolumeChart points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), count: p.count }))} />
+                </div>
+              </div>
+              <div className="rounded-sm border border-border bg-surface p-4 lg:col-span-2">
+                <p className="font-mono text-xs uppercase tracking-wide text-muted">Configuration Mix</p>
+                <div className="mt-3">
+                  <ConfigurationDistribution buckets={locked ? [] : configDistribution} />
+                </div>
               </div>
             </div>
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Transaction Volume</p>
-              <div className="mt-3">
-                <TransactionVolumeChart points={monthlyTrend.map((p) => ({ month: p.month.toISOString(), count: p.count }))} />
-              </div>
-            </div>
-            <div className="rounded-sm border border-border bg-surface p-4 lg:col-span-2">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Configuration Mix</p>
-              <div className="mt-3">
-                <ConfigurationDistribution buckets={configDistribution} />
-              </div>
-            </div>
-          </div>
+          </PremiumGate>
         </ReportSection>
 
         <ReportSection id="comparisons" title="Comparisons" description="This project's price/sqft vs its locality and the Mumbai market">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <ComparisonStat
-              label="Price per sqft vs locality"
-              value={formatPricePerSqft(project.configPricePerSqftPaise)}
-              baselineLabel={`${project.locality.name} avg`}
-              baselineValue={formatPricePerSqft(project.locality.avgPricePerSqftPaise)}
-              deltaPercent={priceVsLocalityDelta}
-            />
-            <ComparisonStat
-              label="Price per sqft vs Mumbai"
-              value={formatPricePerSqft(project.configPricePerSqftPaise)}
-              baselineLabel="Mumbai avg"
-              baselineValue={formatPricePerSqft(baseline.avgPricePerSqftPaise)}
-              deltaPercent={priceVsCityDelta}
-            />
-          </div>
+          <PremiumGate locked={locked} feature="market-analytics" next={next}>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <ComparisonStat
+                label="Price per sqft vs locality"
+                value={gated(locked, formatPricePerSqft(project.configPricePerSqftPaise), maskPricePerSqft())}
+                baselineLabel={`${project.locality.name} avg`}
+                baselineValue={gated(locked, formatPricePerSqft(project.locality.avgPricePerSqftPaise), maskPricePerSqft())}
+                deltaPercent={locked ? null : priceVsLocalityDelta}
+              />
+              <ComparisonStat
+                label="Price per sqft vs Mumbai"
+                value={gated(locked, formatPricePerSqft(project.configPricePerSqftPaise), maskPricePerSqft())}
+                baselineLabel="Mumbai avg"
+                baselineValue={gated(locked, formatPricePerSqft(baseline.avgPricePerSqftPaise), maskPricePerSqft())}
+                deltaPercent={locked ? null : priceVsCityDelta}
+              />
+            </div>
+          </PremiumGate>
         </ReportSection>
 
         <ReportSection id="historical" title="Historical Data" description="Analyst-verified monthly average, independent of registered transactions">
-          <HistoricalTable
-            columnLabels={["Avg ₹/sqft"]}
-            rows={priceHistory.map((p) => ({ label: formatMonth(p.month), values: [formatPricePerSqft(p.avgPricePerSqftPaise)] }))}
-          />
+          <PremiumGate locked={locked} feature="transaction-history" next={next}>
+            <HistoricalTable
+              columnLabels={["Avg ₹/sqft"]}
+              rows={priceHistory.map((p) => ({ label: gated(locked, formatMonth(p.month), "──"), values: [gated(locked, formatPricePerSqft(p.avgPricePerSqftPaise), maskPricePerSqft())] }))}
+            />
+          </PremiumGate>
         </ReportSection>
 
         <RelatedSection id="related-projects" title="Related Projects" isEmpty={related.length === 0} emptyMessage="No related projects found yet.">
           {related.map((p) => (
-            <ProjectCard key={p.id} project={p} />
+            <ProjectCard key={p.id} project={maskProjectBrochure(p, locked)} />
           ))}
         </RelatedSection>
 
         <RelatedSection id="related-developers" title="Related Developers" isEmpty={otherNearbyBuilders.length === 0} emptyMessage="No other developers active in this locality yet.">
           {otherNearbyBuilders.map((b) => (
-            <BuilderCard key={b.slug} builder={{ slug: b.slug, name: b.name, logoUrl: b.logoUrl, overallScore: b.score, projectCount: b.projectCount }} />
+            <BuilderCard key={b.slug} builder={{ slug: b.slug, name: b.name, logoUrl: b.logoUrl, overallScore: b.score, projectCount: b.projectCount }} locked={locked} />
           ))}
         </RelatedSection>
 
         <RelatedSection id="related-localities" title="Related Localities" isEmpty={nearbyLocalities.length === 0} emptyMessage="No nearby localities published yet.">
           {nearbyLocalities.map((l) => (
-            <LocalityCard key={l.id} locality={l} />
+            <LocalityCard key={l.id} locality={l} locked={locked} />
           ))}
         </RelatedSection>
       </main>

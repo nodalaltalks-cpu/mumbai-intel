@@ -1,16 +1,43 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
-import { useState, useTransition } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { saveSearchAction } from "@/lib/actions/saved-searches";
+import SignInGateModal from "@/app/components/premium/SignInGateModal";
+
+const RESUME_PARAM = "resumeSaveSearch";
 
 /** Saves the /projects page's current filter state (its own query string, unchanged) as a named SavedSearch for the signed-in user. */
 export default function SaveSearchButton() {
   const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState("");
-  const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [gateOpen, setGateOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const resumedRef = useRef(false);
+
+  // A saved search needs a user-chosen label, so post-login "resume" reopens
+  // the label input pre-filled with what they'd typed — it doesn't silently
+  // auto-save the way Wishlist does, since the label is meaningful content.
+  useEffect(() => {
+    if (resumedRef.current) return;
+    const resumeLabel = searchParams.get(RESUME_PARAM);
+    if (resumeLabel === null) return;
+    resumedRef.current = true;
+
+    const next = new URLSearchParams(searchParams);
+    next.delete(RESUME_PARAM);
+    const nextQs = next.toString();
+    router.replace(nextQs ? `${pathname}?${nextQs}` : pathname, { scroll: false });
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- restoring UI state from a one-time URL param on mount, not derivable from render
+    setLabel(resumeLabel);
+    setOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleSave() {
     if (!label.trim()) return;
@@ -18,13 +45,19 @@ export default function SaveSearchButton() {
     startTransition(async () => {
       const result = await saveSearchAction(label, filters, false);
       if (result.error) {
-        setMessage({ text: result.error, isError: true });
+        setGateOpen(true);
         return;
       }
-      setMessage({ text: "Search saved to your dashboard.", isError: false });
+      setMessage("Search saved to your dashboard.");
       setLabel("");
       setOpen(false);
     });
+  }
+
+  function buildNext(): string {
+    const next = new URLSearchParams(searchParams);
+    next.set(RESUME_PARAM, label);
+    return `${pathname}?${next.toString()}`;
   }
 
   if (!open) {
@@ -66,7 +99,8 @@ export default function SaveSearchButton() {
       <button type="button" onClick={() => setOpen(false)} className="text-[11px] text-muted hover:text-foreground">
         Cancel
       </button>
-      {message ? <span className={`text-[11px] ${message.isError ? "text-negative" : "text-positive"}`}>{message.text}</span> : null}
+      {message ? <span className="text-[11px] text-positive">{message}</span> : null}
+      {gateOpen ? <SignInGateModal feature="save-search" next={buildNext()} onClose={() => setGateOpen(false)} /> : null}
     </div>
   );
 }

@@ -20,6 +20,7 @@ export default function LoginForm({ googleError, next }: { googleError?: string;
 
       <form action={formAction} className="flex flex-col gap-4">
         <AuthError message={state.error ?? googleError} />
+        {next ? <input type="hidden" name="next" value={next} /> : null}
         <AuthField label="Email" name="email" type="email" required autoComplete="email" placeholder="you@example.com" />
         <div className="flex flex-col gap-1.5">
           <AuthField label="Password" name="password" type="password" required autoComplete="current-password" />

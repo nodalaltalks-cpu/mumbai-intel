@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { formatPaise } from "@/lib/format";
+import { gated, maskScore } from "@/lib/premium/mask";
 
 export interface BuilderCardData {
   slug: string;
@@ -20,7 +21,8 @@ export interface BuilderCardData {
   investmentScore?: number | null;
 }
 
-export default function BuilderCard({ builder }: { builder: BuilderCardData }) {
+/** `locked` masks the Rating and Investment score tiles — project counts and "Starting from" price stay visible (same asking-price data every Project Card already shows). */
+export default function BuilderCard({ builder, locked = false }: { builder: BuilderCardData; locked?: boolean }) {
   const hasStatusCounts = builder.deliveredCount !== undefined || builder.underConstructionCount !== undefined || builder.upcomingCount !== undefined;
 
   return (
@@ -81,12 +83,14 @@ export default function BuilderCard({ builder }: { builder: BuilderCardData }) {
       <div className="mt-auto flex items-end justify-between border-t border-border pt-3">
         <div>
           <p className="text-[10px] uppercase tracking-wide text-muted">Rating</p>
-          <p className="font-mono text-sm text-foreground">{builder.overallScore != null ? `${builder.overallScore.toFixed(1)}/10` : "--"}</p>
+          <p className="font-mono text-sm text-foreground">
+            {gated(locked, builder.overallScore != null ? `${builder.overallScore.toFixed(1)}/10` : "--", maskScore())}
+          </p>
         </div>
         {builder.investmentScore !== undefined && builder.investmentScore !== null ? (
           <div className="text-center">
             <p className="text-[10px] uppercase tracking-wide text-muted">Investment</p>
-            <p className="font-mono text-sm text-accent">{builder.investmentScore.toFixed(1)}/10</p>
+            <p className="font-mono text-sm text-accent">{gated(locked, `${builder.investmentScore.toFixed(1)}/10`, maskScore())}</p>
           </div>
         ) : null}
         <div className="text-right">

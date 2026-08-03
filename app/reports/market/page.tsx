@@ -25,6 +25,9 @@ import HistoricalTable from "@/app/components/reports/HistoricalTable";
 import RelatedSection from "@/app/components/reports/RelatedSection";
 import { recordRecentViewAction } from "@/lib/actions/recent-views";
 import { MARKET_REPORT_ENTITY_ID } from "@/lib/queries/dashboard";
+import PremiumGate from "@/app/components/premium/PremiumGate";
+import { getPublicSession } from "@/lib/public-auth/session";
+import { gated, maskPricePerSqft, maskProjectBrochure } from "@/lib/premium/mask";
 
 export const metadata: Metadata = {
   title: "Market Report — NoDalalTalks",
@@ -45,7 +48,7 @@ const NAV_SECTIONS = [
 export default async function MarketReportPage() {
   await recordRecentViewAction("MarketReport", MARKET_REPORT_ENTITY_ID);
 
-  const [snapshot, priceTrend, monthlyTrend, propertyTypes, topLocalities, featuredProjects, topDevelopers] = await Promise.all([
+  const [snapshot, priceTrend, monthlyTrend, propertyTypes, topLocalities, featuredProjects, topDevelopers, session] = await Promise.all([
     getMarketSnapshot(),
     getCityPriceTrend(12),
     getTransactionMonthlyTrend({}, 12),
@@ -53,7 +56,10 @@ export default async function MarketReportPage() {
     getTopLocalitiesByActivity(6),
     getFeaturedProjects(6),
     getTopDevelopers(4),
+    getPublicSession(),
   ]);
+  const locked = session === null;
+  const next = "/reports/market";
 
   const growthPercentYoy =
     priceTrend.length >= 2 ? AnalyticsService.Market.calculateGrowthPercent(priceTrend[0].avgPricePerSqftPaise, priceTrend[priceTrend.length - 1].avgPricePerSqftPaise) : null;
@@ -78,7 +84,7 @@ export default async function MarketReportPage() {
         title="Mumbai Residential Market"
         subtitle="City-wide market intelligence, generated from live registered transaction data"
         meta={[
-          { label: "Avg price/sqft", value: formatPricePerSqft(snapshot.avgPricePerSqftPaise) },
+          { label: "Avg price/sqft", value: gated(locked, formatPricePerSqft(snapshot.avgPricePerSqftPaise), maskPricePerSqft()) },
           { label: "Live projects", value: formatCompactCount(snapshot.liveProjectsCount) },
           { label: "Transactions (90d)", value: formatCompactCount(snapshot.transactions90dCount) },
         ]}
@@ -96,7 +102,7 @@ export default async function MarketReportPage() {
 
       <main id="main-content" className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-4 py-8 sm:px-6">
         <ReportSection id="summary" title="Market Summary">
-          <MarketSummaryCard summary={summary} />
+          <MarketSummaryCard summary={summary} locked={locked} />
         </ReportSection>
 
         <ReportSection id="kpis" title="Key Performance Indicators">
@@ -106,31 +112,33 @@ export default async function MarketReportPage() {
             <StatCard label="Transactions recorded" value={formatCompactCount(snapshot.transactionsCount)} />
             <StatCard label="Transactions (90d)" value={formatCompactCount(snapshot.transactions90dCount)} />
             <StatCard label="Builders tracked" value={formatCompactCount(snapshot.buildersCount)} />
-            <StatCard label="Avg price/sqft" value={formatPricePerSqft(snapshot.avgPricePerSqftPaise)} />
+            <StatCard label="Avg price/sqft" value={gated(locked, formatPricePerSqft(snapshot.avgPricePerSqftPaise), maskPricePerSqft())} />
           </div>
         </ReportSection>
 
         <ReportSection id="charts" title="Charts & Trends">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">City Price Trend</p>
-              <div className="mt-3">
-                <TransactionLineChart points={priceTrend.map((p) => ({ month: p.month.toISOString(), value: p.avgPricePerSqftPaise }))} ariaLabel="City-wide average price per square foot" />
+          <PremiumGate locked={locked} feature="market-analytics" next={next}>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div className="rounded-sm border border-border bg-surface p-4">
+                <p className="font-mono text-xs uppercase tracking-wide text-muted">City Price Trend</p>
+                <div className="mt-3">
+                  <TransactionLineChart points={locked ? [] : priceTrend.map((p) => ({ month: p.month.toISOString(), value: p.avgPricePerSqftPaise }))} ariaLabel="City-wide average price per square foot" />
+                </div>
+              </div>
+              <div className="rounded-sm border border-border bg-surface p-4">
+                <p className="font-mono text-xs uppercase tracking-wide text-muted">Transaction Volume</p>
+                <div className="mt-3">
+                  <TransactionVolumeChart points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), count: p.count }))} />
+                </div>
+              </div>
+              <div className="rounded-sm border border-border bg-surface p-4 lg:col-span-2">
+                <p className="font-mono text-xs uppercase tracking-wide text-muted">Property Type Mix</p>
+                <div className="mt-3">
+                  <PropertyTypeDistribution buckets={locked ? [] : propertyTypes} />
+                </div>
               </div>
             </div>
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Transaction Volume</p>
-              <div className="mt-3">
-                <TransactionVolumeChart points={monthlyTrend.map((p) => ({ month: p.month.toISOString(), count: p.count }))} />
-              </div>
-            </div>
-            <div className="rounded-sm border border-border bg-surface p-4 lg:col-span-2">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Property Type Mix</p>
-              <div className="mt-3">
-                <PropertyTypeDistribution buckets={propertyTypes} />
-              </div>
-            </div>
-          </div>
+          </PremiumGate>
         </ReportSection>
 
         <ReportSection id="comparisons" title="Trending Areas" description="Ranked by registered-transaction activity">
@@ -151,7 +159,7 @@ export default async function MarketReportPage() {
                       <td className="px-3 py-2 font-mono text-muted">#{i + 1}</td>
                       <td className="px-3 py-2 font-mono text-foreground">{l.localityName}</td>
                       <td className="px-3 py-2 text-right font-mono text-muted">{l.transactionCount}</td>
-                      <td className="px-3 py-2 text-right font-mono text-muted">{formatPricePerSqft(l.avgPricePerSqftPaise)}</td>
+                      <td className="px-3 py-2 text-right font-mono text-muted">{gated(locked, formatPricePerSqft(l.avgPricePerSqftPaise), maskPricePerSqft())}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -163,18 +171,23 @@ export default async function MarketReportPage() {
         </ReportSection>
 
         <ReportSection id="historical" title="Historical Data" description="City-wide average price per square foot, last 12 months">
-          <HistoricalTable columnLabels={["Avg ₹/sqft"]} rows={priceTrend.map((p) => ({ label: formatMonth(p.month), values: [formatPricePerSqft(p.avgPricePerSqftPaise)] }))} />
+          <PremiumGate locked={locked} feature="transaction-history" next={next}>
+            <HistoricalTable
+              columnLabels={["Avg ₹/sqft"]}
+              rows={priceTrend.map((p) => ({ label: gated(locked, formatMonth(p.month), "──"), values: [gated(locked, formatPricePerSqft(p.avgPricePerSqftPaise), maskPricePerSqft())] }))}
+            />
+          </PremiumGate>
         </ReportSection>
 
         <RelatedSection id="related-projects" title="Featured Projects" isEmpty={featuredProjects.length === 0} emptyMessage="No featured projects yet.">
           {featuredProjects.map((p) => (
-            <ProjectCard key={p.id} project={p} />
+            <ProjectCard key={p.id} project={maskProjectBrochure(p, locked)} />
           ))}
         </RelatedSection>
 
         <RelatedSection id="related-developers" title="Top Developers" isEmpty={topDevelopers.length === 0} emptyMessage="No developer scores yet.">
           {topDevelopers.map((b) => (
-            <BuilderCard key={b.slug} builder={b} />
+            <BuilderCard key={b.slug} builder={b} locked={locked} />
           ))}
         </RelatedSection>
 

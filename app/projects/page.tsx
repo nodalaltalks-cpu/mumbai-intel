@@ -8,6 +8,8 @@ import ProjectCard from "@/app/components/ProjectCard";
 import Pagination from "@/app/admin/components/Pagination";
 import EmptyState from "@/app/components/ui/EmptyState";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
+import { getPublicSession } from "@/lib/public-auth/session";
+import { maskProjectBrochure } from "@/lib/premium/mask";
 
 export const metadata: Metadata = {
   title: "Projects — NoDalalTalks",
@@ -39,7 +41,7 @@ export default async function ProjectsPage({
   const params = await searchParams;
   const page = Math.max(1, Number(params.page ?? 1) || 1);
 
-  const [{ items: projects, total, totalPages }, localities, builders] = await Promise.all([
+  const [{ items: projects, total, totalPages }, localities, builders, session] = await Promise.all([
     getPublicProjectsPaged({
       q: params.q,
       localityId: params.locality,
@@ -59,7 +61,9 @@ export default async function ProjectsPage({
     }),
     getLocalitiesForSelect(),
     getBuildersForSelect(),
+    getPublicSession(),
   ]);
+  const locked = session === null;
 
   if (params.q) {
     await recordResearchEvent("SEARCH_PERFORMED", { metadata: { query: params.q } });
@@ -99,7 +103,7 @@ export default async function ProjectsPage({
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {projects.map((project) => (
-              <ProjectCard key={project.id} project={project} />
+              <ProjectCard key={project.id} project={maskProjectBrochure(project, locked)} />
             ))}
           </div>
         )}

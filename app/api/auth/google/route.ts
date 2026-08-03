@@ -1,15 +1,11 @@
 import crypto from "crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { buildGoogleAuthUrl, isGoogleSignInConfigured } from "@/lib/public-auth/google";
+import { sanitizeNextPath } from "@/lib/public-auth/next-path";
 
 export const OAUTH_STATE_COOKIE_NAME = "mi_oauth_state";
 
-/** Only same-origin relative paths are ever accepted as a post-login redirect target — rejects absolute/protocol-relative URLs to prevent open-redirect via `next`. */
-export function sanitizeNextPath(value: string | null | undefined): string {
-  if (!value) return "/";
-  if (!value.startsWith("/") || value.startsWith("//") || value.includes("://") || value.includes("\\")) return "/";
-  return value;
-}
+export { sanitizeNextPath };
 
 export async function GET(request: NextRequest) {
   if (!isGoogleSignInConfigured()) {

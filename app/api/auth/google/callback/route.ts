@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { setPublicSessionCookie } from "@/lib/public-auth/session";
 import { exchangeGoogleCode, fetchGoogleUserInfo } from "@/lib/public-auth/google";
+import { recordResearchEvent } from "@/lib/analytics/research-events";
 import { OAUTH_STATE_COOKIE_NAME, sanitizeNextPath } from "../route";
 
 function failure(origin: string, reason: string) {
@@ -33,6 +34,7 @@ export async function GET(request: NextRequest) {
     if (!profile.email) return failure(origin, "google_auth_failed");
 
     let user = await prisma.publicUser.findUnique({ where: { googleId: profile.sub } });
+    let authEvent: "LOGIN_COMPLETED" | "SIGNUP_COMPLETED" = "LOGIN_COMPLETED";
     if (user) {
       user = await prisma.publicUser.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
     } else {
@@ -61,10 +63,12 @@ export async function GET(request: NextRequest) {
             lastLoginAt: new Date(),
           },
         });
+        authEvent = "SIGNUP_COMPLETED";
       }
     }
 
     await setPublicSessionCookie({ userId: user.id, email: user.email, name: user.name, image: user.image });
+    await recordResearchEvent(authEvent, { entityType: "PublicUser", entityId: user.id, metadata: { method: "google" } });
 
     const response = NextResponse.redirect(new URL(sanitizeNextPath(expected.next), origin));
     response.cookies.delete(OAUTH_STATE_COOKIE_NAME);

@@ -1,30 +1,63 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toggleSavedProjectAction } from "@/lib/actions/saved-projects";
+import SignInGateModal from "@/app/components/premium/SignInGateModal";
+
+const RESUME_PARAM = "resumeSave";
 
 export default function SaveProjectButton({ projectId, initialSaved }: { projectId: string; initialSaved: boolean }) {
   const [saved, setSaved] = useState(initialSaved);
-  const [error, setError] = useState<string | null>(null);
+  const [gateOpen, setGateOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const resumedRef = useRef(false);
 
-  function handleClick() {
-    setError(null);
+  function toggle() {
     startTransition(async () => {
       const result = await toggleSavedProjectAction(projectId);
       if (result.error) {
-        setError(result.error);
+        setGateOpen(true);
         return;
       }
       setSaved(result.saved);
     });
   }
 
+  // Auto-completes the save once, right after landing back here signed-in —
+  // the redirect target set below encodes exactly which project to resume.
+  useEffect(() => {
+    if (resumedRef.current) return;
+    const marker = searchParams.get(RESUME_PARAM);
+    if (marker !== projectId || saved) return;
+    resumedRef.current = true;
+
+    const next = new URLSearchParams(searchParams);
+    next.delete(RESUME_PARAM);
+    const nextQs = next.toString();
+    router.replace(nextQs ? `${pathname}?${nextQs}` : pathname, { scroll: false });
+
+    startTransition(async () => {
+      const result = await toggleSavedProjectAction(projectId);
+      if (!result.error) setSaved(result.saved);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function buildNext(): string {
+    const next = new URLSearchParams(searchParams);
+    next.set(RESUME_PARAM, projectId);
+    return `${pathname}?${next.toString()}`;
+  }
+
   return (
     <div className="flex flex-col items-start gap-1">
       <button
         type="button"
-        onClick={handleClick}
+        onClick={toggle}
         disabled={isPending}
         aria-pressed={saved}
         className={`rounded-sm border px-2 py-1 text-[10px] font-mono uppercase tracking-wide transition-colors disabled:opacity-60 ${
@@ -33,7 +66,7 @@ export default function SaveProjectButton({ projectId, initialSaved }: { project
       >
         {saved ? "Saved" : "Save"}
       </button>
-      {error ? <span className="text-[10px] text-negative">{error}</span> : null}
+      {gateOpen ? <SignInGateModal feature="wishlist" next={buildNext()} onClose={() => setGateOpen(false)} /> : null}
     </div>
   );
 }

@@ -4,13 +4,18 @@
  * Mirrors lib/track-brochure.ts's sendBeacon-with-fetch-fallback shape so
  * the write survives the click's navigation instead of racing it.
  */
-export type ClientResearchEventType = "CONTINUE_RESEARCH_CLICKED";
+export type ClientResearchEventType = "CONTINUE_RESEARCH_CLICKED" | "LOCKED_FEATURE_CLICKED";
 
-export function trackResearchEvent(eventType: ClientResearchEventType, entityType?: string, entityId?: string): void {
+export function trackResearchEvent(
+  eventType: ClientResearchEventType,
+  entityType?: string,
+  entityId?: string,
+  metadata?: Record<string, unknown>
+): void {
   if (typeof window === "undefined") return;
 
   try {
-    const payload = JSON.stringify({ eventType, entityType, entityId });
+    const payload = JSON.stringify({ eventType, entityType, entityId, metadata });
     if (navigator.sendBeacon) {
       navigator.sendBeacon("/api/analytics/research", new Blob([payload], { type: "application/json" }));
     } else {

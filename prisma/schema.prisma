@@ -1275,6 +1275,9 @@ enum ResearchEventType {
   NEWSLETTER_VIEWED
   NEWSLETTER_SUBSCRIBED
   NEWSLETTER_UNSUBSCRIBED
+  LOCKED_FEATURE_CLICKED
+  SIGNUP_COMPLETED
+  LOGIN_COMPLETED
 }
 
 /// Site-wide "research intent" log — a deliberately generic single table

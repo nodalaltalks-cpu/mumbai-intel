@@ -36,9 +36,12 @@ export interface ProjectCardData {
   constructionPercent?: number | null;
   dataSource: DataSource;
   imageUrl?: string | null;
+  /** Null when guest-locked (see lib/premium/mask.ts's maskProjectBrochure) — use `brochureAvailable` for the "does a brochure exist" check, never truthiness of this field, since it's intentionally null for locked guests even when a brochure exists. */
   brochureUrl?: string | null;
   brochureFileName?: string | null;
   brochureThumbnailUrl?: string | null;
+  /** Always accurate regardless of lock state — safe to expose, preserves the "Download Official Brochure" affordance for guests. */
+  brochureAvailable?: boolean;
 }
 
 function initials(name: string): string {
@@ -125,7 +128,7 @@ export default function ProjectCard({ project }: { project: ProjectCardData }) {
               >
                 {SOURCE_LABEL[project.dataSource]}
               </span>
-              {project.brochureUrl ? (
+              {project.brochureAvailable ? (
                 <span className="w-fit rounded-sm border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider text-accent">
                   📄 Brochure available
                 </span>
@@ -152,10 +155,10 @@ export default function ProjectCard({ project }: { project: ProjectCardData }) {
           className="absolute bottom-2 right-2 z-10 transition-opacity md:opacity-0 md:group-hover:opacity-100"
         />
 
-        {project.brochureUrl ? (
+        {project.brochureAvailable ? (
           <BrochureDownloadLink
             slug={project.slug}
-            brochureUrl={project.brochureUrl}
+            brochureUrl={project.brochureUrl ?? null}
             brochureFileName={project.brochureFileName}
             className="absolute bottom-2 left-2 z-10 rounded-sm border border-border bg-background/80 px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-wide text-muted backdrop-blur transition-opacity md:opacity-0 md:hover:border-accent md:hover:text-accent md:group-hover:opacity-100"
           >
@@ -251,10 +254,10 @@ function QuickViewModal({ project, onClose }: { project: ProjectCardData; onClos
             <Button href={`/projects/${project.slug}`} size="sm" fullWidth>
               Open full details
             </Button>
-            {project.brochureUrl && !project.brochureThumbnailUrl ? (
+            {project.brochureAvailable && !project.brochureThumbnailUrl ? (
               <BrochureDownloadLink
                 slug={project.slug}
-                brochureUrl={project.brochureUrl}
+                brochureUrl={project.brochureUrl ?? null}
                 brochureFileName={project.brochureFileName}
                 className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-border bg-transparent px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:border-accent hover:text-accent"
               >
@@ -262,10 +265,10 @@ function QuickViewModal({ project, onClose }: { project: ProjectCardData; onClos
               </BrochureDownloadLink>
             ) : null}
           </div>
-          {project.brochureUrl && project.brochureThumbnailUrl ? (
+          {project.brochureAvailable && project.brochureThumbnailUrl ? (
             <BrochureDownloadLink
               slug={project.slug}
-              brochureUrl={project.brochureUrl}
+              brochureUrl={project.brochureUrl ?? null}
               brochureFileName={project.brochureFileName}
               className="flex items-center gap-3 rounded-sm border border-accent/30 bg-accent/5 p-2.5 transition-colors hover:bg-accent/10"
             >

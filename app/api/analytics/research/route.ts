@@ -3,12 +3,13 @@ import { getOrCreateAnonSessionId } from "@/lib/analytics/session-id";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
 import type { ResearchEventType } from "@prisma/client";
 
-const CLIENT_TRIGGERABLE_EVENT_TYPES: ResearchEventType[] = ["CONTINUE_RESEARCH_CLICKED"];
+const CLIENT_TRIGGERABLE_EVENT_TYPES: ResearchEventType[] = ["CONTINUE_RESEARCH_CLICKED", "LOCKED_FEATURE_CLICKED"];
 
 interface ResearchTrackBody {
   eventType?: string;
   entityType?: string;
   entityId?: string;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false }, { status: 400 });
   }
 
-  const { eventType, entityType, entityId } = body;
+  const { eventType, entityType, entityId, metadata } = body;
   if (!eventType || !CLIENT_TRIGGERABLE_EVENT_TYPES.includes(eventType as ResearchEventType)) {
     return NextResponse.json({ ok: false, error: "Invalid eventType" }, { status: 400 });
   }
@@ -37,6 +38,7 @@ export async function POST(req: NextRequest) {
     entityType: entityType as "Project" | "Builder" | "Locality" | "PublicUser" | undefined,
     entityId,
     sessionId,
+    metadata,
   });
 
   return NextResponse.json({ ok: true });

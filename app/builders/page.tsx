@@ -6,6 +6,7 @@ import BuilderCard from "@/app/components/BuilderCard";
 import BuilderFilters from "@/app/components/BuilderFilters";
 import Pagination from "@/app/admin/components/Pagination";
 import EmptyState from "@/app/components/ui/EmptyState";
+import { getPublicSession } from "@/lib/public-auth/session";
 
 export const metadata: Metadata = {
   title: "Developers — NoDalalTalks",
@@ -29,7 +30,7 @@ export default async function BuildersPage({ searchParams }: { searchParams: Pro
   const params = await searchParams;
   const page = Math.max(1, Number(params.page ?? 1) || 1);
 
-  const [{ items: builders, total, totalPages }, cities] = await Promise.all([
+  const [{ items: builders, total, totalPages }, cities, session] = await Promise.all([
     getPublicBuildersPaged({
       q: params.q,
       cityId: params.city,
@@ -42,7 +43,9 @@ export default async function BuildersPage({ searchParams }: { searchParams: Pro
       pageSize: 12,
     }),
     getCitiesForSelect(),
+    getPublicSession(),
   ]);
+  const locked = session === null;
 
   function buildHref(targetPage: number) {
     const qs = new URLSearchParams();
@@ -70,7 +73,7 @@ export default async function BuildersPage({ searchParams }: { searchParams: Pro
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {builders.map((builder) => (
-              <BuilderCard key={builder.id} builder={builder} />
+              <BuilderCard key={builder.id} builder={builder} locked={locked} />
             ))}
           </div>
         )}

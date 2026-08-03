@@ -6,6 +6,7 @@ import LocalityCard from "@/app/components/LocalityCard";
 import Pagination from "@/app/admin/components/Pagination";
 import PublicSearchBar from "@/app/components/PublicSearchBar";
 import EmptyState from "@/app/components/ui/EmptyState";
+import { getPublicSession } from "@/lib/public-auth/session";
 
 export const metadata: Metadata = {
   title: "Localities — NoDalalTalks",
@@ -29,12 +30,16 @@ export default async function LocalitiesPage({
   const params = await searchParams;
   const page = Math.max(1, Number(params.page ?? 1) || 1);
 
-  const { items: localities, total, totalPages } = await getPublicLocalitiesPaged({
-    q: params.q,
-    sortBy: params.sort,
-    page,
-    pageSize: 12,
-  });
+  const [{ items: localities, total, totalPages }, session] = await Promise.all([
+    getPublicLocalitiesPaged({
+      q: params.q,
+      sortBy: params.sort,
+      page,
+      pageSize: 12,
+    }),
+    getPublicSession(),
+  ]);
+  const locked = session === null;
 
   function buildHref(targetPage: number) {
     const qs = new URLSearchParams();
@@ -63,7 +68,7 @@ export default async function LocalitiesPage({
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {localities.map((locality) => (
-              <LocalityCard key={locality.id} locality={locality} />
+              <LocalityCard key={locality.id} locality={locality} locked={locked} />
             ))}
           </div>
         )}

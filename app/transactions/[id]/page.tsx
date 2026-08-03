@@ -21,6 +21,9 @@ import TransactionTable from "@/app/components/TransactionTable";
 import { Fact } from "@/app/components/ui/StatCard";
 import Breadcrumbs from "@/app/components/Breadcrumbs";
 import { recordRecentViewAction } from "@/lib/actions/recent-views";
+import PremiumGate from "@/app/components/premium/PremiumGate";
+import { getPublicSession } from "@/lib/public-auth/session";
+import { gated, maskPaise, maskPricePerSqft } from "@/lib/premium/mask";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +48,9 @@ export default async function TransactionDetailPage({ params }: { params: Promis
 
   await recordRecentViewAction("Transaction", tx.id);
 
-  const { history, similar } = await getRelatedTransactions(tx);
+  const [{ history, similar }, session] = await Promise.all([getRelatedTransactions(tx), getPublicSession()]);
+  const locked = session === null;
+  const next = `/transactions/${tx.id}`;
 
   return (
     <div className="flex min-h-screen flex-1 flex-col bg-background">
@@ -73,7 +78,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
           </div>
           <div className="text-right">
             <p className="text-[10px] uppercase tracking-wide text-muted">Transaction value</p>
-            <p className="font-mono text-3xl text-accent">{formatPaise(tx.valuePaise)}</p>
+            <p className="font-mono text-3xl text-accent">{gated(locked, formatPaise(tx.valuePaise), maskPaise())}</p>
             <p className="text-xs text-muted">{formatDate(tx.registrationDate)}</p>
           </div>
         </div>
@@ -88,7 +93,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
             <Fact label="Built-up area" value={formatSqft(tx.builtUpSqft)} />
             <Fact label="Floor" value={tx.floor ?? "--"} />
             <Fact label="Tower / Unit" value={[tx.tower, tx.unitLabel].filter(Boolean).join(" / ") || "--"} />
-            <Fact label="Price / sqft" value={formatPricePerSqft(tx.pricePerSqftPaise)} accent />
+            <Fact label="Price / sqft" value={gated(locked, formatPricePerSqft(tx.pricePerSqftPaise), maskPricePerSqft())} accent />
             <Fact label="Buyer type" value={tx.buyerType ? BUYER_TYPE_LABEL[tx.buyerType as BuyerTypeValue] : "--"} />
             <Fact label="Registration no." value={tx.sourceRef ?? "--"} />
             <Fact label="Property type" value={tx.propertyCategory ? CATEGORY_LABEL[tx.propertyCategory as PropertyCategory] : "--"} />
@@ -110,7 +115,9 @@ export default async function TransactionDetailPage({ params }: { params: Promis
             <h2 className="font-mono text-lg font-semibold text-foreground">Historical Transactions in {tx.projectName}</h2>
             {history.length > 0 ? (
               <div className="mt-3">
-                <TransactionTable transactions={history} />
+                <PremiumGate locked={locked} feature="transaction-history" next={next}>
+                  <TransactionTable transactions={history} locked={locked} />
+                </PremiumGate>
               </div>
             ) : (
               <p className="mt-3 text-sm text-muted">No other registered transactions for this project yet.</p>
@@ -122,7 +129,9 @@ export default async function TransactionDetailPage({ params }: { params: Promis
           <h2 className="font-mono text-lg font-semibold text-foreground">Similar Nearby Transactions</h2>
           {similar.length > 0 ? (
             <div className="mt-3">
-              <TransactionTable transactions={similar} />
+              <PremiumGate locked={locked} feature="transaction-history" next={next}>
+                <TransactionTable transactions={similar} locked={locked} />
+              </PremiumGate>
             </div>
           ) : (
             <p className="mt-3 text-sm text-muted">No similar nearby transactions recorded yet.</p>

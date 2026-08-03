@@ -1,10 +1,12 @@
 import { getRecentlyActiveDevelopers } from "@/lib/queries";
+import { getPublicSession } from "@/lib/public-auth/session";
 import BuilderCard from "./BuilderCard";
 import SectionHeading from "./ui/SectionHeading";
 import EmptyState from "./ui/EmptyState";
 
 export default async function RecentlyActiveDevelopers() {
-  const builders = await getRecentlyActiveDevelopers(4);
+  const [builders, session] = await Promise.all([getRecentlyActiveDevelopers(4), getPublicSession()]);
+  const locked = session === null;
 
   return (
     <section className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
@@ -15,7 +17,7 @@ export default async function RecentlyActiveDevelopers() {
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {builders.map((builder) => (
-            <BuilderCard key={builder.id} builder={builder} />
+            <BuilderCard key={builder.id} builder={builder} locked={locked} />
           ))}
         </div>
       )}

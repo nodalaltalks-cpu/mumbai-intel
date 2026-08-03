@@ -6,6 +6,9 @@ import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 import SectionHeading from "@/app/components/ui/SectionHeading";
 import EmptyState from "@/app/components/ui/EmptyState";
+import PremiumGate from "@/app/components/premium/PremiumGate";
+import { getPublicSession } from "@/lib/public-auth/session";
+import { gated, maskPercent, maskPricePerSqft, maskScore } from "@/lib/premium/mask";
 
 export const metadata: Metadata = {
   title: "Market Data — NoDalalTalks",
@@ -14,11 +17,14 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function MarketDataPage() {
-  const [priceTrend, localitySnapshot, builderLeaderboard] = await Promise.all([
+  const [priceTrend, localitySnapshot, builderLeaderboard, session] = await Promise.all([
     getCityPriceTrend(12),
     getPublicLocalityMarketSnapshot(),
     getPublicBuilderTrustLeaderboard(10),
+    getPublicSession(),
   ]);
+  const locked = session === null;
+  const next = "/market-data";
 
   return (
     <div className="flex min-h-screen flex-1 flex-col bg-background">
@@ -33,24 +39,26 @@ export default async function MarketDataPage() {
         <section>
           <SectionHeading title="Mumbai Price Trend" subtitle="Average ₹/sqft across registered transactions, last 12 months" />
           {priceTrend.length > 0 ? (
-            <div className="overflow-x-auto rounded-sm border border-border">
-              <table className="w-full min-w-[420px] border-collapse text-left text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-surface text-[10px] uppercase tracking-wide text-muted">
-                    <th className="px-3 py-2 font-medium">Month</th>
-                    <th className="px-3 py-2 font-medium text-right">Avg ₹/sqft</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {priceTrend.map((point, i) => (
-                    <tr key={i} className="border-b border-border last:border-b-0">
-                      <td className="px-3 py-2 font-mono text-foreground">{formatMonth(point.month)}</td>
-                      <td className="px-3 py-2 text-right font-mono text-muted">{formatPricePerSqft(point.avgPricePerSqftPaise)}</td>
+            <PremiumGate locked={locked} feature="market-analytics" next={next}>
+              <div className="overflow-x-auto rounded-sm border border-border">
+                <table className="w-full min-w-[420px] border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-surface text-[10px] uppercase tracking-wide text-muted">
+                      <th className="px-3 py-2 font-medium">Month</th>
+                      <th className="px-3 py-2 font-medium text-right">Avg ₹/sqft</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {priceTrend.map((point, i) => (
+                      <tr key={i} className="border-b border-border last:border-b-0">
+                        <td className="px-3 py-2 font-mono text-foreground">{gated(locked, formatMonth(point.month), "──")}</td>
+                        <td className="px-3 py-2 text-right font-mono text-muted">{gated(locked, formatPricePerSqft(point.avgPricePerSqftPaise), maskPricePerSqft())}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </PremiumGate>
           ) : (
             <EmptyState title="No price history yet" message="City-wide price trend appears once transactions are recorded." />
           )}
@@ -59,32 +67,36 @@ export default async function MarketDataPage() {
         <section>
           <SectionHeading title="Locality Benchmarks" subtitle="Average price, rental yield and YoY growth by locality" viewAllHref="/localities" />
           {localitySnapshot.length > 0 ? (
-            <div className="overflow-x-auto rounded-sm border border-border">
-              <table className="w-full min-w-[560px] border-collapse text-left text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-surface text-[10px] uppercase tracking-wide text-muted">
-                    <th className="px-3 py-2 font-medium">Locality</th>
-                    <th className="px-3 py-2 font-medium text-right">Avg ₹/sqft</th>
-                    <th className="px-3 py-2 font-medium text-right">Rental yield</th>
-                    <th className="px-3 py-2 font-medium text-right">YoY growth</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {localitySnapshot.map((l) => (
-                    <tr key={l.id} className="border-b border-border last:border-b-0 hover:bg-surface-raised">
-                      <td className="px-3 py-2">
-                        <Link href={`/localities/${l.slug}`} className="font-mono text-foreground hover:text-accent">
-                          {l.name}
-                        </Link>
-                      </td>
-                      <td className="px-3 py-2 text-right font-mono text-muted">{formatPricePerSqft(l.avgPricePerSqftPaise)}</td>
-                      <td className="px-3 py-2 text-right font-mono text-muted">{l.rentalYieldPercent !== null ? `${l.rentalYieldPercent}%` : "--"}</td>
-                      <td className="px-3 py-2 text-right font-mono text-muted">{formatSignedPercent(l.growthPercentYoy)}</td>
+            <PremiumGate locked={locked} feature="market-analytics" next={next}>
+              <div className="overflow-x-auto rounded-sm border border-border">
+                <table className="w-full min-w-[560px] border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-surface text-[10px] uppercase tracking-wide text-muted">
+                      <th className="px-3 py-2 font-medium">Locality</th>
+                      <th className="px-3 py-2 font-medium text-right">Avg ₹/sqft</th>
+                      <th className="px-3 py-2 font-medium text-right">Rental yield</th>
+                      <th className="px-3 py-2 font-medium text-right">YoY growth</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {localitySnapshot.map((l) => (
+                      <tr key={l.id} className="border-b border-border last:border-b-0 hover:bg-surface-raised">
+                        <td className="px-3 py-2">
+                          <Link href={`/localities/${l.slug}`} className="font-mono text-foreground hover:text-accent">
+                            {l.name}
+                          </Link>
+                        </td>
+                        <td className="px-3 py-2 text-right font-mono text-muted">{gated(locked, formatPricePerSqft(l.avgPricePerSqftPaise), maskPricePerSqft())}</td>
+                        <td className="px-3 py-2 text-right font-mono text-muted">
+                          {gated(locked, l.rentalYieldPercent !== null ? `${l.rentalYieldPercent}%` : "--", maskPercent())}
+                        </td>
+                        <td className="px-3 py-2 text-right font-mono text-muted">{gated(locked, formatSignedPercent(l.growthPercentYoy), maskPercent())}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </PremiumGate>
           ) : (
             <EmptyState title="No locality market data yet" />
           )}
@@ -93,30 +105,32 @@ export default async function MarketDataPage() {
         <section>
           <SectionHeading title="Builder Trust Leaderboard" subtitle="Ranked by overall delivery track record score" viewAllHref="/builders" />
           {builderLeaderboard.length > 0 ? (
-            <div className="overflow-x-auto rounded-sm border border-border">
-              <table className="w-full min-w-[400px] border-collapse text-left text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-surface text-[10px] uppercase tracking-wide text-muted">
-                    <th className="px-3 py-2 font-medium">Rank</th>
-                    <th className="px-3 py-2 font-medium">Builder</th>
-                    <th className="px-3 py-2 font-medium text-right">Trust score</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {builderLeaderboard.map((b, i) => (
-                    <tr key={b.id} className="border-b border-border last:border-b-0 hover:bg-surface-raised">
-                      <td className="px-3 py-2 font-mono text-muted">#{i + 1}</td>
-                      <td className="px-3 py-2">
-                        <Link href={`/builders/${b.slug}`} className="font-mono text-foreground hover:text-accent">
-                          {b.name}
-                        </Link>
-                      </td>
-                      <td className="px-3 py-2 text-right font-mono text-accent">{b.score.toFixed(1)}/10</td>
+            <PremiumGate locked={locked} feature="market-analytics" next={next}>
+              <div className="overflow-x-auto rounded-sm border border-border">
+                <table className="w-full min-w-[400px] border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-surface text-[10px] uppercase tracking-wide text-muted">
+                      <th className="px-3 py-2 font-medium">Rank</th>
+                      <th className="px-3 py-2 font-medium">Builder</th>
+                      <th className="px-3 py-2 font-medium text-right">Trust score</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {builderLeaderboard.map((b, i) => (
+                      <tr key={b.id} className="border-b border-border last:border-b-0 hover:bg-surface-raised">
+                        <td className="px-3 py-2 font-mono text-muted">#{i + 1}</td>
+                        <td className="px-3 py-2">
+                          <Link href={`/builders/${b.slug}`} className="font-mono text-foreground hover:text-accent">
+                            {b.name}
+                          </Link>
+                        </td>
+                        <td className="px-3 py-2 text-right font-mono text-accent">{gated(locked, `${b.score.toFixed(1)}/10`, maskScore())}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </PremiumGate>
           ) : (
             <EmptyState title="No builder scores yet" />
           )}

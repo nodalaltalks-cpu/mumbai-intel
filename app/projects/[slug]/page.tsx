@@ -16,6 +16,8 @@ import {
 } from "@/lib/queries";
 import { formatBytes, formatDate, formatMonth, formatPaise, formatPriceBand, formatPricePerSqft } from "@/lib/format";
 import BrochureDownloadLink from "@/app/components/BrochureDownloadLink";
+import PremiumGate from "@/app/components/premium/PremiumGate";
+import { gated, maskPaise, maskPricePerSqft, maskProjectBrochure } from "@/lib/premium/mask";
 import { recordBrochureViewed } from "@/lib/analytics/brochure-events";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
 import {
@@ -143,6 +145,7 @@ export default async function ProjectDetailPage({
     getPublicSession(),
   ]);
 
+  const locked = publicSession === null;
   const investmentScore = computeProjectInvestmentScore(project.localityInvestmentScore, project.builderOverallScore, txStats.totalTransactions);
   const latestRegistration = latestTx[0]?.registrationDate ?? null;
   const latestTransactionPricePaise = latestTx[0]?.valuePaise ?? null;
@@ -236,8 +239,8 @@ export default async function ProjectDetailPage({
             {project.brochureUrl ? (
               <BrochureDownloadLink
                 slug={project.slug}
-                brochureUrl={project.brochureUrl}
-                brochureFileName={project.brochureFileName}
+                brochureUrl={locked ? null : project.brochureUrl}
+                brochureFileName={locked ? null : project.brochureFileName}
                 className="flex items-center gap-1.5 rounded-sm border border-accent/40 bg-accent/10 px-2.5 py-1.5 text-[11px] font-mono uppercase tracking-wide text-accent transition-colors hover:bg-accent/20"
               >
                 📄 Download Brochure
@@ -343,51 +346,56 @@ export default async function ProjectDetailPage({
         <section id="market" className="scroll-mt-32">
           <h2 className="font-mono text-lg font-semibold text-foreground">Market Snapshot</h2>
           <div className="mt-3">
-            <ProjectMarketSnapshot
-              stats={txStats}
-              startingPricePaise={project.priceMinPaise !== null ? Number(project.priceMinPaise) : null}
-              pricePerSqftPaise={project.configPricePerSqftPaise}
-              rentalYieldPercent={project.localityRentalYieldPercent}
-              investmentScore={investmentScore}
-            />
+            <PremiumGate locked={locked} feature="market-analytics" next={`/projects/${project.slug}`}>
+              <ProjectMarketSnapshot
+                stats={txStats}
+                startingPricePaise={project.priceMinPaise !== null ? Number(project.priceMinPaise) : null}
+                pricePerSqftPaise={project.configPricePerSqftPaise}
+                rentalYieldPercent={project.localityRentalYieldPercent}
+                investmentScore={investmentScore}
+                locked={locked}
+              />
+            </PremiumGate>
           </div>
         </section>
 
         {/* Charts */}
         <section id="charts" className="scroll-mt-32">
           <h2 className="font-mono text-lg font-semibold text-foreground">Charts</h2>
-          <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Price Trend</p>
-              <div className="mt-3">
-                <TransactionLineChart
-                  points={monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.avgPricePerSqftPaise }))}
-                  ariaLabel="Average price per square foot trend"
-                />
+          <PremiumGate locked={locked} feature="market-analytics" next={`/projects/${project.slug}`} className="mt-3">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div className="rounded-sm border border-border bg-surface p-4">
+                <p className="font-mono text-xs uppercase tracking-wide text-muted">Price Trend</p>
+                <div className="mt-3">
+                  <TransactionLineChart
+                    points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.avgPricePerSqftPaise }))}
+                    ariaLabel="Average price per square foot trend"
+                  />
+                </div>
+              </div>
+              <div className="rounded-sm border border-border bg-surface p-4">
+                <p className="font-mono text-xs uppercase tracking-wide text-muted">Transaction Trend</p>
+                <div className="mt-3">
+                  <TransactionVolumeChart points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), count: p.count }))} />
+                </div>
+              </div>
+              <div className="rounded-sm border border-border bg-surface p-4">
+                <p className="font-mono text-xs uppercase tracking-wide text-muted">Sales Volume</p>
+                <div className="mt-3">
+                  <TransactionLineChart
+                    points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.totalValuePaise }))}
+                    ariaLabel="Monthly sales volume"
+                  />
+                </div>
+              </div>
+              <div className="rounded-sm border border-border bg-surface p-4">
+                <p className="font-mono text-xs uppercase tracking-wide text-muted">Configuration Distribution</p>
+                <div className="mt-3">
+                  <ConfigurationDistribution buckets={locked ? [] : configDistribution} />
+                </div>
               </div>
             </div>
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Transaction Trend</p>
-              <div className="mt-3">
-                <TransactionVolumeChart points={monthlyTrend.map((p) => ({ month: p.month.toISOString(), count: p.count }))} />
-              </div>
-            </div>
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Sales Volume</p>
-              <div className="mt-3">
-                <TransactionLineChart
-                  points={monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.totalValuePaise }))}
-                  ariaLabel="Monthly sales volume"
-                />
-              </div>
-            </div>
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Configuration Distribution</p>
-              <div className="mt-3">
-                <ConfigurationDistribution buckets={configDistribution} />
-              </div>
-            </div>
-          </div>
+          </PremiumGate>
         </section>
 
         {/* Configurations */}
@@ -605,23 +613,27 @@ export default async function ProjectDetailPage({
           <h2 className="font-mono text-lg font-semibold text-foreground">Curated Price History</h2>
           <p className="mt-1 text-xs text-muted">Analyst-verified monthly average, independent of registered transactions</p>
           {priceHistory.length > 0 ? (
-            <div className="mt-3 overflow-x-auto rounded-sm border border-border">
-              <table className="w-full min-w-[400px] border-collapse text-left text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-surface text-[10px] uppercase tracking-wide text-muted">
-                    <th className="px-3 py-2 font-medium">Month</th>
-                    <th className="px-3 py-2 font-medium text-right">Avg ₹/sqft</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {priceHistory.map((point, i) => (
-                    <tr key={i} className="border-b border-border last:border-b-0">
-                      <td className="px-3 py-2 font-mono text-foreground">{formatMonth(point.month)}</td>
-                      <td className="px-3 py-2 text-right font-mono text-muted">{formatPricePerSqft(point.avgPricePerSqftPaise)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="mt-3">
+              <PremiumGate locked={locked} feature="transaction-history" next={`/projects/${project.slug}`}>
+                <div className="overflow-x-auto rounded-sm border border-border">
+                  <table className="w-full min-w-[400px] border-collapse text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-border bg-surface text-[10px] uppercase tracking-wide text-muted">
+                        <th className="px-3 py-2 font-medium">Month</th>
+                        <th className="px-3 py-2 font-medium text-right">Avg ₹/sqft</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {priceHistory.map((point, i) => (
+                        <tr key={i} className="border-b border-border last:border-b-0">
+                          <td className="px-3 py-2 font-mono text-foreground">{gated(locked, formatMonth(point.month), "──")}</td>
+                          <td className="px-3 py-2 text-right font-mono text-muted">{gated(locked, formatPricePerSqft(point.avgPricePerSqftPaise), maskPricePerSqft())}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </PremiumGate>
             </div>
           ) : (
             <p className="mt-3 text-sm text-muted">No price history recorded yet.</p>
@@ -639,19 +651,23 @@ export default async function ProjectDetailPage({
             ) : null}
           </div>
 
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <StatCard label="Latest transaction price" value={formatPaise(latestTransactionPricePaise)} accent size="md" />
-            <StatCard label="Latest price / sqft" value={formatPricePerSqft(latestTransactionPricePerSqftPaise)} accent size="md" />
-            <StatCard label="Latest registration" value={latestRegistration ? formatDate(latestRegistration) : "--"} size="md" />
-            <StatCard label="Highest sale" value={formatPaise(txStats.highestPricePaise)} size="md" />
-            <StatCard label="Lowest sale" value={formatPaise(txStats.lowestPricePaise)} size="md" />
-            <StatCard label="Total transactions" value={String(totalTransactions)} size="md" />
-          </div>
+          <PremiumGate locked={locked} feature="transaction-history" next={`/projects/${project.slug}`} className="mt-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              <StatCard label="Latest transaction price" value={gated(locked, formatPaise(latestTransactionPricePaise), maskPaise())} accent size="md" />
+              <StatCard label="Latest price / sqft" value={gated(locked, formatPricePerSqft(latestTransactionPricePerSqftPaise), maskPricePerSqft())} accent size="md" />
+              <StatCard label="Latest registration" value={latestRegistration ? formatDate(latestRegistration) : "--"} size="md" />
+              <StatCard label="Highest sale" value={gated(locked, formatPaise(txStats.highestPricePaise), maskPaise())} size="md" />
+              <StatCard label="Lowest sale" value={gated(locked, formatPaise(txStats.lowestPricePaise), maskPaise())} size="md" />
+              <StatCard label="Total transactions" value={String(totalTransactions)} size="md" />
+            </div>
+          </PremiumGate>
 
           <h3 className="mt-6 font-mono text-sm font-semibold text-foreground">Transaction History</h3>
           {transactions.length > 0 ? (
             <div className="mt-3 flex flex-col gap-4">
-              <TransactionTable transactions={transactions} />
+              <PremiumGate locked={locked} feature="transaction-history" next={`/projects/${project.slug}`}>
+                <TransactionTable transactions={transactions} locked={locked} />
+              </PremiumGate>
               <Pagination page={page} totalPages={totalPages} total={totalTransactions} buildHref={buildTxHref} />
             </div>
           ) : (
@@ -735,7 +751,7 @@ export default async function ProjectDetailPage({
               <h2 className="font-mono text-lg font-semibold text-foreground">Nearby Projects</h2>
               <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {related.map((p) => (
-                  <ProjectCard key={p.id} project={p} />
+                  <ProjectCard key={p.id} project={maskProjectBrochure(p, locked)} />
                 ))}
               </div>
             </div>
@@ -749,6 +765,7 @@ export default async function ProjectDetailPage({
                   <BuilderCard
                     key={b.slug}
                     builder={{ slug: b.slug, name: b.name, logoUrl: b.logoUrl, overallScore: b.score, projectCount: b.projectCount }}
+                    locked={locked}
                   />
                 ))}
               </div>
@@ -762,7 +779,7 @@ export default async function ProjectDetailPage({
             {nearbyLocalities.length > 0 ? (
               <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {nearbyLocalities.map((l) => (
-                  <LocalityCard key={l.id} locality={l} />
+                  <LocalityCard key={l.id} locality={l} locked={locked} />
                 ))}
               </div>
             ) : (
@@ -779,8 +796,8 @@ export default async function ProjectDetailPage({
               {project.brochureUrl ? (
                 <BrochureDownloadLink
                   slug={project.slug}
-                  brochureUrl={project.brochureUrl}
-                  brochureFileName={project.brochureFileName}
+                  brochureUrl={locked ? null : project.brochureUrl}
+                  brochureFileName={locked ? null : project.brochureFileName}
                   className="flex items-center gap-4 rounded-sm border border-accent/30 bg-accent/5 p-4 transition-colors hover:bg-accent/10"
                 >
                   {project.brochureThumbnailUrl ? (

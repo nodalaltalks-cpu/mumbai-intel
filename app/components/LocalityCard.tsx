@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { formatPricePerSqft, formatSignedPercent } from "@/lib/format";
+import { gated, maskPercent, maskPricePerSqft, maskScore } from "@/lib/premium/mask";
 
 export interface LocalityCardData {
   slug: string;
@@ -15,7 +16,8 @@ export interface LocalityCardData {
   builderCount?: number;
 }
 
-export default function LocalityCard({ locality }: { locality: LocalityCardData }) {
+/** `locked` masks avg price/sqft, YoY growth, rental yield and the investment-score badge — project/builder counts stay visible. */
+export default function LocalityCard({ locality, locked = false }: { locality: LocalityCardData; locked?: boolean }) {
   return (
     <Link
       href={`/localities/${locality.slug}`}
@@ -31,7 +33,7 @@ export default function LocalityCard({ locality }: { locality: LocalityCardData 
         )}
         {locality.investmentScore != null ? (
           <span className="absolute right-2 top-2 rounded-sm border border-accent/40 bg-background/80 px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wide text-accent backdrop-blur">
-            Invest {locality.investmentScore.toFixed(1)}
+            Invest {gated(locked, locality.investmentScore.toFixed(1), maskScore())}
           </span>
         ) : null}
       </div>
@@ -45,15 +47,17 @@ export default function LocalityCard({ locality }: { locality: LocalityCardData 
         <div className="grid grid-cols-2 gap-2 border-t border-border pt-3">
           <div>
             <p className="text-[10px] uppercase tracking-wide text-muted">Avg price</p>
-            <p className="font-mono text-sm text-foreground">{formatPricePerSqft(locality.avgPricePerSqftPaise)}</p>
+            <p className="font-mono text-sm text-foreground">{gated(locked, formatPricePerSqft(locality.avgPricePerSqftPaise), maskPricePerSqft())}</p>
           </div>
           <div className="text-right">
             <p className="text-[10px] uppercase tracking-wide text-muted">YoY growth</p>
-            <p className="font-mono text-sm text-foreground">{formatSignedPercent(locality.growthPercentYoy)}</p>
+            <p className="font-mono text-sm text-foreground">{gated(locked, formatSignedPercent(locality.growthPercentYoy), maskPercent())}</p>
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-wide text-muted">Rental yield</p>
-            <p className="font-mono text-sm text-foreground">{locality.rentalYieldPercent != null ? `${locality.rentalYieldPercent}%` : "--"}</p>
+            <p className="font-mono text-sm text-foreground">
+              {gated(locked, locality.rentalYieldPercent != null ? `${locality.rentalYieldPercent}%` : "--", maskPercent())}
+            </p>
           </div>
           <div className="text-right">
             <p className="text-[10px] uppercase tracking-wide text-muted">Projects</p>

@@ -15,6 +15,8 @@ import TransactionStats from "@/app/components/TransactionStats";
 import { PropertyTypeDistribution, TransactionLineChart, TransactionVolumeChart } from "@/app/components/charts/TransactionCharts";
 import Pagination from "@/app/admin/components/Pagination";
 import EmptyState from "@/app/components/ui/EmptyState";
+import PremiumGate from "@/app/components/premium/PremiumGate";
+import { getPublicSession } from "@/lib/public-auth/session";
 
 export const metadata: Metadata = {
   title: "Transactions — NoDalalTalks",
@@ -64,7 +66,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
     sortBy: params.sort,
   };
 
-  const [{ items: transactions, total, totalPages }, stats, monthlyTrend, propertyTypes, localities, builders, projects] = await Promise.all([
+  const [{ items: transactions, total, totalPages }, stats, monthlyTrend, propertyTypes, localities, builders, projects, session] = await Promise.all([
     getPublicTransactionsPaged({ ...filters, page, pageSize: 20 }),
     getTransactionStats(filters),
     getTransactionMonthlyTrend(filters, 12),
@@ -72,7 +74,10 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
     getLocalitiesForSelect(),
     getBuildersForSelect(),
     getProjectsForSelect(),
+    getPublicSession(),
   ]);
+  const locked = session === null;
+  const next = `/transactions${params.page || params.q ? `?${new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]).toString()}` : ""}`;
 
   function buildHref(targetPage: number) {
     const qs = new URLSearchParams();
@@ -102,46 +107,54 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
           <p className="text-xs text-muted">Registered sale, resale and lease transactions across Mumbai.</p>
         </div>
 
-        <TransactionStats stats={stats} />
+        <PremiumGate locked={locked} feature="transaction-history" next={next}>
+          <TransactionStats stats={stats} locked={locked} />
+        </PremiumGate>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div className="rounded-sm border border-border bg-surface p-4">
-            <p className="font-mono text-xs uppercase tracking-wide text-muted">Monthly Transactions</p>
-            <div className="mt-3">
-              <TransactionVolumeChart points={monthlyTrend.map((p) => ({ month: p.month.toISOString(), count: p.count }))} />
+        <PremiumGate locked={locked} feature="market-analytics" next={next}>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="rounded-sm border border-border bg-surface p-4">
+              <p className="font-mono text-xs uppercase tracking-wide text-muted">Monthly Transactions</p>
+              <div className="mt-3">
+                <TransactionVolumeChart points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), count: p.count }))} />
+              </div>
+            </div>
+            <div className="rounded-sm border border-border bg-surface p-4">
+              <p className="font-mono text-xs uppercase tracking-wide text-muted">Average Price Trend</p>
+              <div className="mt-3">
+                <TransactionLineChart
+                  points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.avgPricePaise }))}
+                  ariaLabel="Average transaction price trend"
+                />
+              </div>
+            </div>
+            <div className="rounded-sm border border-border bg-surface p-4">
+              <p className="font-mono text-xs uppercase tracking-wide text-muted">Property Type Distribution</p>
+              <div className="mt-3">
+                <PropertyTypeDistribution buckets={locked ? [] : propertyTypes} />
+              </div>
             </div>
           </div>
+        </PremiumGate>
+
+        <PremiumGate locked={locked} feature="market-analytics" next={next}>
           <div className="rounded-sm border border-border bg-surface p-4">
-            <p className="font-mono text-xs uppercase tracking-wide text-muted">Average Price Trend</p>
+            <p className="font-mono text-xs uppercase tracking-wide text-muted">Median Price Trend</p>
             <div className="mt-3">
               <TransactionLineChart
-                points={monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.avgPricePaise }))}
-                ariaLabel="Average transaction price trend"
+                points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.medianPricePaise }))}
+                ariaLabel="Median transaction price trend"
               />
             </div>
           </div>
-          <div className="rounded-sm border border-border bg-surface p-4">
-            <p className="font-mono text-xs uppercase tracking-wide text-muted">Property Type Distribution</p>
-            <div className="mt-3">
-              <PropertyTypeDistribution buckets={propertyTypes} />
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-sm border border-border bg-surface p-4">
-          <p className="font-mono text-xs uppercase tracking-wide text-muted">Median Price Trend</p>
-          <div className="mt-3">
-            <TransactionLineChart
-              points={monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.medianPricePaise }))}
-              ariaLabel="Median transaction price trend"
-            />
-          </div>
-        </div>
+        </PremiumGate>
 
         {transactions.length === 0 ? (
           <EmptyState title="No transactions match these filters" message="Try widening your search or resetting filters." />
         ) : (
-          <TransactionTable transactions={transactions} />
+          <PremiumGate locked={locked} feature="transaction-history" next={next}>
+            <TransactionTable transactions={transactions} locked={locked} />
+          </PremiumGate>
         )}
 
         <Pagination page={page} totalPages={totalPages} total={total} buildHref={buildHref} />

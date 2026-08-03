@@ -7,6 +7,8 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { setSessionCookie } from "@/lib/auth/session";
 import { clearPublicSessionCookie, setPublicSessionCookie } from "@/lib/public-auth/session";
+import { sanitizeNextPath } from "@/lib/public-auth/next-path";
+import { recordResearchEvent } from "@/lib/analytics/research-events";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/request-ip";
 import { sendPasswordResetEmail } from "@/lib/email";
@@ -57,7 +59,9 @@ export async function signupAction(_prevState: PublicAuthState, formData: FormDa
   });
 
   await setPublicSessionCookie({ userId: user.id, email: user.email, name: user.name, image: user.image });
-  redirect("/");
+  await recordResearchEvent("SIGNUP_COMPLETED", { entityType: "PublicUser", entityId: user.id, metadata: { method: "credentials" } });
+  const signupNext = formData.get("next");
+  redirect(typeof signupNext === "string" && signupNext ? sanitizeNextPath(signupNext) : "/");
 }
 
 // ── Log in ──────────────────────────────────────────────────────────────
@@ -102,7 +106,9 @@ export async function loginAction(_prevState: PublicAuthState, formData: FormDat
 
   await prisma.publicUser.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
   await setPublicSessionCookie({ userId: user.id, email: user.email, name: user.name, image: user.image });
-  redirect("/account");
+  await recordResearchEvent("LOGIN_COMPLETED", { entityType: "PublicUser", entityId: user.id, metadata: { method: "credentials" } });
+  const loginNext = formData.get("next");
+  redirect(typeof loginNext === "string" && loginNext ? sanitizeNextPath(loginNext) : "/account");
 }
 
 export async function logoutAction(): Promise<void> {

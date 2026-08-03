@@ -1,10 +1,15 @@
 import LocalityCard from "./LocalityCard";
 import { getPublicLocalitiesPaged } from "@/lib/queries";
+import { getPublicSession } from "@/lib/public-auth/session";
 import SectionHeading from "./ui/SectionHeading";
 import EmptyState from "./ui/EmptyState";
 
 export default async function TrendingLocalities() {
-  const { items: localities } = await getPublicLocalitiesPaged({ sortBy: "projects_desc", pageSize: 4 });
+  const [{ items: localities }, session] = await Promise.all([
+    getPublicLocalitiesPaged({ sortBy: "projects_desc", pageSize: 4 }),
+    getPublicSession(),
+  ]);
+  const locked = session === null;
 
   return (
     <section className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
@@ -15,7 +20,7 @@ export default async function TrendingLocalities() {
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {localities.map((locality) => (
-            <LocalityCard key={locality.id} locality={locality} />
+            <LocalityCard key={locality.id} locality={locality} locked={locked} />
           ))}
         </div>
       )}

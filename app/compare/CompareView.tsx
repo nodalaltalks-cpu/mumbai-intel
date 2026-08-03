@@ -6,50 +6,53 @@ import EmptyState from "@/app/components/ui/EmptyState";
 import Button from "@/app/components/ui/Button";
 import { SkeletonBlock } from "@/app/components/ui/Skeleton";
 import { clearCompareList, pruneCompareList, removeCompareItem, useCompareList } from "@/lib/compare-list";
-import { getProjectsForCompareAction } from "@/lib/actions/compare";
+import { getProjectsForCompareAction, type CompareProjectGated } from "@/lib/actions/compare";
 import BrochureDownloadLink from "@/app/components/BrochureDownloadLink";
-import type { CompareProject } from "@/lib/queries/compare";
 
-const ROWS: { label: string; render: (p: CompareProject) => ReactNode }[] = [
-  { label: "Locality", render: (p) => p.localityName },
-  { label: "Builder", render: (p) => p.builderName ?? "--" },
-  { label: "Status", render: (p) => p.status },
-  { label: "Category", render: (p) => p.category },
-  { label: "Price band", render: (p) => p.priceLabel },
-  { label: "Price / sqft", render: (p) => p.pricePerSqftLabel ?? "--" },
-  { label: "Configurations", render: (p) => (p.configurationLabels.length ? p.configurationLabels.join(", ") : "--") },
-  { label: "Carpet area", render: (p) => p.areaLabel ?? "--" },
-  { label: "Total units", render: (p) => p.totalUnits ?? "--" },
-  { label: "Construction", render: (p) => (p.constructionPercent !== null ? `${p.constructionPercent}%` : "--") },
-  { label: "Possession", render: (p) => p.possessionLabel },
-  { label: "RERA number", render: (p) => p.reraNumber ?? "--" },
-  { label: "Amenities", render: (p) => p.amenityCount },
-  {
-    label: "Brochure",
-    render: (p) =>
-      p.brochureUrl ? (
-        <BrochureDownloadLink
-          slug={p.slug}
-          brochureUrl={p.brochureUrl}
-          brochureFileName={p.brochureFileName}
-          className="flex items-center gap-2 text-accent hover:underline"
-        >
-          {p.brochureThumbnailUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={p.brochureThumbnailUrl} alt="" className="h-8 w-6 rounded-sm border border-border object-cover" />
-          ) : null}
-          Download
-        </BrochureDownloadLink>
-      ) : (
-        "--"
-      ),
-  },
-];
+function buildRows(): { label: string; render: (p: CompareProjectGated) => ReactNode }[] {
+  return [
+    { label: "Locality", render: (p) => p.localityName },
+    { label: "Builder", render: (p) => p.builderName ?? "--" },
+    { label: "Status", render: (p) => p.status },
+    { label: "Category", render: (p) => p.category },
+    { label: "Price band", render: (p) => p.priceLabel },
+    { label: "Price / sqft", render: (p) => p.pricePerSqftLabel ?? "--" },
+    { label: "Configurations", render: (p) => (p.configurationLabels.length ? p.configurationLabels.join(", ") : "--") },
+    { label: "Carpet area", render: (p) => p.areaLabel ?? "--" },
+    { label: "Total units", render: (p) => p.totalUnits ?? "--" },
+    { label: "Construction", render: (p) => (p.constructionPercent !== null ? `${p.constructionPercent}%` : "--") },
+    { label: "Possession", render: (p) => p.possessionLabel },
+    { label: "RERA number", render: (p) => p.reraNumber ?? "--" },
+    { label: "Amenities", render: (p) => p.amenityCount },
+    {
+      label: "Brochure",
+      render: (p) =>
+        p.brochureAvailable ? (
+          <BrochureDownloadLink
+            slug={p.slug}
+            brochureUrl={p.brochureUrl}
+            brochureFileName={p.brochureFileName}
+            className="flex items-center gap-2 text-accent hover:underline"
+          >
+            {p.brochureThumbnailUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={p.brochureThumbnailUrl} alt="" className="h-8 w-6 rounded-sm border border-border object-cover" />
+            ) : null}
+            Download
+          </BrochureDownloadLink>
+        ) : (
+          "--"
+        ),
+    },
+  ];
+}
 
-/** The client-only body of /compare — split out of the page itself so the page can stay a Server Component and render Navbar/Footer (which read server-only session cookies) without pulling them into a client bundle. */
+const ROWS = buildRows();
+
+/** The client-only body of /compare — split out of the page itself so the page can stay a Server Component and render Navbar/Footer (which read server-only session cookies) without pulling them into a client bundle. Compare's own list/table stays anonymous-friendly by design — only the Brochure row is gated (masked server-side in getProjectsForCompareAction itself, before the response ever reaches this client component). */
 export default function CompareView() {
   const slugs = useCompareList();
-  const [projects, setProjects] = useState<CompareProject[] | null>(null);
+  const [projects, setProjects] = useState<CompareProjectGated[] | null>(null);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {

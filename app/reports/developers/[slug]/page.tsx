@@ -25,6 +25,9 @@ import MarketSummaryCard from "@/app/components/reports/MarketSummaryCard";
 import ComparisonStat from "@/app/components/reports/ComparisonStat";
 import HistoricalTable from "@/app/components/reports/HistoricalTable";
 import RelatedSection from "@/app/components/reports/RelatedSection";
+import PremiumGate from "@/app/components/premium/PremiumGate";
+import { getPublicSession } from "@/lib/public-auth/session";
+import { gated, maskPaise, maskPercent, maskPricePerSqft, maskProjectBrochure, maskScore } from "@/lib/premium/mask";
 
 export const dynamic = "force-dynamic";
 
@@ -56,13 +59,16 @@ export default async function DeveloperReportPage({ params }: { params: Promise<
   if (!builder) notFound();
 
   const filters = { builderId: builder.id };
-  const [txStats, monthlyTrend, relatedLocalities, peerDevelopers, baseline] = await Promise.all([
+  const [txStats, monthlyTrend, relatedLocalities, peerDevelopers, baseline, session] = await Promise.all([
     getTransactionStats(filters),
     getTransactionMonthlyTrend(filters, 12),
     getLocalitiesForBuilder(builder.id, 4),
     getTopDevelopers(5),
     getMarketBaseline(),
+    getPublicSession(),
   ]);
+  const locked = session === null;
+  const next = `/reports/developers/${builder.slug}`;
 
   const latestScore = builder.scoreSnapshots[0] ?? null;
   const otherPeerDevelopers = peerDevelopers.filter((p) => p.slug !== builder.slug).slice(0, 4);
@@ -90,8 +96,8 @@ export default async function DeveloperReportPage({ params }: { params: Promise<
         title={builder.name}
         subtitle={builder.headquarters ?? "Headquarters not specified"}
         meta={[
-          { label: "Rating", value: latestScore ? `${latestScore.overallScore.toFixed(1)}/10` : "--" },
-          { label: "Investment score", value: builder.investmentScore !== null ? `${builder.investmentScore.toFixed(1)}/10` : "--" },
+          { label: "Rating", value: gated(locked, latestScore ? `${latestScore.overallScore.toFixed(1)}/10` : "--", maskScore()) },
+          { label: "Investment score", value: gated(locked, builder.investmentScore !== null ? `${builder.investmentScore.toFixed(1)}/10` : "--", maskScore()) },
           { label: "Projects", value: String(builder.projects.length) },
         ]}
       />
@@ -108,7 +114,7 @@ export default async function DeveloperReportPage({ params }: { params: Promise<
 
       <main id="main-content" className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-4 py-8 sm:px-6">
         <ReportSection id="summary" title="Market Summary">
-          <MarketSummaryCard summary={summary} />
+          <MarketSummaryCard summary={summary} locked={locked} />
         </ReportSection>
 
         <ReportSection id="kpis" title="Key Performance Indicators">
@@ -117,80 +123,98 @@ export default async function DeveloperReportPage({ params }: { params: Promise<
             <StatCard label="Delivered" value={String(builder.completedProjects.length)} />
             <StatCard label="Under construction" value={String(builder.underConstructionProjects.length)} />
             <StatCard label="Upcoming" value={String(builder.upcomingProjects.length)} />
-            <StatCard label="Investment score" value={builder.investmentScore !== null ? `${builder.investmentScore.toFixed(1)}/10` : "--"} />
-            <StatCard label="On-time delivery" value={latestScore?.onTimeDeliveryPct !== null && latestScore?.onTimeDeliveryPct !== undefined ? `${latestScore.onTimeDeliveryPct}%` : "--"} />
+            <StatCard label="Investment score" value={gated(locked, builder.investmentScore !== null ? `${builder.investmentScore.toFixed(1)}/10` : "--", maskScore())} />
+            <StatCard
+              label="On-time delivery"
+              value={gated(
+                locked,
+                latestScore?.onTimeDeliveryPct !== null && latestScore?.onTimeDeliveryPct !== undefined ? `${latestScore.onTimeDeliveryPct}%` : "--",
+                maskPercent()
+              )}
+            />
             <StatCard label="Years in business" value={builder.yearsInBusiness !== null ? String(builder.yearsInBusiness) : "--"} />
             <StatCard label="Cities served" value={String(builder.citiesServed.length)} />
           </div>
         </ReportSection>
 
         <ReportSection id="charts" title="Charts & Trends">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Projects by Status</p>
-              <div className="mt-3">
-                <LabeledDistributionBars buckets={builder.projectsByStatus.map((s) => ({ label: STATUS_LABEL[s.status as ProjectStatus], count: s.count }))} />
+          <PremiumGate locked={locked} feature="builder-analytics" next={next}>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div className="rounded-sm border border-border bg-surface p-4">
+                <p className="font-mono text-xs uppercase tracking-wide text-muted">Projects by Status</p>
+                <div className="mt-3">
+                  <LabeledDistributionBars buckets={locked ? [] : builder.projectsByStatus.map((s) => ({ label: STATUS_LABEL[s.status as ProjectStatus], count: s.count }))} />
+                </div>
+              </div>
+              <div className="rounded-sm border border-border bg-surface p-4">
+                <p className="font-mono text-xs uppercase tracking-wide text-muted">Transaction Volume (Monthly)</p>
+                <div className="mt-3">
+                  <TransactionVolumeChart points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), count: p.count }))} />
+                </div>
+              </div>
+              <div className="rounded-sm border border-border bg-surface p-4 lg:col-span-2">
+                <p className="font-mono text-xs uppercase tracking-wide text-muted">Average Price Trend</p>
+                <div className="mt-3">
+                  <TransactionLineChart points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.avgPricePaise }))} ariaLabel="Average transaction price trend" />
+                </div>
               </div>
             </div>
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Transaction Volume (Monthly)</p>
-              <div className="mt-3">
-                <TransactionVolumeChart points={monthlyTrend.map((p) => ({ month: p.month.toISOString(), count: p.count }))} />
-              </div>
-            </div>
-            <div className="rounded-sm border border-border bg-surface p-4 lg:col-span-2">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Average Price Trend</p>
-              <div className="mt-3">
-                <TransactionLineChart points={monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.avgPricePaise }))} ariaLabel="Average transaction price trend" />
-              </div>
-            </div>
-          </div>
+          </PremiumGate>
         </ReportSection>
 
         <ReportSection id="comparisons" title="Comparisons" description="This developer's trust score vs the Mumbai market average">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <ComparisonStat
-              label="Trust score"
-              value={latestScore ? `${latestScore.overallScore.toFixed(1)}/10` : "--"}
-              baselineLabel="Mumbai avg"
-              baselineValue={baseline.avgBuilderScore !== null ? `${baseline.avgBuilderScore.toFixed(1)}/10` : "--"}
-              deltaPercent={scoreDelta}
-            />
-            <ComparisonStat
-              label="Avg transaction value"
-              value={formatPaise(txStats.avgPricePaise)}
-              baselineLabel="Avg ₹/sqft citywide"
-              baselineValue={formatPricePerSqft(baseline.avgPricePerSqftPaise)}
-              deltaPercent={null}
-            />
-          </div>
+          <PremiumGate locked={locked} feature="builder-analytics" next={next}>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <ComparisonStat
+                label="Trust score"
+                value={gated(locked, latestScore ? `${latestScore.overallScore.toFixed(1)}/10` : "--", maskScore())}
+                baselineLabel="Mumbai avg"
+                baselineValue={gated(locked, baseline.avgBuilderScore !== null ? `${baseline.avgBuilderScore.toFixed(1)}/10` : "--", maskScore())}
+                deltaPercent={locked ? null : scoreDelta}
+              />
+              <ComparisonStat
+                label="Avg transaction value"
+                value={gated(locked, formatPaise(txStats.avgPricePaise), maskPaise())}
+                baselineLabel="Avg ₹/sqft citywide"
+                baselineValue={gated(locked, formatPricePerSqft(baseline.avgPricePerSqftPaise), maskPricePerSqft())}
+                deltaPercent={null}
+              />
+            </div>
+          </PremiumGate>
         </ReportSection>
 
         <ReportSection id="historical" title="Historical Data" description="Trust score snapshots over time">
-          <HistoricalTable
-            columnLabels={["Score", "On-time delivery", "Delivered", "Active"]}
-            rows={builder.scoreSnapshots.map((s) => ({
-              label: formatDate(s.asOf),
-              values: [s.overallScore.toFixed(1), s.onTimeDeliveryPct !== null ? `${s.onTimeDeliveryPct}%` : "--", String(s.deliveredProjects), String(s.activeProjects)],
-            }))}
-          />
+          <PremiumGate locked={locked} feature="builder-analytics" next={next}>
+            <HistoricalTable
+              columnLabels={["Score", "On-time delivery", "Delivered", "Active"]}
+              rows={builder.scoreSnapshots.map((s) => ({
+                label: gated(locked, formatDate(s.asOf), "──"),
+                values: [
+                  gated(locked, s.overallScore.toFixed(1), maskScore()),
+                  gated(locked, s.onTimeDeliveryPct !== null ? `${s.onTimeDeliveryPct}%` : "--", maskPercent()),
+                  gated(locked, String(s.deliveredProjects), "──"),
+                  gated(locked, String(s.activeProjects), "──"),
+                ],
+              }))}
+            />
+          </PremiumGate>
         </ReportSection>
 
         <RelatedSection id="related-projects" title="Related Projects" isEmpty={builder.projects.length === 0} emptyMessage="No published projects yet.">
           {builder.projects.slice(0, 8).map((p) => (
-            <ProjectCard key={p.id} project={p} />
+            <ProjectCard key={p.id} project={maskProjectBrochure(p, locked)} />
           ))}
         </RelatedSection>
 
         <RelatedSection id="related-developers" title="Related Developers" isEmpty={otherPeerDevelopers.length === 0} emptyMessage="No peer developers to show yet.">
           {otherPeerDevelopers.map((d) => (
-            <BuilderCard key={d.slug} builder={d} />
+            <BuilderCard key={d.slug} builder={d} locked={locked} />
           ))}
         </RelatedSection>
 
         <RelatedSection id="related-localities" title="Related Localities" isEmpty={relatedLocalities.length === 0} emptyMessage="No published localities linked yet.">
           {relatedLocalities.map((l) => (
-            <LocalityCard key={l.id} locality={l} />
+            <LocalityCard key={l.id} locality={l} locked={locked} />
           ))}
         </RelatedSection>
       </main>

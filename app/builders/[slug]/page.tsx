@@ -17,9 +17,11 @@ import Footer from "@/app/components/Footer";
 import ProjectCard from "@/app/components/ProjectCard";
 import LocalityCard from "@/app/components/LocalityCard";
 import TransactionTable from "@/app/components/TransactionTable";
+import PremiumGate from "@/app/components/premium/PremiumGate";
 import { LabeledDistributionBars, TransactionLineChart, TransactionVolumeChart } from "@/app/components/charts/TransactionCharts";
 import EmptyState from "@/app/components/ui/EmptyState";
 import { Fact, StatCard } from "@/app/components/ui/StatCard";
+import { gated, maskCount, maskPaise, maskPercent, maskPricePerSqft, maskProjectBrochure, maskScore } from "@/lib/premium/mask";
 import Breadcrumbs from "@/app/components/Breadcrumbs";
 import WishlistButton from "@/app/components/WishlistButton";
 import ShareButton from "@/app/components/ShareButton";
@@ -77,6 +79,7 @@ export default async function BuilderDetailPage({ params }: { params: Promise<{ 
     isWishlisted("Builder", builder.id),
     getPublicSession(),
   ]);
+  const locked = publicSession === null;
 
   const projectsByCityBars = builder.citiesServed.map((c) => ({ label: c.cityName, count: c.projectCount }));
   const projectsByStatusBars = builder.projectsByStatus.map((s) => ({ label: STATUS_LABEL[s.status as ProjectStatus], count: s.count }));
@@ -141,11 +144,15 @@ export default async function BuilderDetailPage({ params }: { params: Promise<{ 
           <div className="flex gap-6">
             <div className="text-right">
               <p className="text-[10px] uppercase tracking-wide text-muted">Rating</p>
-              <p className="font-mono text-2xl text-accent">{latestScore ? latestScore.overallScore.toFixed(1) : "--"}</p>
+              <p className="font-mono text-2xl text-accent">
+                {gated(locked, latestScore ? latestScore.overallScore.toFixed(1) : "--", maskScore())}
+              </p>
             </div>
             <div className="text-right">
               <p className="text-[10px] uppercase tracking-wide text-muted">Investment score</p>
-              <p className="font-mono text-2xl text-foreground">{builder.investmentScore !== null ? builder.investmentScore.toFixed(1) : "--"}</p>
+              <p className="font-mono text-2xl text-foreground">
+                {gated(locked, builder.investmentScore !== null ? builder.investmentScore.toFixed(1) : "--", maskScore())}
+              </p>
             </div>
             <div className="text-right">
               <p className="text-[10px] uppercase tracking-wide text-muted">Projects</p>
@@ -233,40 +240,48 @@ export default async function BuilderDetailPage({ params }: { params: Promise<{ 
             <Fact label="Upcoming" value={builder.upcomingProjects.length} />
             <Fact
               label="On-time delivery"
-              value={latestScore?.onTimeDeliveryPct !== null && latestScore?.onTimeDeliveryPct !== undefined ? `${latestScore.onTimeDeliveryPct}%` : "--"}
+              value={gated(
+                locked,
+                latestScore?.onTimeDeliveryPct !== null && latestScore?.onTimeDeliveryPct !== undefined ? `${latestScore.onTimeDeliveryPct}%` : "--",
+                maskPercent()
+              )}
             />
             <Fact label="Years in business" value={builder.yearsInBusiness ?? "--"} />
             <Fact label="Cities served" value={builder.citiesServed.length} />
-            <Fact label="Investment score" value={builder.investmentScore !== null ? `${builder.investmentScore}/10` : "--"} accent />
+            <Fact label="Investment score" value={gated(locked, builder.investmentScore !== null ? `${builder.investmentScore}/10` : "--", maskScore())} accent />
           </div>
         </section>
 
         {builder.scoreSnapshots.length > 0 ? (
           <section>
             <h2 className="font-mono text-lg font-semibold text-foreground">Trust Score History</h2>
-            <div className="mt-3 overflow-x-auto rounded-sm border border-border">
-              <table className="w-full min-w-[520px] border-collapse text-left text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-surface text-[10px] uppercase tracking-wide text-muted">
-                    <th className="px-3 py-2 font-medium">As of</th>
-                    <th className="px-3 py-2 font-medium">Score</th>
-                    <th className="px-3 py-2 font-medium">On-time delivery</th>
-                    <th className="px-3 py-2 font-medium">Delivered</th>
-                    <th className="px-3 py-2 font-medium">Active</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {builder.scoreSnapshots.map((s) => (
-                    <tr key={s.id} className="border-b border-border last:border-b-0">
-                      <td className="px-3 py-2 font-mono text-muted">{formatDate(s.asOf)}</td>
-                      <td className="px-3 py-2 font-mono text-accent">{s.overallScore.toFixed(1)}</td>
-                      <td className="px-3 py-2 text-foreground">{s.onTimeDeliveryPct !== null ? `${s.onTimeDeliveryPct}%` : "--"}</td>
-                      <td className="px-3 py-2 text-foreground">{s.deliveredProjects}</td>
-                      <td className="px-3 py-2 text-foreground">{s.activeProjects}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="mt-3">
+              <PremiumGate locked={locked} feature="builder-analytics" next={`/builders/${builder.slug}`}>
+                <div className="overflow-x-auto rounded-sm border border-border">
+                  <table className="w-full min-w-[520px] border-collapse text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-border bg-surface text-[10px] uppercase tracking-wide text-muted">
+                        <th className="px-3 py-2 font-medium">As of</th>
+                        <th className="px-3 py-2 font-medium">Score</th>
+                        <th className="px-3 py-2 font-medium">On-time delivery</th>
+                        <th className="px-3 py-2 font-medium">Delivered</th>
+                        <th className="px-3 py-2 font-medium">Active</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {builder.scoreSnapshots.map((s) => (
+                        <tr key={s.id} className="border-b border-border last:border-b-0">
+                          <td className="px-3 py-2 font-mono text-muted">{gated(locked, formatDate(s.asOf), "──")}</td>
+                          <td className="px-3 py-2 font-mono text-accent">{gated(locked, s.overallScore.toFixed(1), maskScore())}</td>
+                          <td className="px-3 py-2 text-foreground">{gated(locked, s.onTimeDeliveryPct !== null ? `${s.onTimeDeliveryPct}%` : "--", maskPercent())}</td>
+                          <td className="px-3 py-2 text-foreground">{gated(locked, String(s.deliveredProjects), "──")}</td>
+                          <td className="px-3 py-2 text-foreground">{gated(locked, String(s.activeProjects), "──")}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </PremiumGate>
             </div>
           </section>
         ) : null}
@@ -294,60 +309,62 @@ export default async function BuilderDetailPage({ params }: { params: Promise<{ 
         {/* Developer Analytics */}
         <section id="analytics" className="scroll-mt-32">
           <h2 className="font-mono text-lg font-semibold text-foreground">Developer Analytics</h2>
-          <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="Total transactions" value={String(txStats.totalTransactions)} size="md" />
-            <StatCard label="Average price" value={formatPaise(txStats.avgPricePaise)} size="md" />
-            <StatCard label="Avg ₹/sqft" value={formatPricePerSqft(txStats.avgPricePerSqftPaise)} size="md" />
-            <StatCard label="Sales volume" value={formatPaise(txStats.totalSalesVolumePaise)} size="md" />
-          </div>
-          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Projects by Status</p>
-              <div className="mt-3">
-                <LabeledDistributionBars buckets={projectsByStatusBars} />
+          <PremiumGate locked={locked} feature="builder-analytics" next={`/builders/${builder.slug}`} className="mt-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <StatCard label="Total transactions" value={gated(locked, String(txStats.totalTransactions), maskCount())} size="md" />
+              <StatCard label="Average price" value={gated(locked, formatPaise(txStats.avgPricePaise), maskPaise())} size="md" />
+              <StatCard label="Avg ₹/sqft" value={gated(locked, formatPricePerSqft(txStats.avgPricePerSqftPaise), maskPricePerSqft())} size="md" />
+              <StatCard label="Sales volume" value={gated(locked, formatPaise(txStats.totalSalesVolumePaise), maskPaise())} size="md" />
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div className="rounded-sm border border-border bg-surface p-4">
+                <p className="font-mono text-xs uppercase tracking-wide text-muted">Projects by Status</p>
+                <div className="mt-3">
+                  <LabeledDistributionBars buckets={locked ? [] : projectsByStatusBars} />
+                </div>
+              </div>
+              <div className="rounded-sm border border-border bg-surface p-4">
+                <p className="font-mono text-xs uppercase tracking-wide text-muted">Transaction Volume (Monthly)</p>
+                <div className="mt-3">
+                  <TransactionVolumeChart points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), count: p.count }))} />
+                </div>
+              </div>
+              <div className="rounded-sm border border-border bg-surface p-4">
+                <p className="font-mono text-xs uppercase tracking-wide text-muted">Average Price Trend</p>
+                <div className="mt-3">
+                  <TransactionLineChart
+                    points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.avgPricePaise }))}
+                    ariaLabel="Average transaction price trend"
+                  />
+                </div>
+              </div>
+              <div className="rounded-sm border border-border bg-surface p-4">
+                <p className="font-mono text-xs uppercase tracking-wide text-muted">Sales Volume Trend</p>
+                <div className="mt-3">
+                  <TransactionLineChart
+                    points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.totalValuePaise }))}
+                    ariaLabel="Monthly sales volume"
+                  />
+                </div>
               </div>
             </div>
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Transaction Volume (Monthly)</p>
-              <div className="mt-3">
-                <TransactionVolumeChart points={monthlyTrend.map((p) => ({ month: p.month.toISOString(), count: p.count }))} />
-              </div>
-            </div>
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Average Price Trend</p>
-              <div className="mt-3">
-                <TransactionLineChart
-                  points={monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.avgPricePaise }))}
-                  ariaLabel="Average transaction price trend"
-                />
-              </div>
-            </div>
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Sales Volume Trend</p>
-              <div className="mt-3">
-                <TransactionLineChart
-                  points={monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.totalValuePaise }))}
-                  ariaLabel="Monthly sales volume"
-                />
-              </div>
-            </div>
-          </div>
 
-          {timelineProjects.length > 0 ? (
-            <div className="mt-4 rounded-sm border border-border bg-surface p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Project Timeline</p>
-              <ol className="mt-3 flex flex-col gap-2 border-l border-border pl-4">
-                {timelineProjects.map((p) => (
-                  <li key={p.id}>
-                    <p className="font-mono text-xs text-foreground">
-                      <span className="text-accent">{p.launchDate ? formatDate(p.launchDate) : "Date TBD"}</span> — {p.name}
-                      <span className="ml-2 text-muted">({STATUS_LABEL[p.status as ProjectStatus]})</span>
-                    </p>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          ) : null}
+            {timelineProjects.length > 0 && !locked ? (
+              <div className="mt-4 rounded-sm border border-border bg-surface p-4">
+                <p className="font-mono text-xs uppercase tracking-wide text-muted">Project Timeline</p>
+                <ol className="mt-3 flex flex-col gap-2 border-l border-border pl-4">
+                  {timelineProjects.map((p) => (
+                    <li key={p.id}>
+                      <p className="font-mono text-xs text-foreground">
+                        <span className="text-accent">{p.launchDate ? formatDate(p.launchDate) : "Date TBD"}</span> — {p.name}
+                        <span className="ml-2 text-muted">({STATUS_LABEL[p.status as ProjectStatus]})</span>
+                      </p>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : null}
+          </PremiumGate>
         </section>
 
         {builder.amenities.length > 0 ? (
@@ -381,7 +398,7 @@ export default async function BuilderDetailPage({ params }: { params: Promise<{ 
           {builder.completedProjects.length > 0 ? (
             <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {builder.completedProjects.map((p) => (
-                <ProjectCard key={p.id} project={p} />
+                <ProjectCard key={p.id} project={maskProjectBrochure(p, locked)} />
               ))}
             </div>
           ) : (
@@ -394,7 +411,7 @@ export default async function BuilderDetailPage({ params }: { params: Promise<{ 
           {builder.underConstructionProjects.length > 0 ? (
             <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {builder.underConstructionProjects.map((p) => (
-                <ProjectCard key={p.id} project={p} />
+                <ProjectCard key={p.id} project={maskProjectBrochure(p, locked)} />
               ))}
             </div>
           ) : (
@@ -407,7 +424,7 @@ export default async function BuilderDetailPage({ params }: { params: Promise<{ 
           {builder.upcomingProjects.length > 0 ? (
             <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {builder.upcomingProjects.map((p) => (
-                <ProjectCard key={p.id} project={p} />
+                <ProjectCard key={p.id} project={maskProjectBrochure(p, locked)} />
               ))}
             </div>
           ) : (
@@ -421,7 +438,7 @@ export default async function BuilderDetailPage({ params }: { params: Promise<{ 
           {relatedLocalities.length > 0 ? (
             <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {relatedLocalities.map((l) => (
-                <LocalityCard key={l.id} locality={l} />
+                <LocalityCard key={l.id} locality={l} locked={locked} />
               ))}
             </div>
           ) : (
@@ -441,7 +458,9 @@ export default async function BuilderDetailPage({ params }: { params: Promise<{ 
           </div>
           {recentTransactions.length > 0 ? (
             <div className="mt-3">
-              <TransactionTable transactions={recentTransactions} />
+              <PremiumGate locked={locked} feature="transaction-history" next={`/builders/${builder.slug}`}>
+                <TransactionTable transactions={recentTransactions} locked={locked} />
+              </PremiumGate>
             </div>
           ) : (
             <EmptyState className="mt-3" title="No transactions yet" message="Registered transactions for this developer will appear here." />

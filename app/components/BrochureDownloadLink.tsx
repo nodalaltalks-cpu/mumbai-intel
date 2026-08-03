@@ -1,13 +1,25 @@
 "use client";
 
+import { useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { toDocumentDownloadUrl } from "@/lib/document-url";
 import { trackBrochureEvent } from "@/lib/track-brochure";
+import SignInGateModal from "@/app/components/premium/SignInGateModal";
 
 /**
  * The one place a brochure download link is actually rendered — used by
  * ProjectCard, the project detail page, Compare, Wishlist and Continue
  * Research, so every surface gets the forced-download URL and funnel
  * tracking for free instead of five copies of the same onClick handler.
+ *
+ * IMPORTANT — gating contract: this is a Client Component, so ANY prop
+ * passed to it is serialized into the page's hydration payload and
+ * present in guest-viewable HTML, regardless of which internal branch
+ * actually renders. There is deliberately no separate `locked` boolean —
+ * the caller (a Server Component that knows the real session) must pass
+ * `brochureUrl={null}` when the viewer is locked out, never the real URL
+ * alongside a flag. `brochureUrl === null` is what shows the sign-in-gate
+ * button instead of a real download anchor.
  */
 export default function BrochureDownloadLink({
   slug,
@@ -17,11 +29,27 @@ export default function BrochureDownloadLink({
   children,
 }: {
   slug: string;
-  brochureUrl: string;
+  brochureUrl: string | null;
   brochureFileName?: string | null;
   className?: string;
   children: React.ReactNode;
 }) {
+  const [gateOpen, setGateOpen] = useState(false);
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const next = searchParams.size > 0 ? `${pathname}?${searchParams.toString()}` : pathname;
+
+  if (!brochureUrl) {
+    return (
+      <>
+        <button type="button" onClick={() => setGateOpen(true)} className={className}>
+          {children}
+        </button>
+        {gateOpen ? <SignInGateModal feature="brochure" next={next} onClose={() => setGateOpen(false)} /> : null}
+      </>
+    );
+  }
+
   return (
     <a
       href={toDocumentDownloadUrl(brochureUrl, brochureFileName ?? `${slug}-brochure.pdf`)}

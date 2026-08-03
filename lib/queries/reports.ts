@@ -90,6 +90,9 @@ export async function getTopProjectsByActivity(limit = 6) {
       constructionPercent: p.constructionPercent,
       dataSource: p.dataSource,
       imageUrl: p.images[0]?.url ?? null,
+      brochureUrl: p.brochureUrl,
+      brochureFileName: p.brochureFileName,
+      brochureThumbnailUrl: p.brochureThumbnailUrl,
     };
   });
 }

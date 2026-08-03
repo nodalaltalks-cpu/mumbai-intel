@@ -42,6 +42,9 @@ export default async function AdminAnalyticsPage() {
           <Link href="/admin/analytics/research" className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
             Research Intent →
           </Link>
+          <Link href="/admin/analytics/registration-funnel" className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
+            Registration Funnel →
+          </Link>
         </div>
       </div>
 

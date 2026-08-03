@@ -2,8 +2,10 @@ import Link from "next/link";
 import { formatDate, formatPaise, formatPricePerSqft, formatSqft } from "@/lib/format";
 import { STATUS_CLASS, STATUS_LABEL, TRANSACTION_TYPE_LABEL, type ProjectStatus, type TransactionType } from "@/lib/project-meta";
 import type { PublicTransaction } from "@/lib/queries";
+import { gated, maskPaise, maskPricePerSqft } from "@/lib/premium/mask";
 
-export default function TransactionTable({ transactions }: { transactions: PublicTransaction[] }) {
+/** `locked` masks only the exact Price / ₹-per-sqft figures — every other column (date, project, config, area, status) stays visible to guests, matching what's already shown on Project Cards everywhere. */
+export default function TransactionTable({ transactions, locked = false }: { transactions: PublicTransaction[]; locked?: boolean }) {
   return (
     <div className="max-h-[640px] overflow-auto rounded-sm border border-border">
       <table className="w-full min-w-[960px] border-collapse text-left text-xs">
@@ -40,8 +42,8 @@ export default function TransactionTable({ transactions }: { transactions: Publi
               <td className="px-3 py-2 text-muted">{tx.bedrooms !== null ? `${tx.bedrooms} BHK` : "--"}</td>
               <td className="px-3 py-2 text-right text-muted">{formatSqft(tx.carpetSqft)}</td>
               <td className="px-3 py-2 text-muted">{tx.floor ?? "--"}</td>
-              <td className="px-3 py-2 text-right text-foreground">{formatPaise(tx.valuePaise)}</td>
-              <td className="px-3 py-2 text-right text-muted">{formatPricePerSqft(tx.pricePerSqftPaise)}</td>
+              <td className="px-3 py-2 text-right text-foreground">{gated(locked, formatPaise(tx.valuePaise), maskPaise())}</td>
+              <td className="px-3 py-2 text-right text-muted">{gated(locked, formatPricePerSqft(tx.pricePerSqftPaise), maskPricePerSqft())}</td>
               <td className="px-3 py-2">
                 {tx.projectStatus ? (
                   <span

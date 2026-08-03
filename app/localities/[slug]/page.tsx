@@ -25,6 +25,8 @@ import BuilderCard from "@/app/components/BuilderCard";
 import LocalityCard from "@/app/components/LocalityCard";
 import MapEmbed from "@/app/admin/components/MapEmbed";
 import TransactionTable from "@/app/components/TransactionTable";
+import PremiumGate from "@/app/components/premium/PremiumGate";
+import { gated, maskPercent, maskPricePerSqft, maskProjectBrochure, maskScore } from "@/lib/premium/mask";
 import LocalityFilters from "@/app/components/LocalityFilters";
 import LocalityMarketSnapshot from "@/app/components/LocalityMarketSnapshot";
 import LocalityIntelligencePanel from "@/app/components/LocalityIntelligencePanel";
@@ -135,6 +137,8 @@ export default async function LocalityDetailPage({
     isWishlisted("Locality", locality.id),
     getPublicSession(),
   ]);
+  const locked = publicSession === null;
+  const next = `/localities/${locality.slug}`;
 
   function buildHref(targetPage: number) {
     const qs = new URLSearchParams();
@@ -199,11 +203,11 @@ export default async function LocalityDetailPage({
           <div className="mt-3 flex flex-wrap items-end gap-6">
             <div>
               <p className="text-[10px] uppercase tracking-wide text-muted">Avg price</p>
-              <p className="font-mono text-xl text-accent">{formatPricePerSqft(locality.avgPricePerSqftPaise)}</p>
+              <p className="font-mono text-xl text-accent">{gated(locked, formatPricePerSqft(locality.avgPricePerSqftPaise), maskPricePerSqft())}</p>
             </div>
             <div>
               <p className="text-[10px] uppercase tracking-wide text-muted">YoY growth</p>
-              <p className="font-mono text-xl text-foreground">{formatSignedPercent(locality.growthPercentYoy)}</p>
+              <p className="font-mono text-xl text-foreground">{gated(locked, formatSignedPercent(locality.growthPercentYoy), maskPercent())}</p>
             </div>
             <div>
               <p className="text-[10px] uppercase tracking-wide text-muted">Projects</p>
@@ -252,50 +256,55 @@ export default async function LocalityDetailPage({
           <h2 className="font-mono text-lg font-semibold text-foreground">Market Snapshot</h2>
           <p className="mt-1 text-xs text-muted">Pincode {locality.pincode ?? "--"} · reflects the filters above</p>
           <div className="mt-3">
-            <LocalityMarketSnapshot
-              stats={stats}
-              avgPricePerSqftPaise={locality.avgPricePerSqftPaise !== null ? Number(locality.avgPricePerSqftPaise) : null}
-              rentalYieldPercent={locality.rentalYieldPercent}
-              growthPercentYoy={locality.growthPercentYoy}
-            />
+            <PremiumGate locked={locked} feature="locality-analytics" next={next}>
+              <LocalityMarketSnapshot
+                stats={stats}
+                avgPricePerSqftPaise={locality.avgPricePerSqftPaise !== null ? Number(locality.avgPricePerSqftPaise) : null}
+                rentalYieldPercent={locality.rentalYieldPercent}
+                growthPercentYoy={locality.growthPercentYoy}
+                locked={locked}
+              />
+            </PremiumGate>
           </div>
         </section>
 
         {/* Charts */}
         <section id="charts" className="scroll-mt-32">
           <h2 className="font-mono text-lg font-semibold text-foreground">Charts</h2>
-          <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Monthly Price Trend</p>
-              <div className="mt-3">
-                <TransactionLineChart
-                  points={monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.avgPricePerSqftPaise }))}
-                  ariaLabel="Monthly average price per square foot"
-                />
+          <PremiumGate locked={locked} feature="market-analytics" next={next} className="mt-3">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div className="rounded-sm border border-border bg-surface p-4">
+                <p className="font-mono text-xs uppercase tracking-wide text-muted">Monthly Price Trend</p>
+                <div className="mt-3">
+                  <TransactionLineChart
+                    points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.avgPricePerSqftPaise }))}
+                    ariaLabel="Monthly average price per square foot"
+                  />
+                </div>
+              </div>
+              <div className="rounded-sm border border-border bg-surface p-4">
+                <p className="font-mono text-xs uppercase tracking-wide text-muted">Monthly Transaction Trend</p>
+                <div className="mt-3">
+                  <TransactionVolumeChart points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), count: p.count }))} />
+                </div>
+              </div>
+              <div className="rounded-sm border border-border bg-surface p-4">
+                <p className="font-mono text-xs uppercase tracking-wide text-muted">Sales Volume Trend</p>
+                <div className="mt-3">
+                  <TransactionLineChart
+                    points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.totalValuePaise }))}
+                    ariaLabel="Monthly total sales volume"
+                  />
+                </div>
+              </div>
+              <div className="rounded-sm border border-border bg-surface p-4">
+                <p className="font-mono text-xs uppercase tracking-wide text-muted">Property Type Distribution</p>
+                <div className="mt-3">
+                  <PropertyTypeDistribution buckets={locked ? [] : propertyTypes} />
+                </div>
               </div>
             </div>
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Monthly Transaction Trend</p>
-              <div className="mt-3">
-                <TransactionVolumeChart points={monthlyTrend.map((p) => ({ month: p.month.toISOString(), count: p.count }))} />
-              </div>
-            </div>
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Sales Volume Trend</p>
-              <div className="mt-3">
-                <TransactionLineChart
-                  points={monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.totalValuePaise }))}
-                  ariaLabel="Monthly total sales volume"
-                />
-              </div>
-            </div>
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Property Type Distribution</p>
-              <div className="mt-3">
-                <PropertyTypeDistribution buckets={propertyTypes} />
-              </div>
-            </div>
-          </div>
+          </PremiumGate>
         </section>
 
         {/* Market Intelligence */}
@@ -303,7 +312,9 @@ export default async function LocalityDetailPage({
           <h2 className="font-mono text-lg font-semibold text-foreground">Market Intelligence</h2>
           <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-3">
             <div className="lg:col-span-2">
-              <LocalityIntelligencePanel intelligence={intelligence} />
+              <PremiumGate locked={locked} feature="locality-analytics" next={next}>
+                <LocalityIntelligencePanel intelligence={intelligence} locked={locked} />
+              </PremiumGate>
             </div>
             <div className="rounded-sm border border-border bg-surface p-4">
               <p className="font-mono text-xs uppercase tracking-wide text-muted">Popular Configurations</p>
@@ -328,7 +339,9 @@ export default async function LocalityDetailPage({
           </div>
           {transactions.length > 0 ? (
             <div className="mt-3 flex flex-col gap-4">
-              <TransactionTable transactions={transactions} />
+              <PremiumGate locked={locked} feature="transaction-history" next={`/localities/${locality.slug}`}>
+                <TransactionTable transactions={transactions} locked={locked} />
+              </PremiumGate>
               <Pagination page={page} totalPages={totalPages} total={totalTransactions} buildHref={buildHref} />
             </div>
           ) : (
@@ -374,7 +387,7 @@ export default async function LocalityDetailPage({
           {topProjects.length > 0 ? (
             <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {topProjects.map((p) => (
-                <ProjectCard key={p.id} project={p} />
+                <ProjectCard key={p.id} project={maskProjectBrochure(p, locked)} />
               ))}
             </div>
           ) : (
@@ -391,6 +404,7 @@ export default async function LocalityDetailPage({
                 <BuilderCard
                   key={b.slug}
                   builder={{ slug: b.slug, name: b.name, logoUrl: b.logoUrl, overallScore: b.score, projectCount: b.projectCount }}
+                  locked={locked}
                 />
               ))}
             </div>
@@ -405,7 +419,7 @@ export default async function LocalityDetailPage({
           {nearbyLocalities.length > 0 ? (
             <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {nearbyLocalities.map((l) => (
-                <LocalityCard key={l.id} locality={l} />
+                <LocalityCard key={l.id} locality={l} locked={locked} />
               ))}
             </div>
           ) : (
@@ -460,12 +474,14 @@ export default async function LocalityDetailPage({
         {/* Market Insights */}
         <section id="insights" className="scroll-mt-32">
           <h2 className="font-mono text-lg font-semibold text-foreground">Market Insights</h2>
-          <div className="mt-3 grid grid-cols-2 gap-3 rounded-sm border border-border bg-surface p-4 sm:grid-cols-4">
-            <Fact label="Investment score" value={locality.investmentScore !== null ? `${locality.investmentScore}/10` : "--"} accent />
-            <Fact label="End-user score" value={locality.endUserScore !== null ? `${locality.endUserScore}/10` : "--"} />
-            <Fact label="Luxury score" value={locality.luxuryScore !== null ? `${locality.luxuryScore}/10` : "--"} />
-            <Fact label="Family score" value={locality.familyScore !== null ? `${locality.familyScore}/10` : "--"} />
-          </div>
+          <PremiumGate locked={locked} feature="locality-analytics" next={next} className="mt-3">
+            <div className="grid grid-cols-2 gap-3 rounded-sm border border-border bg-surface p-4 sm:grid-cols-4">
+              <Fact label="Investment score" value={gated(locked, locality.investmentScore !== null ? `${locality.investmentScore}/10` : "--", maskScore())} accent />
+              <Fact label="End-user score" value={gated(locked, locality.endUserScore !== null ? `${locality.endUserScore}/10` : "--", maskScore())} />
+              <Fact label="Luxury score" value={gated(locked, locality.luxuryScore !== null ? `${locality.luxuryScore}/10` : "--", maskScore())} />
+              <Fact label="Family score" value={gated(locked, locality.familyScore !== null ? `${locality.familyScore}/10` : "--", maskScore())} />
+            </div>
+          </PremiumGate>
 
           {locality.advantages.length > 0 || locality.disadvantages.length > 0 ? (
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">

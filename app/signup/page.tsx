@@ -6,7 +6,9 @@ import SignupForm from "./SignupForm";
 export const metadata: Metadata = { title: "Create your account — NoDalalTalks" };
 export const dynamic = "force-dynamic";
 
-export default function SignupPage() {
+export default async function SignupPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
+  const sp = await searchParams;
+
   return (
     <AuthCard
       eyebrow="Get started"
@@ -15,13 +17,13 @@ export default function SignupPage() {
       footer={
         <>
           Already have an account?{" "}
-          <Link href="/login" className="font-medium text-foreground hover:underline">
+          <Link href={sp.next ? `/login?next=${encodeURIComponent(sp.next)}` : "/login"} className="font-medium text-foreground hover:underline">
             Sign in
           </Link>
         </>
       }
     >
-      <SignupForm />
+      <SignupForm next={sp.next} />
     </AuthCard>
   );
 }
