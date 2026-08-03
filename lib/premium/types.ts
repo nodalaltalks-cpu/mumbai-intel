@@ -20,19 +20,18 @@ export const PREMIUM_FEATURE_LABEL: Record<PremiumFeature, string> = {
   reports: "Market Reports",
 };
 
-export const PREMIUM_CARD_TITLE = "Unlock Complete Project Intelligence";
-export const PREMIUM_CARD_SUBTITLE = "Create your FREE account to access";
+export const PREMIUM_CARD_TITLE = "Continue your research";
+export const PREMIUM_CARD_SUBTITLE = "Create your free account to unlock verified project intelligence.";
 
 export const PREMIUM_BENEFITS: string[] = [
-  "Download Official Brochures",
-  "Exact Transaction Prices",
-  "Compare Projects",
-  "Save Wishlist",
-  "Continue Research",
-  "Recently Viewed",
-  "Weekly Market Intelligence",
-  "AI Insights (Coming Soon)",
-  "Zero Spam Calls",
-  "No Sales Calls",
-  "Phone Number NOT Required",
+  "Download official brochures",
+  "Exact transaction prices",
+  "Save wishlist",
+  "Continue research",
+  "Recently viewed",
+  "Weekly market updates",
+  "AI insights (Coming Soon)",
+  "Zero spam calls",
+  "No sales calls",
+  "Phone number not required",
 ];

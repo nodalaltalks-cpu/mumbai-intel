@@ -3,7 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { saveSearchAction } from "@/lib/actions/saved-searches";
-import SignInGateModal from "@/app/components/premium/SignInGateModal";
+import { usePremiumGate } from "@/lib/premium/gate-context";
 
 const RESUME_PARAM = "resumeSaveSearch";
 
@@ -15,9 +15,9 @@ export default function SaveSearchButton() {
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState("");
   const [message, setMessage] = useState<string | null>(null);
-  const [gateOpen, setGateOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const resumedRef = useRef(false);
+  const { openGate } = usePremiumGate();
 
   // A saved search needs a user-chosen label, so post-login "resume" reopens
   // the label input pre-filled with what they'd typed — it doesn't silently
@@ -45,7 +45,7 @@ export default function SaveSearchButton() {
     startTransition(async () => {
       const result = await saveSearchAction(label, filters, false);
       if (result.error) {
-        setGateOpen(true);
+        openGate("save-search", buildNext());
         return;
       }
       setMessage("Search saved to your dashboard.");
@@ -100,7 +100,6 @@ export default function SaveSearchButton() {
         Cancel
       </button>
       {message ? <span className="text-[11px] text-positive">{message}</span> : null}
-      {gateOpen ? <SignInGateModal feature="save-search" next={buildNext()} onClose={() => setGateOpen(false)} /> : null}
     </div>
   );
 }

@@ -3,24 +3,24 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toggleSavedProjectAction } from "@/lib/actions/saved-projects";
-import SignInGateModal from "@/app/components/premium/SignInGateModal";
+import { usePremiumGate } from "@/lib/premium/gate-context";
 
 const RESUME_PARAM = "resumeSave";
 
 export default function SaveProjectButton({ projectId, initialSaved }: { projectId: string; initialSaved: boolean }) {
   const [saved, setSaved] = useState(initialSaved);
-  const [gateOpen, setGateOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
   const resumedRef = useRef(false);
+  const { openGate } = usePremiumGate();
 
   function toggle() {
     startTransition(async () => {
       const result = await toggleSavedProjectAction(projectId);
       if (result.error) {
-        setGateOpen(true);
+        openGate("wishlist", buildNext());
         return;
       }
       setSaved(result.saved);
@@ -66,7 +66,6 @@ export default function SaveProjectButton({ projectId, initialSaved }: { project
       >
         {saved ? "Saved" : "Save"}
       </button>
-      {gateOpen ? <SignInGateModal feature="wishlist" next={buildNext()} onClose={() => setGateOpen(false)} /> : null}
     </div>
   );
 }

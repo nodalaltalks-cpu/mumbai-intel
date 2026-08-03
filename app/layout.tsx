@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import PremiumGateProvider from "@/app/components/premium/PremiumGateProvider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -66,7 +67,7 @@ export default function RootLayout({
         >
           Skip to content
         </a>
-        {children}
+        <PremiumGateProvider>{children}</PremiumGateProvider>
       </body>
     </html>
   );

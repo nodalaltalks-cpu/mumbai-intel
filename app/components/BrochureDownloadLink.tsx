@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { toDocumentDownloadUrl } from "@/lib/document-url";
 import { trackBrochureEvent } from "@/lib/track-brochure";
-import SignInGateModal from "@/app/components/premium/SignInGateModal";
+import { usePremiumGate } from "@/lib/premium/gate-context";
 
 /**
  * The one place a brochure download link is actually rendered — used by
@@ -34,19 +33,16 @@ export default function BrochureDownloadLink({
   className?: string;
   children: React.ReactNode;
 }) {
-  const [gateOpen, setGateOpen] = useState(false);
+  const { openGate } = usePremiumGate();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const next = searchParams.size > 0 ? `${pathname}?${searchParams.toString()}` : pathname;
 
   if (!brochureUrl) {
     return (
-      <>
-        <button type="button" onClick={() => setGateOpen(true)} className={className}>
-          {children}
-        </button>
-        {gateOpen ? <SignInGateModal feature="brochure" next={next} onClose={() => setGateOpen(false)} /> : null}
-      </>
+      <button type="button" onClick={() => openGate("brochure", next)} className={className}>
+        {children}
+      </button>
     );
   }
 
