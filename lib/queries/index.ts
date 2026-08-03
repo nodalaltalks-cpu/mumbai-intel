@@ -49,7 +49,7 @@ export async function getPrimaryCity() {
 
 export async function getLocalities() {
   return prisma.locality.findMany({
-    where: { city: { slug: PRIMARY_CITY_SLUG } },
+    where: { city: { slug: PRIMARY_CITY_SLUG }, isPublished: true, isArchived: false },
     include: { zone: true },
     orderBy: { name: "asc" },
   });
@@ -1086,7 +1086,12 @@ export async function getPublicLocalitiesPaged(filters: PublicLocalityFilters) {
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(48, Math.max(1, filters.pageSize ?? 12));
 
-  const where: Prisma.LocalityWhereInput = { city: { slug: PRIMARY_CITY_SLUG }, isPublished: true, isArchived: false };
+  const where: Prisma.LocalityWhereInput = {
+    city: { slug: PRIMARY_CITY_SLUG },
+    isPublished: true,
+    isArchived: false,
+    deletedAt: null,
+  };
   if (filters.q) {
     where.OR = [{ name: { contains: filters.q, mode: "insensitive" } }];
   }

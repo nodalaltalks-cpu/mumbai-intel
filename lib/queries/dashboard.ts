@@ -176,7 +176,7 @@ export async function getRecentViewsForUser(publicUserId: string): Promise<Recen
   const [projects, builders, localities, transactions] = await Promise.all([
     idsByType.has("Project")
       ? prisma.project.findMany({
-          where: { id: { in: idsByType.get("Project")! } },
+          where: { id: { in: idsByType.get("Project")! }, isPublished: true, isArchived: false },
           select: {
             id: true,
             name: true,
@@ -190,10 +190,16 @@ export async function getRecentViewsForUser(publicUserId: string): Promise<Recen
         })
       : Promise.resolve([]),
     idsByType.has("Builder")
-      ? prisma.builder.findMany({ where: { id: { in: idsByType.get("Builder")! } }, select: { id: true, name: true, slug: true, headquarters: true } })
+      ? prisma.builder.findMany({
+          where: { id: { in: idsByType.get("Builder")! }, isPublished: true, isArchived: false },
+          select: { id: true, name: true, slug: true, headquarters: true },
+        })
       : Promise.resolve([]),
     idsByType.has("Locality")
-      ? prisma.locality.findMany({ where: { id: { in: idsByType.get("Locality")! } }, select: { id: true, name: true, slug: true } })
+      ? prisma.locality.findMany({
+          where: { id: { in: idsByType.get("Locality")! }, isPublished: true, isArchived: false },
+          select: { id: true, name: true, slug: true },
+        })
       : Promise.resolve([]),
     idsByType.has("Transaction")
       ? prisma.transaction.findMany({
