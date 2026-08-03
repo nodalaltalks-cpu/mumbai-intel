@@ -75,6 +75,7 @@ export default function AllImagesManager({
                 <option value="hero">Hero</option>
                 <option value="gallery">Gallery</option>
                 <option value="floorplan">Floorplan</option>
+                <option value="masterplan">Masterplan</option>
                 <option value="elevation">Elevation</option>
               </select>
             </label>

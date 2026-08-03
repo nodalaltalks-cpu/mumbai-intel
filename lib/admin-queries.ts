@@ -1,4 +1,4 @@
-import type { Prisma, ProjectStatus } from "@prisma/client";
+import type { Prisma, ProjectStatus, TransactionType, DataSource } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { PRIMARY_CITY_SLUG } from "@/lib/queries";
 import { distanceMeters } from "@/lib/geo";
@@ -551,19 +551,24 @@ export async function getLocalityMarketStats(localityId: string) {
     "getLocalityMarketStats",
     { totalTransactions: 0, totalSalesVolumePaise: null as bigint | null, avgTicketSizePaise: null as bigint | null, medianPricePaise: null as bigint | null },
     async () => {
-      const transactions = await prisma.transaction.findMany({
-        where: { localityId },
-        select: { valuePaise: true },
-      });
-      const totalTransactions = transactions.length;
+      // Count/sum/avg computed in SQL via aggregate() — no need to pull every
+      // row into memory for these three. Median has no SQL aggregate in
+      // Prisma without raw percentile_cont, so it alone still needs the full
+      // sorted value list; at real-world per-locality transaction volumes
+      // (hundreds, not millions) that row fetch stays fast.
+      const [counts, values] = await Promise.all([
+        prisma.transaction.aggregate({ where: { localityId }, _count: { _all: true }, _sum: { valuePaise: true } }),
+        prisma.transaction.findMany({ where: { localityId }, select: { valuePaise: true }, orderBy: { valuePaise: "asc" } }),
+      ]);
+      const totalTransactions = counts._count._all;
       if (totalTransactions === 0) {
         return { totalTransactions: 0, totalSalesVolumePaise: null, avgTicketSizePaise: null, medianPricePaise: null };
       }
-      const values = transactions.map((t) => t.valuePaise).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-      const totalSalesVolumePaise = values.reduce((sum, v) => sum + v, BigInt(0));
+      const totalSalesVolumePaise = counts._sum.valuePaise ?? BigInt(0);
       const avgTicketSizePaise = totalSalesVolumePaise / BigInt(totalTransactions);
-      const mid = Math.floor(values.length / 2);
-      const medianPricePaise = values.length % 2 === 0 ? (values[mid - 1] + values[mid]) / BigInt(2) : values[mid];
+      const sorted = values.map((t) => t.valuePaise);
+      const mid = Math.floor(sorted.length / 2);
+      const medianPricePaise = sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / BigInt(2) : sorted[mid];
       return { totalTransactions, totalSalesVolumePaise, avgTicketSizePaise, medianPricePaise };
     }
   );
@@ -607,15 +612,71 @@ export async function getLocalityNearbyInfra(localityId: string, radiusMeters = 
   });
 }
 
-export async function getAllTransactionsAdmin(limit = 200) {
-  return safeQuery("getAllTransactionsAdmin", [], () =>
+export interface TransactionListFilters {
+  q?: string;
+  type?: string;
+  dataSource?: string;
+  sortBy?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+const EMPTY_TRANSACTION_PAGE = {
+  items: [] as Awaited<ReturnType<typeof fetchTransactionsPage>>["items"],
+  total: 0,
+  page: 1,
+  pageSize: 50,
+  totalPages: 1,
+};
+
+function buildTransactionOrderBy(sortBy: string | undefined): Prisma.TransactionOrderByWithRelationInput {
+  switch (sortBy) {
+    case "value_desc":
+      return { valuePaise: "desc" };
+    case "value_asc":
+      return { valuePaise: "asc" };
+    case "ppsf_desc":
+      return { pricePerSqftPaise: "desc" };
+    case "date_asc":
+      return { registrationDate: "asc" };
+    default:
+      return { registrationDate: "desc" };
+  }
+}
+
+async function fetchTransactionsPage(filters: TransactionListFilters) {
+  const page = Math.max(1, filters.page ?? 1);
+  const pageSize = Math.min(200, Math.max(1, filters.pageSize ?? 50));
+
+  const where: Prisma.TransactionWhereInput = { deletedAt: null };
+  if (filters.q) {
+    where.OR = [
+      { locality: { name: { contains: filters.q, mode: "insensitive" } } },
+      { project: { name: { contains: filters.q, mode: "insensitive" } } },
+      { tower: { contains: filters.q, mode: "insensitive" } },
+      { unitLabel: { contains: filters.q, mode: "insensitive" } },
+      { sourceRef: { contains: filters.q, mode: "insensitive" } },
+    ];
+  }
+  if (filters.type) where.type = filters.type as TransactionType;
+  if (filters.dataSource) where.dataSource = filters.dataSource as DataSource;
+
+  const [items, total] = await Promise.all([
     prisma.transaction.findMany({
-      where: { deletedAt: null },
-      orderBy: { registrationDate: "desc" },
-      take: limit,
+      where,
+      orderBy: buildTransactionOrderBy(filters.sortBy),
+      skip: (page - 1) * pageSize,
+      take: pageSize,
       include: { locality: true, project: true },
-    })
-  );
+    }),
+    prisma.transaction.count({ where }),
+  ]);
+
+  return { items, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
+}
+
+export async function getTransactionsAdminPaged(filters: TransactionListFilters) {
+  return safeQuery("getTransactionsAdminPaged", EMPTY_TRANSACTION_PAGE, () => fetchTransactionsPage(filters));
 }
 
 export async function getTransactionForEdit(id: string) {

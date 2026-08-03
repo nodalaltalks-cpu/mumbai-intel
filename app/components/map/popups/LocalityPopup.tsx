@@ -1,4 +1,5 @@
 import { formatPaise, formatPricePerSqft } from "@/lib/format";
+import { gated, maskPaise, maskPercent, maskPricePerSqft } from "@/lib/premium/mask";
 import type { LocalityMapMarker } from "@/lib/map/types";
 
 export default function LocalityPopup({ marker }: { marker: LocalityMapMarker }) {
@@ -15,15 +16,21 @@ export default function LocalityPopup({ marker }: { marker: LocalityMapMarker })
       <div className="grid grid-cols-2 gap-2 border-t border-border pt-2 text-[10px]">
         <div>
           <p className="uppercase tracking-wide text-muted">Median price</p>
-          <p className="font-mono text-xs text-accent">{formatPaise(marker.medianPricePaise)}</p>
+          <p className="font-mono text-xs text-accent" title={marker.locked ? "🔒 Sign in to unlock verified intelligence" : undefined}>
+            {gated(marker.locked, formatPaise(marker.medianPricePaise), maskPaise())}
+          </p>
         </div>
         <div className="text-right">
           <p className="uppercase tracking-wide text-muted">Price/sqft</p>
-          <p className="font-mono text-xs text-foreground">{formatPricePerSqft(marker.avgPricePerSqftPaise)}</p>
+          <p className="font-mono text-xs text-foreground" title={marker.locked ? "🔒 Sign in to unlock verified intelligence" : undefined}>
+            {gated(marker.locked, formatPricePerSqft(marker.avgPricePerSqftPaise), maskPricePerSqft())}
+          </p>
         </div>
         <div>
           <p className="uppercase tracking-wide text-muted">Rental yield</p>
-          <p className="font-mono text-xs text-foreground">{marker.rentalYieldPercent !== null ? `${marker.rentalYieldPercent}%` : "--"}</p>
+          <p className="font-mono text-xs text-foreground" title={marker.locked ? "🔒 Sign in to unlock verified intelligence" : undefined}>
+            {gated(marker.locked, marker.rentalYieldPercent !== null ? `${marker.rentalYieldPercent}%` : "--", maskPercent())}
+          </p>
         </div>
         <div className="text-right">
           <p className="uppercase tracking-wide text-muted">Transactions</p>

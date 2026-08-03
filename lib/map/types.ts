@@ -31,6 +31,8 @@ export interface ProjectMapMarker {
   configurationSummary: string | null;
   imageUrl: string | null;
   position: MapPoint;
+  /** True for a guest — pricePerSqftPaise has already been nulled out server-side; the popup shows a masked placeholder instead. */
+  locked: boolean;
 }
 
 export interface LocalityMapMarker {
@@ -47,6 +49,8 @@ export interface LocalityMapMarker {
   position: MapPoint;
   /** Future-ready: polygon geometry, not populated by any query yet — see FUTURE_MAP_LAYERS. */
   boundary?: MapPoint[] | null;
+  /** True for a guest — medianPricePaise/avgPricePerSqftPaise/rentalYieldPercent have already been nulled out server-side. */
+  locked: boolean;
 }
 
 export interface DeveloperMapMarker {
@@ -59,6 +63,8 @@ export interface DeveloperMapMarker {
   overallScore: number | null;
   /** Derived — centroid of this developer's geolocated published projects (Builder has no stored geo field). */
   position: MapPoint;
+  /** True for a guest — overallScore has already been nulled out server-side. */
+  locked: boolean;
 }
 
 export interface InfraMapMarker {

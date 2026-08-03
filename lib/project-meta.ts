@@ -42,6 +42,21 @@ export type UserRoleValue = (typeof USER_ROLES)[number];
 export const IMAGE_KINDS = ["hero", "gallery", "floorplan", "masterplan", "elevation"] as const;
 export type ImageKind = (typeof IMAGE_KINDS)[number];
 
+/**
+ * The one card-image fallback rule, shared by every list/compare/map query
+ * that shows a single thumbnail per project. `sortOrder` is a single
+ * upload-order counter across ALL kinds for a project (see
+ * lib/actions/images.ts), not scoped per-kind — so a hero image uploaded
+ * after some gallery photos can have a *higher* sortOrder than them, and
+ * "first by sortOrder" alone would silently pick a gallery photo over the
+ * hero. Every caller must fetch images unfiltered by kind (ordered by
+ * sortOrder, a small capped `take`) and run them through this picker,
+ * mirroring the project detail page's own `find(hero) ?? images[0]` logic.
+ */
+export function pickCardImageUrl(images: { kind: string; url: string }[]): string | null {
+  return (images.find((i) => i.kind === "hero") ?? images[0])?.url ?? null;
+}
+
 export const AMENITY_CATEGORIES = ["RECREATION", "SAFETY", "CONVENIENCE", "WELLNESS", "UTILITIES", "OUTDOOR"] as const;
 export type AmenityCategoryValue = (typeof AMENITY_CATEGORIES)[number];
 

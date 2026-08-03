@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { formatDate, formatPriceBand, formatPricePerSqft, formatSqft } from "@/lib/format";
-import { CATEGORY_LABEL, STATUS_LABEL, type ProjectStatus, type PropertyCategory } from "@/lib/project-meta";
+import { CATEGORY_LABEL, pickCardImageUrl, STATUS_LABEL, type ProjectStatus, type PropertyCategory } from "@/lib/project-meta";
 
 /**
  * Public "Compare Projects" read layer — a third, distinct read boundary
@@ -53,7 +53,7 @@ export async function getProjectsForCompare(slugs: string[]): Promise<ComparePro
       brochureThumbnailUrl: true,
       builder: { select: { name: true } },
       locality: { select: { name: true } },
-      images: { where: { kind: "hero" }, orderBy: { sortOrder: "asc" }, take: 1, select: { url: true } },
+      images: { orderBy: { sortOrder: "asc" }, take: 8, select: { url: true, kind: true } },
       configurations: { orderBy: { sortOrder: "asc" }, select: { carpetSqft: true, priceMinPaise: true, label: true } },
       _count: { select: { amenities: true } },
     },
@@ -72,7 +72,7 @@ export async function getProjectsForCompare(slugs: string[]): Promise<ComparePro
       return {
         slug: project.slug,
         name: project.name,
-        imageUrl: project.images[0]?.url ?? null,
+        imageUrl: pickCardImageUrl(project.images),
         builderName: project.builder?.name ?? null,
         localityName: project.locality.name,
         status: STATUS_LABEL[project.status as ProjectStatus],

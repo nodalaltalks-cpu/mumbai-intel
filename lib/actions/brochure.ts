@@ -43,6 +43,12 @@ interface BrochureTargetProject {
  * replace. Only removeProjectBrochureAction ever deletes a file.
  */
 export async function uploadBrochureForProject(project: BrochureTargetProject, file: File, actorId: string): Promise<BrochureActionState> {
+  // Defense in depth: every current caller (uploadProjectBrochureAction,
+  // createProjectAction) already checks the session before calling this, but
+  // this function is exported and "use server" makes it a callable endpoint
+  // in its own right — it must never trust a caller-supplied actorId alone.
+  await requireMutateSession();
+
   if (!(file instanceof File) || file.size === 0) {
     return { error: "Choose a PDF file to upload" };
   }

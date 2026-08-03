@@ -62,9 +62,12 @@ function buildTransactionData(data: z.infer<typeof transactionSchema>) {
   const explicitRate = data.pricePerSqftRupees
     ? BigInt(Math.round(data.pricePerSqftRupees * 100))
     : null;
+  // Falls back to builtUpSqft when carpetSqft isn't given — a common case
+  // for builder-quoted rate cards, which are usually priced on built-up area.
+  const areaForRate = data.carpetSqft ?? data.builtUpSqft;
   const derivedRate =
-    !explicitRate && data.carpetSqft
-      ? BigInt(Math.round((data.valueRupees / data.carpetSqft) * 100))
+    !explicitRate && areaForRate
+      ? BigInt(Math.round((data.valueRupees / areaForRate) * 100))
       : null;
 
   return {

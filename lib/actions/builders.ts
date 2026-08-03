@@ -276,6 +276,14 @@ export async function updateBuilderAction(
 
   await syncBuilderAmenities(builderId, amenityIds);
 
+  // Replacing a logo/cover leaves the previous Cloudinary asset orphaned
+  // (unreferenced anywhere in the DB, but still live and billable) unless we
+  // clean it up here — deleteBuilderMediaAssets only ever ran at trash-empty
+  // time, never on a normal edit that swaps the URL.
+  const replacedLogoUrl = existing.logoUrl && existing.logoUrl !== nextData.logoUrl ? existing.logoUrl : null;
+  const replacedCoverUrl = existing.coverImageUrl && existing.coverImageUrl !== nextData.coverImageUrl ? existing.coverImageUrl : null;
+  await deleteBuilderMediaAssets(builderId, replacedLogoUrl, replacedCoverUrl, [], session.userId);
+
   await emit("BuilderUpdated", { builderId, slug, actorId: session.userId, before: existing, after: nextData });
   redirect("/admin/builders?saved=1");
 }
@@ -317,12 +325,23 @@ export async function restoreBuilderAction(builderId: string): Promise<{ error?:
  */
 export async function permanentlyDeleteBuilderAction(builderId: string): Promise<{ error?: string }> {
   const session = await requireAdminSession();
-  const existing = await prisma.builder.findUnique({
-    where: { id: builderId },
-    select: { deletedAt: true, logoUrl: true, coverImageUrl: true, images: { select: { url: true } } },
-  });
+  const [existing, projectCount] = await Promise.all([
+    prisma.builder.findUnique({
+      where: { id: builderId },
+      select: { deletedAt: true, logoUrl: true, coverImageUrl: true, images: { select: { url: true } } },
+    }),
+    prisma.project.count({ where: { builderId } }),
+  ]);
   if (!existing) return { error: "Builder not found" };
   if (!existing.deletedAt) return { error: "Move this builder to Trash before permanently deleting it" };
+  // Project.builderId is ON DELETE SET NULL, not RESTRICT — the delete below
+  // would otherwise succeed silently and detach this builder from every
+  // still-live project referencing it (unlike Locality/Transaction, which
+  // are RESTRICT and would throw). Block explicitly instead, matching
+  // permanentlyDeleteLocalityAction's guard.
+  if (projectCount > 0) {
+    return { error: `Cannot permanently delete — ${projectCount} project(s) still reference this builder.` };
+  }
 
   try {
     await prisma.builder.delete({ where: { id: builderId } });
@@ -340,18 +359,30 @@ export async function permanentlyDeleteBuilderAction(builderId: string): Promise
 export async function emptyBuilderTrashAction(): Promise<{ error?: string; affected?: number }> {
   const session = await requireAdminSession();
 
+  // Project.builderId is ON DELETE SET NULL, so a bulk deleteMany would
+  // otherwise silently detach still-live projects from their builder — skip
+  // any trashed builder still referenced by a project, same guard as the
+  // single-record permanentlyDeleteBuilderAction and the existing
+  // emptyLocalityTrashAction pattern.
+  const blocked = await prisma.builder.findMany({
+    where: { deletedAt: { not: null }, projects: { some: {} } },
+    select: { id: true },
+  });
+  const blockedIds = new Set(blocked.map((b) => b.id));
   const trashed = await prisma.builder.findMany({
     where: { deletedAt: { not: null } },
     select: { id: true, logoUrl: true, coverImageUrl: true, images: { select: { url: true } } },
   });
+  const deletable = trashed.filter((b) => !blockedIds.has(b.id));
+  if (deletable.length === 0) return { affected: 0 };
 
-  const result = await prisma.builder.deleteMany({ where: { deletedAt: { not: null } } });
+  const result = await prisma.builder.deleteMany({ where: { id: { in: deletable.map((b) => b.id) } } });
 
-  for (const b of trashed) {
+  for (const b of deletable) {
     await deleteBuilderMediaAssets(b.id, b.logoUrl, b.coverImageUrl, b.images.map((i) => i.url), session.userId);
   }
 
-  await logAudit(session.userId, "builder.trash.empty", "Builder", "*");
+  await logAudit(session.userId, "builder.trash.empty", "Builder", deletable.map((b) => b.id).join(","));
   revalidateBuilder();
   return { affected: result.count };
 }

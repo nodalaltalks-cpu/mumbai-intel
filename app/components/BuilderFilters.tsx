@@ -61,7 +61,7 @@ export default function BuilderFilters({ cities }: { cities: FilterOption[] }) {
   }
 
   return (
-    <div className="sticky top-[57px] z-40 rounded-3xl border border-border bg-surface/95 px-4 py-4 shadow-sm backdrop-blur sm:px-6">
+    <div className="sticky top-[98px] z-40 rounded-3xl border border-border bg-surface/95 px-4 py-4 shadow-sm backdrop-blur sm:px-6 md:top-[57px]">
       <div className="flex flex-wrap items-center gap-3">
         <input
           value={q}

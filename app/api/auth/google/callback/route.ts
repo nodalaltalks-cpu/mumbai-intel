@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { setPublicSessionCookie } from "@/lib/public-auth/session";
 import { exchangeGoogleCode, fetchGoogleUserInfo } from "@/lib/public-auth/google";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
+import { recalculatePublicUserCompletion } from "@/lib/profile-completion";
 import { OAUTH_STATE_COOKIE_NAME, sanitizeNextPath } from "../route";
 
 function failure(origin: string, reason: string) {
@@ -69,6 +70,11 @@ export async function GET(request: NextRequest) {
 
     await setPublicSessionCookie({ userId: user.id, email: user.email, name: user.name, image: user.image });
     await recordResearchEvent(authEvent, { entityType: "PublicUser", entityId: user.id, metadata: { method: "google" } });
+    // Every other writer of a scored field (emailVerifiedAt here) recomputes
+    // completion — this was the one path that didn't, so a fresh Google
+    // signup under-reported 0% until the user separately touched the
+    // profile/preferences form.
+    await recalculatePublicUserCompletion(user.id);
 
     const response = NextResponse.redirect(new URL(sanitizeNextPath(expected.next), origin));
     response.cookies.delete(OAUTH_STATE_COOKIE_NAME);

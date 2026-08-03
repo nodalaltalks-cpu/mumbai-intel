@@ -41,7 +41,7 @@ export default function LocalityFilters() {
   if (currentSaleType) chips.push({ keys: ["type"], label: currentSaleType === "sale" ? "Sale" : "Rental" });
 
   return (
-    <div className="sticky top-[57px] z-40 flex flex-col gap-2 border-b border-border bg-background/95 px-4 py-3 backdrop-blur sm:px-6">
+    <div className="sticky top-[98px] z-40 flex flex-col gap-2 border-b border-border bg-background/95 px-4 py-3 backdrop-blur sm:px-6 md:top-[57px]">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[10px] uppercase tracking-wide text-muted">Filter this locality&apos;s data</span>
         <input

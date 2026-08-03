@@ -12,7 +12,7 @@ import { deleteDocumentByPublicId, deleteImageByPublicId, documentPublicIdFromUr
 import { logAudit } from "@/lib/audit";
 import { emit } from "@/lib/events";
 import { syncProjectNearbyInfra } from "@/lib/infra-linking";
-import { buildProjectData, parseHighlights, parseProjectForm, toPaise } from "@/lib/project-data";
+import { buildProjectData, parseProjectForm } from "@/lib/project-data";
 import { completionInputFromSchema, computeProjectCompletionPercent } from "@/lib/project-completion";
 import { uploadBrochureForProject } from "./brochure";
 import { addProjectImageAction } from "./images";
@@ -108,10 +108,12 @@ export async function createProjectAction(
   const city = await prisma.city.findUnique({ where: { slug: PRIMARY_CITY_SLUG } });
   if (!city) return { error: "Primary city is not seeded yet" };
 
+  const requestedSlug = slugify(data.slug || data.name) || "item";
   const slug = await ensureUniqueSlug(data.slug || data.name, async (candidate) => {
     const existing = await prisma.project.findUnique({ where: { slug: candidate } });
     return Boolean(existing);
   });
+  const slugWarning = slug !== requestedSlug ? `Slug "${requestedSlug}" was already in use — this project was saved as "${slug}" instead.` : undefined;
 
   // A brand-new project can't have images yet — imageCount is always 0 here, so
   // Media (and therefore 100% overall) is only reachable after the first save.
@@ -165,7 +167,7 @@ export async function createProjectAction(
   }
 
   await emit("ProjectCreated", { projectId, slug, actorId: session.userId });
-  const warning = [coverImageWarning, brochureWarning].filter(Boolean).join(" ");
+  const warning = [slugWarning, coverImageWarning, brochureWarning].filter(Boolean).join(" ");
   const query = warning ? `created=1&brochureError=${encodeURIComponent(warning)}` : "created=1";
   redirect(`/admin/projects/${projectId}/edit?${query}`);
 }
@@ -237,42 +239,15 @@ export async function autosaveProjectAction(projectId: string, formData: FormDat
   if (!existing) return { error: "Project not found" };
 
   try {
+    // Reuses the exact same field set updateProjectAction writes (buildProjectData)
+    // instead of a hand-maintained duplicate — a prior hand-rolled copy here had
+    // drifted and silently dropped isPublished/isFeatured/dataSource/confidence
+    // on every autosave, so a Publish/Featured toggle only "stuck" if the admin
+    // also hit the explicit Save button before navigating away.
     await prisma.project.update({
       where: { id: projectId },
       data: {
-        name: data.name || undefined,
-        tagline: data.tagline ?? null,
-        description: data.description ?? null,
-        builderId: data.builderId || null,
-        developerGroup: data.developerGroup ?? null,
-        localityId: data.localityId || undefined,
-        microMarketId: data.microMarketId || null,
-        highlights: parseHighlights(data.highlights),
-        status: data.status,
-        category: data.category,
-        address: data.address ?? null,
-        latitude: data.latitude ?? null,
-        longitude: data.longitude ?? null,
-        launchDate: data.launchDate ?? null,
-        promisedPossession: data.promisedPossession ?? null,
-        actualPossession: data.actualPossession ?? null,
-        constructionPercent: data.constructionPercent ?? null,
-        reraNumber: data.reraNumber ?? null,
-        reraStatus: data.reraStatus ?? null,
-        totalUnits: data.totalUnits ?? null,
-        totalTowers: data.totalTowers ?? null,
-        landAreaAcres: data.landAreaAcres ?? null,
-        priceMinPaise: toPaise(data.priceMinRupees),
-        priceMaxPaise: toPaise(data.priceMaxRupees),
-        sourceRef: data.sourceRef ?? null,
-        videoUrl: data.videoUrl ?? null,
-        tour360Url: data.tour360Url ?? null,
-        isTrending: data.isTrending,
-        isLuxury: data.isLuxury,
-        isAffordable: data.isAffordable,
-        metaTitle: data.metaTitle ?? null,
-        metaDescription: data.metaDescription ?? null,
-        ogImageUrl: data.ogImageUrl ?? null,
+        ...buildProjectData(data),
         completionPercent: computeProjectCompletionPercent(completionInputFromSchema(data, amenityIds.length, imageCount)),
       },
     });

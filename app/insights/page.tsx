@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { getTopLocalitiesByActivity } from "@/lib/queries";
 import { formatPricePerSqft } from "@/lib/format";
+import { getPublicSession } from "@/lib/public-auth/session";
+import { gated, maskPricePerSqft } from "@/lib/premium/mask";
 import { SOURCE_LABEL } from "@/lib/project-meta";
 import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
@@ -37,7 +39,8 @@ const PROVENANCE_NOTES = [
 ];
 
 export default async function InsightsPage() {
-  const topLocalities = await getTopLocalitiesByActivity(10);
+  const [session, topLocalities] = await Promise.all([getPublicSession(), getTopLocalitiesByActivity(10)]);
+  const locked = session === null;
 
   return (
     <div className="flex min-h-screen flex-1 flex-col bg-background">
@@ -67,7 +70,9 @@ export default async function InsightsPage() {
                     </div>
                     <div className="text-right">
                       <p className="text-[10px] uppercase tracking-wide text-muted">Avg rate</p>
-                      <p className="font-mono text-sm text-foreground">{formatPricePerSqft(insight.avgPricePerSqftPaise)}</p>
+                      <p className="font-mono text-sm text-foreground" title={locked ? "🔒 Sign in to unlock verified intelligence" : undefined}>
+                        {gated(locked, formatPricePerSqft(insight.avgPricePerSqftPaise), maskPricePerSqft())}
+                      </p>
                     </div>
                   </div>
                 </div>

@@ -1,4 +1,5 @@
 import { formatPriceBand, formatPricePerSqft } from "@/lib/format";
+import { maskPricePerSqft } from "@/lib/premium/mask";
 import { CATEGORY_LABEL, STATUS_CLASS, STATUS_LABEL } from "@/lib/project-meta";
 import type { ProjectMapMarker } from "@/lib/map/types";
 
@@ -23,10 +24,12 @@ export default function ProjectPopup({ marker }: { marker: ProjectMapMarker }) {
           <p className="text-[9px] uppercase tracking-wide text-muted">Starting price</p>
           <p className="font-mono text-sm text-accent">{formatPriceBand(marker.startingPricePaise, null)}</p>
         </div>
-        {marker.pricePerSqftPaise ? (
+        {marker.pricePerSqftPaise || marker.locked ? (
           <div className="text-right">
             <p className="text-[9px] uppercase tracking-wide text-muted">Price/sqft</p>
-            <p className="font-mono text-xs text-foreground">{formatPricePerSqft(marker.pricePerSqftPaise)}</p>
+            <p className="font-mono text-xs text-foreground" title={marker.locked ? "🔒 Sign in to unlock verified intelligence" : undefined}>
+              {marker.locked ? maskPricePerSqft() : formatPricePerSqft(marker.pricePerSqftPaise)}
+            </p>
           </div>
         ) : null}
       </div>

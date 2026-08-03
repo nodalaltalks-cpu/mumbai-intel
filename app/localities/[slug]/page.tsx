@@ -55,7 +55,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return {
     title,
     description,
-    alternates: locality.canonicalUrl ? { canonical: locality.canonicalUrl } : undefined,
+    alternates: { canonical: locality.canonicalUrl || `/localities/${locality.slug}` },
     openGraph: { title, description, type: "website", images: image ? [image] : undefined },
     twitter: { card: "summary_large_image", title, description, images: image ? [image] : undefined },
   };

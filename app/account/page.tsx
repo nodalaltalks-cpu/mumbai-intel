@@ -335,7 +335,16 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Account Details</h2>
               <div className="mt-3 grid grid-cols-2 gap-3">
                 <Fact label="Email" value={user.email} />
-                <Fact label="Sign-in method" value={user.provider === "GOOGLE" ? "Google" : "Email & password"} />
+                <Fact
+                  label="Sign-in method"
+                  value={
+                    user.googleId && user.passwordHash
+                      ? "Email & password + Google"
+                      : user.googleId
+                        ? "Google"
+                        : "Email & password"
+                  }
+                />
                 <Fact label="Member since" value={formatDate(user.createdAt)} />
                 <Fact label="Last sign-in" value={user.lastLoginAt ? formatDate(user.lastLoginAt) : "--"} />
               </div>

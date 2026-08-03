@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { ProjectAnalyticsService, TransactionAnalyticsService } from "@/lib/analytics";
 import type { DeveloperMapMarker, InfraMapMarker, LocalityMapMarker, ProjectMapMarker } from "@/lib/map/types";
+import { getPublicSession } from "@/lib/public-auth/session";
+import { pickCardImageUrl } from "@/lib/project-meta";
 import { PRIMARY_CITY_SLUG } from "./shared";
 
 /**
@@ -9,9 +11,17 @@ import { PRIMARY_CITY_SLUG } from "./shared";
  * client-side against this dataset for instant, network-free interaction.
  * Every derived figure (price/sqft, config summary, median price) is
  * delegated to the Analytics Engine, same rule as the rest of the query layer.
+ *
+ * Guest gating: price/sqft, median price, rental yield and builder score are
+ * "premium" fields masked everywhere else in the app (ProjectCard,
+ * LocalityCard, BuilderCard) — they must be nulled out here too, server-side,
+ * before the marker ever reaches MapExplorer/MapCanvas (a "use client" tree),
+ * same contract as lib/premium/mask.ts's maskProjectBrochure.
  */
 
 export async function getProjectMapMarkers(): Promise<ProjectMapMarker[]> {
+  const session = await getPublicSession();
+  const locked = session === null;
   const projects = await prisma.project.findMany({
     where: {
       city: { slug: PRIMARY_CITY_SLUG },
@@ -23,7 +33,7 @@ export async function getProjectMapMarkers(): Promise<ProjectMapMarker[]> {
     include: {
       locality: true,
       builder: true,
-      images: { where: { kind: "hero" }, orderBy: { sortOrder: "asc" }, take: 1 },
+      images: { orderBy: { sortOrder: "asc" }, take: 8 },
       configurations: { select: { bedrooms: true, carpetSqft: true, priceMinPaise: true } },
     },
   });
@@ -45,15 +55,18 @@ export async function getProjectMapMarkers(): Promise<ProjectMapMarker[]> {
       category: p.category,
       bedroomOptions: Array.from(new Set(p.configurations.map((c) => Number(c.bedrooms)))),
       startingPricePaise: p.priceMinPaise !== null ? Number(p.priceMinPaise) : null,
-      pricePerSqftPaise,
+      pricePerSqftPaise: locked ? null : pricePerSqftPaise,
       configurationSummary,
-      imageUrl: p.images[0]?.url ?? null,
+      imageUrl: pickCardImageUrl(p.images),
       position: { lat: p.latitude as number, lng: p.longitude as number },
+      locked,
     };
   });
 }
 
 export async function getLocalityMapMarkers(): Promise<LocalityMapMarker[]> {
+  const session = await getPublicSession();
+  const locked = session === null;
   const localities = await prisma.locality.findMany({
     where: {
       city: { slug: PRIMARY_CITY_SLUG },
@@ -88,19 +101,22 @@ export async function getLocalityMapMarkers(): Promise<LocalityMapMarker[]> {
       slug: l.slug,
       name: l.name,
       zoneName: l.zone?.name ?? null,
-      medianPricePaise: TransactionAnalyticsService.calculateMedianPrice(localityTx),
-      avgPricePerSqftPaise: l.avgPricePerSqftPaise !== null ? Number(l.avgPricePerSqftPaise) : null,
-      rentalYieldPercent: l.rentalYieldPercent !== null ? Number(l.rentalYieldPercent) : null,
+      medianPricePaise: locked ? null : TransactionAnalyticsService.calculateMedianPrice(localityTx),
+      avgPricePerSqftPaise: locked ? null : l.avgPricePerSqftPaise !== null ? Number(l.avgPricePerSqftPaise) : null,
+      rentalYieldPercent: locked ? null : l.rentalYieldPercent !== null ? Number(l.rentalYieldPercent) : null,
       transactionCount: localityTx.length,
       projectCount: l._count.projects,
       position: { lat: l.centroidLat as number, lng: l.centroidLng as number },
       boundary: null,
+      locked,
     };
   });
 }
 
 /** Builder has no stored geo field, so a developer's map position is derived as the centroid of its own geolocated published projects — builders with none are omitted (Phase 13 spec: "where applicable"). */
 export async function getDeveloperMapMarkers(): Promise<DeveloperMapMarker[]> {
+  const session = await getPublicSession();
+  const locked = session === null;
   const builders = await prisma.builder.findMany({
     where: { isPublished: true, isArchived: false },
     include: {
@@ -124,8 +140,9 @@ export async function getDeveloperMapMarkers(): Promise<DeveloperMapMarker[]> {
         name: b.name,
         logoUrl: b.logoUrl,
         projectCount: b.projects.length,
-        overallScore: b.scoreSnapshots[0] ? Number(b.scoreSnapshots[0].overallScore) : null,
+        overallScore: locked ? null : b.scoreSnapshots[0] ? Number(b.scoreSnapshots[0].overallScore) : null,
         position: { lat, lng },
+        locked,
       };
     });
 }

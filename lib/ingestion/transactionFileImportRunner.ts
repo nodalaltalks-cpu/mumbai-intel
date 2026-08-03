@@ -1,21 +1,14 @@
 import "server-only";
+import { createHash } from "crypto";
 import { Prisma, type DataSource } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { PRIMARY_CITY_SLUG } from "@/lib/queries";
 import { parseCsv } from "./connectors/fileImport/csvParser";
 import { mapRowToTransactionFields } from "./connectors/fileImport/columnMapping";
-import { validateTransactionRow } from "./connectors/fileImport/validateTransactionRow";
+import { validateTransactionRow, type ValidatedTransactionRow } from "./connectors/fileImport/validateTransactionRow";
 import type { TransactionImportPayload } from "./connectors/fileImport/types";
 import type { ConnectorRunSummary } from "./types";
 import type { FileFormat } from "./fileImportRunner";
-
-async function logEntry(batchId: string, entityType: string, entityId: string | null, action: string, message: string | null) {
-  try {
-    await prisma.ingestLogEntry.create({ data: { batchId, entityType, entityId, action, message } });
-  } catch (error) {
-    console.error("[file-import] failed to write log entry", error);
-  }
-}
 
 function parseRows(fileText: string, format: FileFormat): Record<string, unknown>[] {
   if (format === "csv") return parseCsv(fileText).rows;
@@ -25,11 +18,56 @@ function parseRows(fileText: string, format: FileFormat): Record<string, unknown
 }
 
 /**
+ * Content-derived idempotency key — deliberately independent of row
+ * position within any particular file. A prior version keyed this as
+ * `${sourceKey}:row-${rowNumber}`, which meant row 1 of *every* upload ever
+ * made under the same sourceKey collided with row 1 of every other upload,
+ * silently discarding real transactions on any second file. Hashing the
+ * transaction's own stable fields means only a genuinely identical
+ * transaction (same locality/project/date/value/area/unit) is ever treated
+ * as a duplicate, regardless of which file or row it came from.
+ */
+function computeSourceRef(sourceKey: string, row: ValidatedTransactionRow): string {
+  const stable = JSON.stringify({
+    type: row.type,
+    date: row.registrationDate.toISOString(),
+    value: row.valueRupees,
+    carpet: row.carpetSqft ?? null,
+    bedrooms: row.bedrooms ?? null,
+    tower: row.tower?.trim().toLowerCase() ?? null,
+    unit: row.unitLabel?.trim().toLowerCase() ?? null,
+    locality: row.localityName.trim().toLowerCase(),
+    project: row.projectName?.trim().toLowerCase() ?? null,
+  });
+  const hash = createHash("sha256").update(stable).digest("hex").slice(0, 24);
+  return `${sourceKey}:${hash}`;
+}
+
+interface PendingLogEntry {
+  entityType: string;
+  entityId: string | null;
+  action: string;
+  message: string | null;
+}
+
+/**
  * Bulk-import runner for uploaded Transaction files (CSV/JSON) — the
  * Transaction counterpart to runProjectFileImport. This is the pipeline
  * that finally gives the platform's Transaction model (already designed as
  * "manual now, IGR later" — see prisma/schema.prisma) a bulk-import path,
  * and produces the TransactionImported event once approved.
+ *
+ * All row parsing/validation/dedup-checking happens in memory first; the
+ * database writes for every row then fire concurrently via `Promise.allSettled`
+ * instead of one `await` at a time. NOT `createMany` — the Neon HTTP adapter
+ * has no transaction support and Prisma's `createMany` needs one internally
+ * even for a same-shape batch (see lib/ingestion/runner.ts), so it fails
+ * outright on this adapter. Concurrent single-row `create()` calls (the same
+ * remedy used by updateManyByRow in lib/actions/errors.ts for bulk updates)
+ * keep every write a single HTTP round trip while no longer waiting for each
+ * one to finish before starting the next — a prior version awaited up to two
+ * sequential single-row `create` calls per row, meaning a few-hundred-row
+ * file meant a few-hundred sequential network round trips to Neon.
  */
 export async function runTransactionFileImport(params: {
   sourceKey: string;
@@ -45,6 +83,8 @@ export async function runTransactionFileImport(params: {
   });
 
   const summary: ConnectorRunSummary = { written: 0, skipped: 0, staged: 0, failed: 0 };
+  const logEntries: PendingLogEntry[] = [];
+  const stagingRecords: { entityType: "Transaction"; targetId: null; payload: Prisma.InputJsonValue }[] = [];
 
   try {
     const rawRows = parseRows(fileText, fileFormat);
@@ -62,6 +102,8 @@ export async function runTransactionFileImport(params: {
     const localityByName = new Map(localities.map((l) => [l.name.trim().toLowerCase(), l.id]));
     const projectByName = new Map(projects.map((p) => [p.name.trim().toLowerCase(), p.id]));
     const existingSourceRefSet = new Set(existingSourceRefs.map((t) => t.sourceRef).filter((r): r is string => r !== null));
+    // Guards against the same file containing two literally-identical rows.
+    const seenInThisRun = new Set<string>();
 
     for (let i = 0; i < rawRows.length; i++) {
       const rowNumber = i + 1;
@@ -70,7 +112,7 @@ export async function runTransactionFileImport(params: {
         const validated = validateTransactionRow(mapped);
         if (!validated.ok) {
           summary.failed += 1;
-          await logEntry(batch.id, "Transaction", null, "FAILED", `Row ${rowNumber}: ${validated.error}`);
+          logEntries.push({ entityType: "Transaction", entityId: null, action: "FAILED", message: `Row ${rowNumber}: ${validated.error}` });
           continue;
         }
         const row = validated.data;
@@ -78,18 +120,29 @@ export async function runTransactionFileImport(params: {
         const localityId = localityByName.get(row.localityName.trim().toLowerCase());
         if (!localityId) {
           summary.failed += 1;
-          await logEntry(batch.id, "Transaction", null, "FAILED", `Row ${rowNumber}: locality "${row.localityName}" not found — add it in the admin panel first`);
+          logEntries.push({
+            entityType: "Transaction",
+            entityId: null,
+            action: "FAILED",
+            message: `Row ${rowNumber}: locality "${row.localityName}" not found — add it in the admin panel first`,
+          });
           continue;
         }
 
         const projectId = row.projectName ? projectByName.get(row.projectName.trim().toLowerCase()) : undefined;
 
-        const sourceRef = `${sourceKey}:row-${rowNumber}`;
-        if (existingSourceRefSet.has(sourceRef)) {
+        const sourceRef = computeSourceRef(sourceKey, row);
+        if (existingSourceRefSet.has(sourceRef) || seenInThisRun.has(sourceRef)) {
           summary.skipped += 1;
-          await logEntry(batch.id, "Transaction", null, "SKIPPED_DUPLICATE", `Row ${rowNumber}: already imported from this source (sourceRef "${sourceRef}")`);
+          logEntries.push({
+            entityType: "Transaction",
+            entityId: null,
+            action: "SKIPPED_DUPLICATE",
+            message: `Row ${rowNumber}: an identical transaction has already been imported (sourceRef "${sourceRef}")`,
+          });
           continue;
         }
+        seenInThisRun.add(sourceRef);
 
         const payload: TransactionImportPayload = {
           localityId,
@@ -109,27 +162,33 @@ export async function runTransactionFileImport(params: {
         // duplicated" the way Project/Builder/Locality are — there is no
         // duplicate-match candidate here, only the sourceRef idempotency check
         // above. Every valid row not already imported is staged for review.
-        await prisma.ingestStagingRecord.create({
-          data: {
-            batchId: batch.id,
-            entityType: "Transaction",
-            targetId: null,
-            payload: payload as unknown as Prisma.InputJsonValue,
-          },
-        });
+        stagingRecords.push({ entityType: "Transaction", targetId: null, payload: payload as unknown as Prisma.InputJsonValue });
         summary.staged += 1;
-        await logEntry(
-          batch.id,
-          "Transaction",
-          null,
-          "STAGED",
-          `Row ${rowNumber}: ${row.type} in "${row.localityName}"${row.projectName ? ` (${row.projectName})` : ""} — awaiting review`
-        );
+        logEntries.push({
+          entityType: "Transaction",
+          entityId: null,
+          action: "STAGED",
+          message: `Row ${rowNumber}: ${row.type} in "${row.localityName}"${row.projectName ? ` (${row.projectName})` : ""} — awaiting review`,
+        });
       } catch (error) {
         summary.failed += 1;
-        await logEntry(batch.id, "Transaction", null, "FAILED", `Row ${rowNumber}: ${error instanceof Error ? error.message : "Unknown error"}`);
+        logEntries.push({
+          entityType: "Transaction",
+          entityId: null,
+          action: "FAILED",
+          message: `Row ${rowNumber}: ${error instanceof Error ? error.message : "Unknown error"}`,
+        });
       }
     }
+
+    await Promise.allSettled([
+      ...stagingRecords.map((r) =>
+        prisma.ingestStagingRecord.create({ data: { batchId: batch.id, entityType: r.entityType, targetId: r.targetId, payload: r.payload } })
+      ),
+      ...logEntries.map((l) =>
+        prisma.ingestLogEntry.create({ data: { batchId: batch.id, entityType: l.entityType, entityId: l.entityId, action: l.action, message: l.message } })
+      ),
+    ]);
 
     await prisma.ingestBatch.update({
       where: { id: batch.id },
@@ -142,6 +201,17 @@ export async function runTransactionFileImport(params: {
       },
     });
   } catch (error) {
+    // Best-effort — the batch's failed status is the priority; logging that
+    // the log-write itself failed would recurse into the same problem.
+    try {
+      await Promise.allSettled(
+        logEntries.map((l) =>
+          prisma.ingestLogEntry.create({ data: { batchId: batch.id, entityType: l.entityType, entityId: l.entityId, action: l.action, message: l.message } })
+        )
+      );
+    } catch {
+      // Ignore — see comment above.
+    }
     await prisma.ingestBatch.update({
       where: { id: batch.id },
       data: { status: "failed", finishedAt: new Date(), note: error instanceof Error ? error.message : "Unknown error" },

@@ -2,6 +2,7 @@ import { cache } from "react";
 import type { Prisma, ProjectStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { distanceMeters } from "@/lib/geo";
+import { pickCardImageUrl } from "@/lib/project-meta";
 import {
   DeveloperAnalyticsService,
   LocalityAnalyticsService,
@@ -115,7 +116,7 @@ export async function getFeaturedProjects(limit = 6) {
   const include = {
     locality: { include: { zone: true } },
     builder: true,
-    images: { where: { kind: "hero" }, orderBy: { sortOrder: "asc" as const }, take: 1 },
+    images: { orderBy: { sortOrder: "asc" as const }, take: 8 },
     configurations: { select: { bedrooms: true, carpetSqft: true, priceMinPaise: true } },
   };
 
@@ -156,7 +157,7 @@ export async function getFeaturedProjects(limit = 6) {
       possessionDate: project.promisedPossession,
       constructionPercent: project.constructionPercent,
       dataSource: project.dataSource,
-      imageUrl: project.images[0]?.url ?? null,
+      imageUrl: pickCardImageUrl(project.images),
       brochureUrl: project.brochureUrl,
       brochureFileName: project.brochureFileName,
       brochureThumbnailUrl: project.brochureThumbnailUrl,
@@ -192,7 +193,7 @@ export async function getSavedProjectsForUser(publicUserId: string) {
           brochureThumbnailUrl: true,
           locality: { select: { name: true, zone: { select: { name: true } } } },
           builder: { select: { name: true, logoUrl: true } },
-          images: { where: { kind: "hero" }, orderBy: { sortOrder: "asc" as const }, take: 1, select: { url: true } },
+          images: { orderBy: { sortOrder: "asc" as const }, take: 8, select: { url: true, kind: true } },
           configurations: { select: { bedrooms: true, carpetSqft: true, priceMinPaise: true } },
         },
       },
@@ -219,7 +220,7 @@ export async function getSavedProjectsForUser(publicUserId: string) {
       possessionDate: project.promisedPossession,
       constructionPercent: project.constructionPercent,
       dataSource: project.dataSource,
-      imageUrl: project.images[0]?.url ?? null,
+      imageUrl: pickCardImageUrl(project.images),
       brochureUrl: project.brochureUrl,
       brochureFileName: project.brochureFileName,
       brochureThumbnailUrl: project.brochureThumbnailUrl,
@@ -241,7 +242,7 @@ export async function getLatestLaunches(limit = 6) {
     include: {
       locality: { include: { zone: true } },
       builder: true,
-      images: { where: { kind: "hero" }, orderBy: { sortOrder: "asc" }, take: 1 },
+      images: { orderBy: { sortOrder: "asc" }, take: 8 },
       configurations: { select: { bedrooms: true, carpetSqft: true, priceMinPaise: true } },
     },
   });
@@ -265,7 +266,7 @@ export async function getLatestLaunches(limit = 6) {
       possessionDate: project.promisedPossession,
       constructionPercent: project.constructionPercent,
       dataSource: project.dataSource,
-      imageUrl: project.images[0]?.url ?? null,
+      imageUrl: pickCardImageUrl(project.images),
       brochureUrl: project.brochureUrl,
       brochureFileName: project.brochureFileName,
       brochureThumbnailUrl: project.brochureThumbnailUrl,
@@ -630,7 +631,7 @@ export async function getPublicProjectsPaged(filters: PublicProjectFilters) {
       include: {
         locality: { include: { zone: true } },
         builder: true,
-        images: { where: { kind: "hero" }, orderBy: { sortOrder: "asc" }, take: 1 },
+        images: { orderBy: { sortOrder: "asc" }, take: 8 },
         configurations: { select: { bedrooms: true, carpetSqft: true, priceMinPaise: true } },
       },
     }),
@@ -657,7 +658,7 @@ export async function getPublicProjectsPaged(filters: PublicProjectFilters) {
         possessionDate: project.promisedPossession,
         constructionPercent: project.constructionPercent,
         dataSource: project.dataSource,
-        imageUrl: project.images[0]?.url ?? null,
+        imageUrl: pickCardImageUrl(project.images),
         brochureUrl: project.brochureUrl,
         brochureFileName: project.brochureFileName,
         brochureThumbnailUrl: project.brochureThumbnailUrl,
@@ -741,7 +742,7 @@ export async function getRelatedProjects(project: { id: string; localityId: stri
     include: {
       locality: { include: { zone: true } },
       builder: true,
-      images: { where: { kind: "hero" }, orderBy: { sortOrder: "asc" }, take: 1 },
+      images: { orderBy: { sortOrder: "asc" }, take: 8 },
       configurations: { select: { bedrooms: true, carpetSqft: true, priceMinPaise: true } },
     },
   }).then((projects) =>
@@ -764,7 +765,7 @@ export async function getRelatedProjects(project: { id: string; localityId: stri
         possessionDate: p.promisedPossession,
         constructionPercent: p.constructionPercent,
         dataSource: p.dataSource,
-        imageUrl: p.images[0]?.url ?? null,
+        imageUrl: pickCardImageUrl(p.images),
         brochureUrl: p.brochureUrl,
         brochureFileName: p.brochureFileName,
         brochureThumbnailUrl: p.brochureThumbnailUrl,
@@ -944,7 +945,7 @@ export const getPublicBuilderBySlug = cache(async (slug: string) => {
       locality: { include: { zone: true } },
       city: true,
       builder: true,
-      images: { where: { kind: "hero" }, orderBy: { sortOrder: "asc" }, take: 1 },
+      images: { orderBy: { sortOrder: "asc" }, take: 8 },
       configurations: { select: { bedrooms: true, carpetSqft: true, priceMinPaise: true } },
     },
   });
@@ -969,7 +970,7 @@ export const getPublicBuilderBySlug = cache(async (slug: string) => {
       launchDate: p.launchDate,
       constructionPercent: p.constructionPercent,
       dataSource: p.dataSource,
-      imageUrl: p.images[0]?.url ?? null,
+      imageUrl: pickCardImageUrl(p.images),
       brochureUrl: p.brochureUrl,
       brochureFileName: p.brochureFileName,
       brochureThumbnailUrl: p.brochureThumbnailUrl,
@@ -1152,7 +1153,7 @@ export const getPublicLocalityBySlug = cache(async (slug: string) => {
     include: {
       locality: { include: { zone: true } },
       builder: true,
-      images: { where: { kind: "hero" }, orderBy: { sortOrder: "asc" }, take: 1 },
+      images: { orderBy: { sortOrder: "asc" }, take: 8 },
       configurations: { select: { bedrooms: true, carpetSqft: true, priceMinPaise: true } },
     },
   });
@@ -1184,7 +1185,7 @@ export const getPublicLocalityBySlug = cache(async (slug: string) => {
         possessionDate: p.promisedPossession,
         constructionPercent: p.constructionPercent,
         dataSource: p.dataSource,
-        imageUrl: p.images[0]?.url ?? null,
+        imageUrl: pickCardImageUrl(p.images),
         brochureUrl: p.brochureUrl,
         brochureFileName: p.brochureFileName,
         brochureThumbnailUrl: p.brochureThumbnailUrl,
@@ -1327,16 +1328,20 @@ export async function getTopLocalitiesByActivity(limit = 3): Promise<LocalityIns
   if (grouped.length === 0) return [];
 
   const localities = await prisma.locality.findMany({
-    where: { id: { in: grouped.map((g) => g.localityId) } },
+    where: { id: { in: grouped.map((g) => g.localityId) }, isPublished: true, isArchived: false },
   });
   const nameById = new Map(localities.map((l) => [l.id, l.name]));
 
-  return grouped.map((g) => ({
-    localityId: g.localityId,
-    localityName: nameById.get(g.localityId) ?? "Unknown",
-    transactionCount: g._count._all,
-    avgPricePerSqftPaise: g._avg.pricePerSqftPaise ? Number(g._avg.pricePerSqftPaise) : null,
-  }));
+  // An unpublished/archived locality has no entry in nameById — drop it
+  // rather than surface it under a placeholder "Unknown" name.
+  return grouped
+    .filter((g) => nameById.has(g.localityId))
+    .map((g) => ({
+      localityId: g.localityId,
+      localityName: nameById.get(g.localityId) as string,
+      transactionCount: g._count._all,
+      avgPricePerSqftPaise: g._avg.pricePerSqftPaise ? Number(g._avg.pricePerSqftPaise) : null,
+    }));
 }
 
 // ─────────────────────────────────────────────────────────────────────────

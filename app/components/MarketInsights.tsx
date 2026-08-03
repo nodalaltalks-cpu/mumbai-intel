@@ -1,10 +1,13 @@
 import { formatPricePerSqft } from "@/lib/format";
 import { getTopLocalitiesByActivity } from "@/lib/queries";
+import { getPublicSession } from "@/lib/public-auth/session";
+import { gated, maskPricePerSqft } from "@/lib/premium/mask";
 import SectionHeading from "./ui/SectionHeading";
 import EmptyState from "./ui/EmptyState";
 
 export default async function MarketInsights() {
-  const insights = await getTopLocalitiesByActivity(3);
+  const [session, insights] = await Promise.all([getPublicSession(), getTopLocalitiesByActivity(3)]);
+  const locked = session === null;
 
   return (
     <section className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
@@ -25,8 +28,8 @@ export default async function MarketInsights() {
                 </div>
                 <div className="text-right">
                   <p className="text-[10px] uppercase tracking-wide text-muted">Avg rate</p>
-                  <p className="font-mono text-sm text-foreground">
-                    {formatPricePerSqft(insight.avgPricePerSqftPaise)}
+                  <p className="font-mono text-sm text-foreground" title={locked ? "🔒 Sign in to unlock verified intelligence" : undefined}>
+                    {gated(locked, formatPricePerSqft(insight.avgPricePerSqftPaise), maskPricePerSqft())}
                   </p>
                 </div>
               </div>
