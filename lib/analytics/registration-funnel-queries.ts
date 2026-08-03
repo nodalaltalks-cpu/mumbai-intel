@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import type { PremiumFeature } from "@/lib/premium/types";
+import type { TopViewedEntity } from "./research-queries";
 
 function startOfDay(d: Date): Date {
   const x = new Date(d);
@@ -87,6 +88,69 @@ export async function getSignupTrend(days = 30): Promise<DailySignupPoint[]> {
     buckets.set(key, (buckets.get(key) ?? 0) + 1);
   }
   return Array.from(buckets.entries()).map(([date, count]) => ({ date, count }));
+}
+
+export interface GuestVsLoggedInSplit {
+  guestEvents: number;
+  loggedInEvents: number;
+}
+
+/** Event-volume split by identity — publicUserId null means the event was recorded while browsing as a guest, same identity model as every other ResearchEvent query. */
+export async function getGuestVsLoggedInSplit(days = 30): Promise<GuestVsLoggedInSplit> {
+  const since = daysAgo(days - 1);
+  const [guestEvents, loggedInEvents] = await Promise.all([
+    prisma.researchEvent.count({ where: { createdAt: { gte: since }, publicUserId: null } }),
+    prisma.researchEvent.count({ where: { createdAt: { gte: since }, publicUserId: { not: null } } }),
+  ]);
+  return { guestEvents, loggedInEvents };
+}
+
+/**
+ * Projects a now-registered user viewed anonymously before they signed up —
+ * the anon session cookie (mi_anon_id) is never rotated on login, so a
+ * SIGNUP_COMPLETED row and the PROJECT_VIEWED rows that preceded it share
+ * the same sessionId without any explicit backfill/link step. Grouped in
+ * JS (Neon HTTP adapter groupBy avoidance), same pattern as getTopViewed
+ * in research-queries.ts.
+ */
+export async function getTopProjectsBeforeSignup(limit = 10): Promise<TopViewedEntity[]> {
+  const signups = await prisma.researchEvent.findMany({
+    where: { eventType: "SIGNUP_COMPLETED", sessionId: { not: null } },
+    select: { sessionId: true, createdAt: true },
+  });
+  if (signups.length === 0) return [];
+
+  const earliestSignupAt = new Map<string, Date>();
+  for (const s of signups) {
+    if (!s.sessionId) continue;
+    const existing = earliestSignupAt.get(s.sessionId);
+    if (!existing || s.createdAt < existing) earliestSignupAt.set(s.sessionId, s.createdAt);
+  }
+
+  const preSignupViews = await prisma.researchEvent.findMany({
+    where: { eventType: "PROJECT_VIEWED", sessionId: { in: Array.from(earliestSignupAt.keys()) }, entityId: { not: null } },
+    select: { sessionId: true, entityId: true, createdAt: true },
+  });
+
+  const counts = new Map<string, number>();
+  for (const v of preSignupViews) {
+    if (!v.sessionId || !v.entityId) continue;
+    const signupAt = earliestSignupAt.get(v.sessionId);
+    if (!signupAt || v.createdAt >= signupAt) continue;
+    counts.set(v.entityId, (counts.get(v.entityId) ?? 0) + 1);
+  }
+
+  const topIds = Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([id]) => id);
+  if (topIds.length === 0) return [];
+
+  const projects = await prisma.project.findMany({ where: { id: { in: topIds } }, select: { id: true, name: true } });
+  const byId = new Map(projects.map((p) => [p.id, p]));
+  return topIds
+    .map((id) => ({ id, name: byId.get(id)?.name ?? "(deleted)", href: `/admin/projects/${id}/edit`, viewCount: counts.get(id) ?? 0 }))
+    .filter((r) => byId.has(r.id));
 }
 
 export interface LockedFeatureClickCount {

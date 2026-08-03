@@ -47,6 +47,7 @@ export default function PremiumGate({
       onClick={handleOpen}
       onKeyDown={handleKeyDown}
       aria-label="Sign in to view"
+      title="🔒 Sign in to unlock verified intelligence"
       className={`relative cursor-pointer overflow-hidden rounded-sm ${className}`}
     >
       <div aria-hidden="true" className="pointer-events-none select-none blur-[3px] opacity-60">

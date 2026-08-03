@@ -8,6 +8,7 @@ import CompareToggleButton from "@/app/components/CompareToggleButton";
 import BrochureDownloadLink from "@/app/components/BrochureDownloadLink";
 import { IconClose } from "@/app/components/ui/icons";
 import { formatDate, formatPriceBand, formatPricePerSqft } from "@/lib/format";
+import { maskPricePerSqft } from "@/lib/premium/mask";
 import {
   SOURCE_CLASS,
   SOURCE_LABEL,
@@ -42,6 +43,8 @@ export interface ProjectCardData {
   brochureThumbnailUrl?: string | null;
   /** Always accurate regardless of lock state — safe to expose, preserves the "Download Official Brochure" affordance for guests. */
   brochureAvailable?: boolean;
+  /** True when a real pricePerSqftPaise exists but was nulled out server-side for a guest (see lib/premium/mask.ts's maskProjectBrochure) — shows the masked placeholder instead of hiding the row entirely. */
+  pricePerSqftMasked?: boolean;
 }
 
 function initials(name: string): string {
@@ -107,6 +110,10 @@ export default function ProjectCard({ project }: { project: ProjectCardData }) {
                 </p>
                 {project.pricePerSqftPaise ? (
                   <p className="font-mono text-[10px] text-muted">{formatPricePerSqft(project.pricePerSqftPaise)}</p>
+                ) : project.pricePerSqftMasked ? (
+                  <p className="font-mono text-[10px] text-muted" title="🔒 Sign in to unlock verified intelligence">
+                    {maskPricePerSqft()}
+                  </p>
                 ) : null}
               </div>
               {typeof project.constructionPercent === "number" ? (
@@ -234,6 +241,13 @@ function QuickViewModal({ project, onClose }: { project: ProjectCardData; onClos
               <div>
                 <p className="text-[10px] uppercase tracking-wide text-muted">Price/sqft</p>
                 <p className="font-mono text-sm text-foreground">{formatPricePerSqft(project.pricePerSqftPaise)}</p>
+              </div>
+            ) : project.pricePerSqftMasked ? (
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-muted">Price/sqft</p>
+                <p className="font-mono text-sm text-foreground" title="🔒 Sign in to unlock verified intelligence">
+                  {maskPricePerSqft()}
+                </p>
               </div>
             ) : null}
             {typeof project.constructionPercent === "number" ? (

@@ -32,7 +32,10 @@ export default function LocalityCard({ locality, locked = false }: { locality: L
           </div>
         )}
         {locality.investmentScore != null ? (
-          <span className="absolute right-2 top-2 rounded-sm border border-accent/40 bg-background/80 px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wide text-accent backdrop-blur">
+          <span
+            className="absolute right-2 top-2 rounded-sm border border-accent/40 bg-background/80 px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wide text-accent backdrop-blur"
+            title={locked ? "🔒 Sign in to unlock verified intelligence" : undefined}
+          >
             Invest {gated(locked, locality.investmentScore.toFixed(1), maskScore())}
           </span>
         ) : null}
@@ -47,15 +50,19 @@ export default function LocalityCard({ locality, locked = false }: { locality: L
         <div className="grid grid-cols-2 gap-2 border-t border-border pt-3">
           <div>
             <p className="text-[10px] uppercase tracking-wide text-muted">Avg price</p>
-            <p className="font-mono text-sm text-foreground">{gated(locked, formatPricePerSqft(locality.avgPricePerSqftPaise), maskPricePerSqft())}</p>
+            <p className="font-mono text-sm text-foreground" title={locked ? "🔒 Sign in to unlock verified intelligence" : undefined}>
+              {gated(locked, formatPricePerSqft(locality.avgPricePerSqftPaise), maskPricePerSqft())}
+            </p>
           </div>
           <div className="text-right">
             <p className="text-[10px] uppercase tracking-wide text-muted">YoY growth</p>
-            <p className="font-mono text-sm text-foreground">{gated(locked, formatSignedPercent(locality.growthPercentYoy), maskPercent())}</p>
+            <p className="font-mono text-sm text-foreground" title={locked ? "🔒 Sign in to unlock verified intelligence" : undefined}>
+              {gated(locked, formatSignedPercent(locality.growthPercentYoy), maskPercent())}
+            </p>
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-wide text-muted">Rental yield</p>
-            <p className="font-mono text-sm text-foreground">
+            <p className="font-mono text-sm text-foreground" title={locked ? "🔒 Sign in to unlock verified intelligence" : undefined}>
               {gated(locked, locality.rentalYieldPercent != null ? `${locality.rentalYieldPercent}%` : "--", maskPercent())}
             </p>
           </div>

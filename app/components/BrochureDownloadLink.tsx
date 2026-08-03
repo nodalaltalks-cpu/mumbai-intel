@@ -40,7 +40,12 @@ export default function BrochureDownloadLink({
 
   if (!brochureUrl) {
     return (
-      <button type="button" onClick={() => openGate("brochure", next)} className={className}>
+      <button
+        type="button"
+        onClick={() => openGate("brochure", next)}
+        title="🔒 Sign in to download official brochure"
+        className={className}
+      >
         {children}
       </button>
     );

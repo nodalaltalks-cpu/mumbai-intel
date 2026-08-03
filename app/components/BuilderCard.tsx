@@ -83,14 +83,16 @@ export default function BuilderCard({ builder, locked = false }: { builder: Buil
       <div className="mt-auto flex items-end justify-between border-t border-border pt-3">
         <div>
           <p className="text-[10px] uppercase tracking-wide text-muted">Rating</p>
-          <p className="font-mono text-sm text-foreground">
+          <p className="font-mono text-sm text-foreground" title={locked ? "🔒 Sign in to unlock verified intelligence" : undefined}>
             {gated(locked, builder.overallScore != null ? `${builder.overallScore.toFixed(1)}/10` : "--", maskScore())}
           </p>
         </div>
         {builder.investmentScore !== undefined && builder.investmentScore !== null ? (
           <div className="text-center">
             <p className="text-[10px] uppercase tracking-wide text-muted">Investment</p>
-            <p className="font-mono text-sm text-accent">{gated(locked, `${builder.investmentScore.toFixed(1)}/10`, maskScore())}</p>
+            <p className="font-mono text-sm text-accent" title={locked ? "🔒 Sign in to unlock verified intelligence" : undefined}>
+              {gated(locked, `${builder.investmentScore.toFixed(1)}/10`, maskScore())}
+            </p>
           </div>
         ) : null}
         <div className="text-right">

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import type { PremiumFeature } from "./types";
 
 interface GateRequest {
@@ -17,6 +17,9 @@ interface GateContextValue {
 
 const GateContext = createContext<GateContextValue | null>(null);
 
+/** A guest who dismisses the modal for a given feature won't be re-shown it for this long if they click the *same* feature again — avoids nagging on repeat clicks while a click on a different feature still opens it immediately. */
+const DISMISS_COOLDOWN_MS = 5 * 60 * 1000;
+
 /**
  * Single app-wide source of truth for the sign-in gate: whichever surface
  * calls openGate() last wins, so only one <GlobalSignInModal> can ever be
@@ -24,11 +27,19 @@ const GateContext = createContext<GateContextValue | null>(null);
  */
 export function PremiumGateStateProvider({ children }: { children: ReactNode }) {
   const [request, setRequest] = useState<GateRequest | null>(null);
+  const lastDismissed = useRef<{ feature: PremiumFeature; at: number } | null>(null);
 
   const openGate = useCallback((feature: PremiumFeature, next: string, trigger: "inline" | "modal" = "modal") => {
+    const dismissed = lastDismissed.current;
+    if (dismissed && dismissed.feature === feature && Date.now() - dismissed.at < DISMISS_COOLDOWN_MS) return;
     setRequest({ feature, next, trigger });
   }, []);
-  const closeGate = useCallback(() => setRequest(null), []);
+  const closeGate = useCallback(() => {
+    setRequest((current) => {
+      if (current) lastDismissed.current = { feature: current.feature, at: Date.now() };
+      return null;
+    });
+  }, []);
 
   const value = useMemo(() => ({ request, openGate, closeGate }), [request, openGate, closeGate]);
 

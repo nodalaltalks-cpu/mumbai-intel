@@ -1,6 +1,12 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { getConversionSummary, getLockedFeatureClickCounts, getSignupTrend } from "@/lib/analytics/registration-funnel-queries";
+import {
+  getConversionSummary,
+  getGuestVsLoggedInSplit,
+  getLockedFeatureClickCounts,
+  getSignupTrend,
+  getTopProjectsBeforeSignup,
+} from "@/lib/analytics/registration-funnel-queries";
 import { getResearchActivitySummary } from "@/lib/analytics/research-queries";
 import { getBrochureAnalyticsSummary } from "@/lib/analytics/brochure-queries";
 import { getNewsletterSummary } from "@/lib/analytics/newsletter-queries";
@@ -15,16 +21,20 @@ function formatPercent(value: number | null): string {
 }
 
 export default async function RegistrationFunnelPage() {
-  const [conversion, signupTrend, lockedClicks, research, brochures, newsletter] = await Promise.all([
+  const [conversion, signupTrend, lockedClicks, research, brochures, newsletter, guestVsLoggedIn, topBeforeSignup] = await Promise.all([
     getConversionSummary(),
     getSignupTrend(30),
     getLockedFeatureClickCounts(),
     getResearchActivitySummary(),
     getBrochureAnalyticsSummary(),
     getNewsletterSummary(),
+    getGuestVsLoggedInSplit(30),
+    getTopProjectsBeforeSignup(10),
   ]);
 
   const maxLockedClicks = Math.max(...lockedClicks.map((c) => c.count), 1);
+  const totalGuestVsLoggedIn = guestVsLoggedIn.guestEvents + guestVsLoggedIn.loggedInEvents;
+  const guestSharePercent = totalGuestVsLoggedIn > 0 ? (guestVsLoggedIn.guestEvents / totalGuestVsLoggedIn) * 100 : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -67,6 +77,24 @@ export default async function RegistrationFunnelPage() {
       </div>
 
       <section className="rounded-sm border border-border bg-surface p-4">
+        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Guest vs. Logged-in — last 30 days</h2>
+        {totalGuestVsLoggedIn === 0 ? (
+          <p className="text-xs text-muted">No events recorded in this window yet.</p>
+        ) : (
+          <>
+            <div className="flex h-2 overflow-hidden rounded-full bg-background">
+              <div className="h-full bg-accent" style={{ width: `${guestSharePercent}%` }} />
+              <div className="h-full bg-positive" style={{ width: `${100 - (guestSharePercent ?? 0)}%` }} />
+            </div>
+            <div className="mt-2 flex items-center justify-between text-xs text-muted">
+              <span>Guest: {guestVsLoggedIn.guestEvents} ({formatPercent(guestSharePercent)})</span>
+              <span>Logged-in: {guestVsLoggedIn.loggedInEvents} ({formatPercent(100 - (guestSharePercent ?? 0))})</span>
+            </div>
+          </>
+        )}
+      </section>
+
+      <section className="rounded-sm border border-border bg-surface p-4">
         <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Weekly Signups — last 30 days</h2>
         <BarChart data={signupTrend.map((p) => ({ label: p.date.slice(5), count: p.count }))} emptyLabel="No signups recorded in this window yet" />
       </section>
@@ -84,6 +112,27 @@ export default async function RegistrationFunnelPage() {
                   <div className="h-full rounded-full bg-accent" style={{ width: `${(c.count / maxLockedClicks) * 100}%` }} />
                 </div>
                 <span className="w-10 shrink-0 text-right font-mono text-xs text-muted">{c.count}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="rounded-sm border border-border bg-surface p-4">
+        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Most Clicked Projects Before Signup</h2>
+        {topBeforeSignup.length === 0 ? (
+          <p className="text-xs text-muted">No pre-signup project views recorded yet.</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {topBeforeSignup.map((item, i) => (
+              <li key={item.id} className="flex items-center justify-between gap-2 border-t border-border pt-2 first:border-t-0 first:pt-0">
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="font-mono text-[10px] text-muted">{i + 1}</span>
+                  <Link href={item.href} className="truncate text-xs text-foreground hover:text-accent">
+                    {item.name}
+                  </Link>
+                </span>
+                <span className="shrink-0 font-mono text-xs text-accent">{item.viewCount}</span>
               </li>
             ))}
           </ul>
