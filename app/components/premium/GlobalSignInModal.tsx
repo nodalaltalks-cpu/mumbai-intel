@@ -32,10 +32,11 @@ export default function GlobalSignInModal() {
         role="dialog"
         aria-modal="true"
         aria-label={PREMIUM_CARD_TITLE}
-        className="mi-pop-in flex w-full max-h-[90vh] flex-col gap-5 overflow-y-auto rounded-t-2xl border border-border bg-surface p-6 shadow-2xl sm:max-w-sm sm:rounded-2xl sm:p-7"
+        className="mi-pop-in flex w-full max-h-[90vh] flex-col overflow-hidden rounded-t-2xl border border-border bg-surface shadow-2xl sm:max-w-sm sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-4">
+        {/* Sticky so the headline stays visible even when the benefits list below needs to scroll on short viewports. */}
+        <div className="flex shrink-0 items-start justify-between gap-4 p-6 pb-0 sm:p-7 sm:pb-0">
           <div>
             <h2 className="text-lg font-semibold text-foreground">{PREMIUM_CARD_TITLE}</h2>
             <p className="mt-1.5 text-sm leading-relaxed text-muted">{PREMIUM_CARD_SUBTITLE}</p>
@@ -50,31 +51,33 @@ export default function GlobalSignInModal() {
           </button>
         </div>
 
-        <ul className="flex flex-col gap-2 text-sm text-foreground">
-          {PREMIUM_BENEFITS.map((benefit) => (
-            <li key={benefit} className="flex items-start gap-2">
-              <span className="mt-0.5 text-positive">✓</span>
-              <span>{benefit}</span>
-            </li>
-          ))}
-        </ul>
+        <div className="flex flex-col gap-5 overflow-y-auto p-6 pt-5 sm:p-7 sm:pt-5">
+          <ul className="flex flex-col gap-2 text-sm text-foreground">
+            {PREMIUM_BENEFITS.map((benefit) => (
+              <li key={benefit} className="flex items-start gap-2">
+                <span className="mt-0.5 text-positive">✓</span>
+                <span>{benefit}</span>
+              </li>
+            ))}
+          </ul>
 
-        <div className="flex flex-col gap-2.5" onClick={fireLockedClick}>
-          <GoogleButton next={next} />
-          <Link
-            href={`/signup?next=${encodeURIComponent(next)}`}
-            className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-raised"
-          >
-            Continue with Email
-          </Link>
+          <div className="flex flex-col gap-2.5" onClick={fireLockedClick}>
+            <GoogleButton next={next} />
+            <Link
+              href={`/signup?next=${encodeURIComponent(next)}`}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-raised"
+            >
+              Continue with Email
+            </Link>
+          </div>
+
+          <p className="text-center text-sm text-muted">
+            Already have an account?{" "}
+            <Link href={`/login?next=${encodeURIComponent(next)}`} className="font-medium text-foreground hover:underline" onClick={fireLockedClick}>
+              Sign In
+            </Link>
+          </p>
         </div>
-
-        <p className="text-center text-sm text-muted">
-          Already have an account?{" "}
-          <Link href={`/login?next=${encodeURIComponent(next)}`} className="font-medium text-foreground hover:underline" onClick={fireLockedClick}>
-            Sign In
-          </Link>
-        </p>
       </div>
     </div>
   );
