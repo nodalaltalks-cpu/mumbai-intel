@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import { trackGuestPaywallTriggered } from "@/lib/analytics/ga";
 import type { PremiumFeature } from "./types";
 
 interface GateRequest {
@@ -32,6 +33,7 @@ export function PremiumGateStateProvider({ children }: { children: ReactNode }) 
   const openGate = useCallback((feature: PremiumFeature, next: string, trigger: "inline" | "modal" = "modal") => {
     const dismissed = lastDismissed.current;
     if (dismissed && dismissed.feature === feature && Date.now() - dismissed.at < DISMISS_COOLDOWN_MS) return;
+    trackGuestPaywallTriggered(feature);
     setRequest({ feature, next, trigger });
   }, []);
   const closeGate = useCallback(() => {

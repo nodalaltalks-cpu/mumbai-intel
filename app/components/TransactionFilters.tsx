@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { publicSearchAction } from "@/lib/actions/public-search";
+import { trackFilterApplied, trackSearchPerformed } from "@/lib/analytics/ga";
 import type { PublicSearchResult } from "@/lib/queries";
 import {
   CATEGORY_LABEL,
@@ -64,6 +65,11 @@ export default function TransactionFilters({
     }
     params.delete("page");
     router.push(`${pathname}?${params.toString()}`);
+    const applied = Object.entries(updates).filter(([, value]) => value);
+    const q = applied.find(([key]) => key === "q");
+    if (q) trackSearchPerformed(q[1]);
+    const otherFilters = applied.filter(([key]) => key !== "q");
+    if (otherFilters.length > 0) trackFilterApplied("transactions", Object.fromEntries(otherFilters));
   }
 
   function updateParam(key: string, value: string) {

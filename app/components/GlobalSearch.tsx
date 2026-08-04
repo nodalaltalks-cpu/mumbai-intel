@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { publicSearchAction } from "@/lib/actions/public-search";
 import type { PublicSearchResult } from "@/lib/queries";
 import { saveRecentSearch, useRecentSearches } from "@/lib/recent-searches";
+import { trackSearchPerformed } from "@/lib/analytics/ga";
 import { IconChevronRight, IconSearch } from "@/app/components/ui/icons";
 
 interface FlatItem {
@@ -39,7 +40,10 @@ export default function GlobalSearch({ open, onClose }: { open: boolean; onClose
         return;
       }
       publicSearchAction(query)
-        .then(setResults)
+        .then((result) => {
+          setResults(result);
+          trackSearchPerformed(query, result.projects.length + result.builders.length + result.localities.length);
+        })
         .finally(() => setIsPending(false));
     }, 200);
     return () => {

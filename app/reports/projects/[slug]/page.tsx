@@ -16,6 +16,7 @@ import { AnalyticsService } from "@/lib/analytics";
 import { formatMonth, formatPaise, formatPriceBand, formatPricePerSqft } from "@/lib/format";
 import { CATEGORY_LABEL, STATUS_LABEL } from "@/lib/project-meta";
 import Navbar from "@/app/components/Navbar";
+import GAPageEvent from "@/app/components/analytics/GAPageEvent";
 import Footer from "@/app/components/Footer";
 import Breadcrumbs from "@/app/components/Breadcrumbs";
 import ProjectCard from "@/app/components/ProjectCard";
@@ -98,6 +99,7 @@ export default async function ProjectReportPage({ params }: { params: Promise<{ 
 
   return (
     <div className="flex min-h-screen flex-1 flex-col bg-background">
+      <GAPageEvent event="report_viewed" params={{ report_type: "project", entity_name: project.name }} />
       <Navbar />
       <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: "Reports", href: "/reports" }, { label: `${project.name} Report` }]} />
 

@@ -11,7 +11,7 @@ import { sanitizeNextPath } from "@/lib/public-auth/next-path";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/request-ip";
-import { sendPasswordResetEmail } from "@/lib/email";
+import { sendPasswordResetEmail, sendWelcomeEmail } from "@/lib/email";
 
 const RESET_TOKEN_TTL_MINUTES = 30;
 
@@ -60,6 +60,7 @@ export async function signupAction(_prevState: PublicAuthState, formData: FormDa
 
   await setPublicSessionCookie({ userId: user.id, email: user.email, name: user.name, image: user.image });
   await recordResearchEvent("SIGNUP_COMPLETED", { entityType: "PublicUser", entityId: user.id, metadata: { method: "credentials" } });
+  await sendWelcomeEmail(user.email, user.name);
   const signupNext = formData.get("next");
   redirect(typeof signupNext === "string" && signupNext ? sanitizeNextPath(signupNext) : "/");
 }

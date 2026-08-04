@@ -3,6 +3,7 @@
 import { usePathname, useSearchParams } from "next/navigation";
 import { toDocumentDownloadUrl } from "@/lib/document-url";
 import { trackBrochureEvent } from "@/lib/track-brochure";
+import { trackBrochureClicked } from "@/lib/analytics/ga";
 import { usePremiumGate } from "@/lib/premium/gate-context";
 
 /**
@@ -42,7 +43,10 @@ export default function BrochureDownloadLink({
     return (
       <button
         type="button"
-        onClick={() => openGate("brochure", next)}
+        onClick={() => {
+          trackBrochureClicked(slug);
+          openGate("brochure", next);
+        }}
         title="🔒 Sign in to download official brochure"
         className={className}
       >
@@ -56,6 +60,7 @@ export default function BrochureDownloadLink({
       href={toDocumentDownloadUrl(brochureUrl, brochureFileName ?? `${slug}-brochure.pdf`)}
       className={className}
       onClick={() => {
+        trackBrochureClicked(slug);
         trackBrochureEvent(slug, "DOWNLOAD_STARTED");
         // A plain anchor download has no reliable "finished" browser event, so
         // COMPLETED is fired alongside STARTED at click time — a disclosed

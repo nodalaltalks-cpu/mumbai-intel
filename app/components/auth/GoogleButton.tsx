@@ -1,9 +1,14 @@
+"use client";
+
+import { trackSignInStarted } from "@/lib/analytics/ga";
+
 /** Plain <a>, not a form — this hits a redirect-based OAuth route, not a Server Action. */
 export default function GoogleButton({ next }: { next?: string }) {
   const href = next ? `/api/auth/google?next=${encodeURIComponent(next)}` : "/api/auth/google";
   return (
     <a
       href={href}
+      onClick={() => trackSignInStarted("google")}
       className="flex w-full items-center justify-center gap-2.5 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-raised"
     >
       <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">

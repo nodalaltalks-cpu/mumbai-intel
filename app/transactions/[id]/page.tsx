@@ -24,6 +24,7 @@ import { recordRecentViewAction } from "@/lib/actions/recent-views";
 import PremiumGate from "@/app/components/premium/PremiumGate";
 import { getPublicSession } from "@/lib/public-auth/session";
 import { gated, maskPaise, maskPricePerSqft } from "@/lib/premium/mask";
+import GAPageEvent from "@/app/components/analytics/GAPageEvent";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
 
   return (
     <div className="flex min-h-screen flex-1 flex-col bg-background">
+      <GAPageEvent event="transaction_viewed" params={{ transaction_id: tx.id }} />
       <Navbar />
 
       <Breadcrumbs

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import { loginAction, type PublicAuthState } from "@/lib/actions/public-auth";
+import { trackSignInStarted } from "@/lib/analytics/ga";
 import AuthField from "@/app/components/auth/AuthField";
 import AuthButton from "@/app/components/auth/AuthButton";
 import GoogleButton from "@/app/components/auth/GoogleButton";
@@ -18,7 +19,7 @@ export default function LoginForm({ googleError, next }: { googleError?: string;
       <GoogleButton next={next} />
       <AuthDivider />
 
-      <form action={formAction} className="flex flex-col gap-4">
+      <form action={formAction} onSubmit={() => trackSignInStarted("email")} className="flex flex-col gap-4">
         <AuthError message={state.error ?? googleError} />
         {next ? <input type="hidden" name="next" value={next} /> : null}
         <AuthField label="Email" name="email" type="email" required autoComplete="email" placeholder="you@example.com" />

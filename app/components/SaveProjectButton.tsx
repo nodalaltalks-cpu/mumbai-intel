@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toggleSavedProjectAction } from "@/lib/actions/saved-projects";
 import { usePremiumGate } from "@/lib/premium/gate-context";
+import { trackSavedProject } from "@/lib/analytics/ga";
 
 const RESUME_PARAM = "resumeSave";
 
@@ -24,6 +25,7 @@ export default function SaveProjectButton({ projectId, initialSaved }: { project
         return;
       }
       setSaved(result.saved);
+      if (result.saved) trackSavedProject(projectId);
     });
   }
 

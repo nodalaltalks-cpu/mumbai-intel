@@ -4,6 +4,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { CATEGORY_LABEL, CONFIGURATION_FILTER_OPTIONS, PROPERTY_CATEGORIES, type PropertyCategory } from "@/lib/project-meta";
 import ActiveFilters, { type ActiveFilterChip } from "@/app/components/ui/ActiveFilters";
 import { chipClass, selectClass, selectStyle } from "@/app/components/ui/formStyles";
+import { trackFilterApplied } from "@/lib/analytics/ga";
 
 const SALE_TYPE_CHIPS = [
   { label: "Sale", value: "sale" },
@@ -21,6 +22,7 @@ export default function LocalityFilters() {
     else params.delete(key);
     params.delete("page");
     router.push(`${pathname}?${params.toString()}#market`);
+    if (value) trackFilterApplied("localities", { [key]: value });
   }
 
   const dateInputClass =

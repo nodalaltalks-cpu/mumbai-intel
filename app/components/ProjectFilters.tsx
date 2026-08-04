@@ -14,6 +14,7 @@ import {
   type PropertyCategory,
 } from "@/lib/project-meta";
 import { saveRecentSearch, useRecentSearches } from "@/lib/recent-searches";
+import { trackFilterApplied, trackSearchPerformed } from "@/lib/analytics/ga";
 import SaveSearchButton from "@/app/components/SaveSearchButton";
 import ActiveFilters, { type ActiveFilterChip } from "@/app/components/ui/ActiveFilters";
 import { chipClass, selectClass, selectStyle } from "@/app/components/ui/formStyles";
@@ -42,6 +43,10 @@ export default function ProjectFilters({ localities, builders }: { localities: F
     else params.delete(key);
     params.delete("page");
     router.push(`${pathname}?${params.toString()}`);
+    if (value) {
+      if (key === "q") trackSearchPerformed(value);
+      else trackFilterApplied("projects", { [key]: value });
+    }
   }
 
   useEffect(() => {

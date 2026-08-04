@@ -4,6 +4,8 @@ import { setPublicSessionCookie } from "@/lib/public-auth/session";
 import { exchangeGoogleCode, fetchGoogleUserInfo } from "@/lib/public-auth/google";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
 import { recalculatePublicUserCompletion } from "@/lib/profile-completion";
+import { sendWelcomeEmail } from "@/lib/email";
+import { GA_GOOGLE_LOGIN_COOKIE } from "@/lib/analytics/ga";
 import { OAUTH_STATE_COOKIE_NAME, sanitizeNextPath } from "../route";
 
 function failure(origin: string, reason: string) {
@@ -68,6 +70,17 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    if (authEvent === "SIGNUP_COMPLETED") {
+      // Best-effort — a transient Resend failure must never fail an
+      // otherwise-successful Google login (this whole handler has one outer
+      // catch that treats any thrown error as an auth failure).
+      try {
+        await sendWelcomeEmail(user.email, user.name);
+      } catch (error) {
+        console.error("[email] failed to send welcome email:", error);
+      }
+    }
+
     await setPublicSessionCookie({ userId: user.id, email: user.email, name: user.name, image: user.image });
     await recordResearchEvent(authEvent, { entityType: "PublicUser", entityId: user.id, metadata: { method: "google" } });
     // Every other writer of a scored field (emailVerifiedAt here) recomputes
@@ -78,6 +91,10 @@ export async function GET(request: NextRequest) {
 
     const response = NextResponse.redirect(new URL(sanitizeNextPath(expected.next), origin));
     response.cookies.delete(OAUTH_STATE_COOKIE_NAME);
+    // Readable client-side (not httpOnly) and short-lived — GoogleLoginPing
+    // (mounted in the root layout) fires the GA4 event once on next paint
+    // and clears this immediately, since gtag only ever runs in the browser.
+    response.cookies.set(GA_GOOGLE_LOGIN_COOKIE, "1", { httpOnly: false, sameSite: "lax", maxAge: 30, path: "/" });
     return response;
   } catch (error) {
     console.error("Google OAuth callback failed:", error);

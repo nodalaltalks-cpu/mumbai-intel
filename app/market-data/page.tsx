@@ -9,6 +9,7 @@ import EmptyState from "@/app/components/ui/EmptyState";
 import PremiumGate from "@/app/components/premium/PremiumGate";
 import { getPublicSession } from "@/lib/public-auth/session";
 import { gated, maskPercent, maskPricePerSqft, maskScore } from "@/lib/premium/mask";
+import GAPageEvent from "@/app/components/analytics/GAPageEvent";
 
 export const metadata: Metadata = {
   title: "Market Data — NoDalalTalks",
@@ -28,6 +29,7 @@ export default async function MarketDataPage() {
 
   return (
     <div className="flex min-h-screen flex-1 flex-col bg-background">
+      <GAPageEvent event="market_data_viewed" />
       <Navbar />
 
       <main id="main-content" className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-10 px-4 py-8 sm:px-6">

@@ -1,7 +1,15 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { GoogleAnalytics } from "@next/third-parties/google";
 import PremiumGateProvider from "@/app/components/premium/PremiumGateProvider";
+import GoogleLoginPing from "@/app/components/analytics/GoogleLoginPing";
 import "./globals.css";
+
+// Public by design — a GA4 Measurement ID is not a secret (it's visible in
+// every page's rendered HTML on any site that uses it); it's just the
+// property identifier. Unset in an environment (e.g. local dev without a
+// configured .env value) means GoogleAnalytics below simply isn't rendered.
+const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -68,6 +76,8 @@ export default function RootLayout({
           Skip to content
         </a>
         <PremiumGateProvider>{children}</PremiumGateProvider>
+        <GoogleLoginPing />
+        {GA_MEASUREMENT_ID ? <GoogleAnalytics gaId={GA_MEASUREMENT_ID} /> : null}
       </body>
     </html>
   );

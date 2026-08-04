@@ -18,6 +18,7 @@ import { getLocalityNearbyInfra, getLocalityPriceTrend } from "@/lib/admin-queri
 import { formatMonth, formatPricePerSqft, formatSignedPercent } from "@/lib/format";
 import { AMENITY_CATEGORY_LABEL, INFRA_TYPE_LABEL, type AmenityCategoryValue, type InfraTypeValue } from "@/lib/project-meta";
 import JsonLd from "@/app/components/JsonLd";
+import GAPageEvent from "@/app/components/analytics/GAPageEvent";
 import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 import ProjectCard from "@/app/components/ProjectCard";
@@ -175,6 +176,7 @@ export default async function LocalityDetailPage({
   return (
     <div className="flex min-h-screen flex-1 flex-col bg-background">
       <JsonLd data={placeSchema} />
+      <GAPageEvent event="locality_viewed" params={{ locality_id: locality.id, locality_name: locality.name }} />
       <Navbar />
 
       <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: "Localities", href: "/localities" }, { label: locality.name }]} />

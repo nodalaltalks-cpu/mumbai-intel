@@ -12,6 +12,7 @@ import {
 import { formatDate, formatPaise, formatPricePerSqft } from "@/lib/format";
 import { AMENITY_CATEGORY_LABEL, SOURCE_CLASS, SOURCE_LABEL, STATUS_LABEL, type AmenityCategoryValue, type ProjectStatus } from "@/lib/project-meta";
 import JsonLd from "@/app/components/JsonLd";
+import GAPageEvent from "@/app/components/analytics/GAPageEvent";
 import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 import ProjectCard from "@/app/components/ProjectCard";
@@ -101,6 +102,7 @@ export default async function BuilderDetailPage({ params }: { params: Promise<{ 
   return (
     <div className="flex min-h-screen flex-1 flex-col bg-background">
       <JsonLd data={organizationSchema} />
+      <GAPageEvent event="builder_viewed" params={{ builder_id: builder.id, builder_name: builder.name }} />
       <Navbar />
 
       <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: "Developers", href: "/builders" }, { label: builder.name }]} />

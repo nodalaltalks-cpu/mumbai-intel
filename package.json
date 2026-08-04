@@ -10,6 +10,7 @@
     "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@next/third-parties": "16.2.10",
     "@prisma/adapter-neon": "^7.9.0",
     "@prisma/client": "^7.8.0",
     "@tiptap/extension-link": "^3.28.0",

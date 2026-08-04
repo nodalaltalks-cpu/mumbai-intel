@@ -3,6 +3,7 @@
 import { CATEGORY_LABEL, CONFIGURATION_FILTER_OPTIONS, PROJECT_STATUSES, PROPERTY_CATEGORIES, STATUS_LABEL } from "@/lib/project-meta";
 import type { DeveloperMapMarker, LocalityMapMarker, MapFilterState, MapLayerVisibility } from "@/lib/map/types";
 import { chipClass, selectClass, selectStyle } from "@/app/components/ui/formStyles";
+import { trackFilterApplied } from "@/lib/analytics/ga";
 
 const LAYER_CHIPS: { key: keyof MapLayerVisibility; label: string }[] = [
   { key: "projects", label: "Projects" },
@@ -30,6 +31,7 @@ export default function MapFilterPanel({
 }) {
   function set<K extends keyof MapFilterState>(key: K, value: MapFilterState[K]) {
     onChange({ ...filters, [key]: value });
+    if (value) trackFilterApplied("map", { [key]: value });
   }
 
   return (

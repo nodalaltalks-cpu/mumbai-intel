@@ -5,6 +5,7 @@ import { getClientIp } from "@/lib/request-ip";
 import { getOrCreateAnonSessionId } from "@/lib/analytics/session-id";
 import { parseUserAgent } from "@/lib/analytics/user-agent";
 import { writeBrochureEvent, type BrochureEventType } from "@/lib/analytics/brochure-events";
+import { sendBrochureDownloadEmail } from "@/lib/email";
 
 const VALID_EVENT_TYPES: BrochureEventType[] = ["VIEWED", "DOWNLOAD_STARTED", "DOWNLOAD_COMPLETED", "DOWNLOAD_FAILED"];
 
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
 
   const project = await prisma.project.findUnique({
     where: { slug },
-    select: { id: true, builderId: true, localityId: true, microMarketId: true },
+    select: { id: true, name: true, slug: true, brochureUrl: true, builderId: true, localityId: true, microMarketId: true },
   });
   if (!project) return NextResponse.json({ ok: false, error: "Project not found" }, { status: 404 });
 
@@ -65,6 +66,24 @@ export async function POST(req: NextRequest) {
     utmMedium: body.utmMedium ?? null,
     utmCampaign: body.utmCampaign ?? null,
   });
+
+  // Best-effort confirmation email, signed-in users only (guests have no
+  // address to send to — and a guest hitting this route at all would mean
+  // the gating in lib/premium/mask.ts was somehow bypassed, since a locked
+  // brochureUrl is null before it ever reaches the client). Never let an
+  // email hiccup affect the tracking response the client is waiting on.
+  if (session?.email && project.brochureUrl && eventType === "DOWNLOAD_COMPLETED") {
+    const siteUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "http://localhost:3000";
+    try {
+      await sendBrochureDownloadEmail(session.email, {
+        projectName: project.name,
+        projectUrl: `${siteUrl}/projects/${project.slug}`,
+        brochureUrl: project.brochureUrl,
+      });
+    } catch (error) {
+      console.error("[email] failed to send brochure download email:", error);
+    }
+  }
 
   return NextResponse.json({ ok: true });
 }

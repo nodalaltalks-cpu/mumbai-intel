@@ -13,6 +13,7 @@ import {
 import { AnalyticsService } from "@/lib/analytics";
 import { formatCompactCount, formatMonth, formatPaise, formatPricePerSqft } from "@/lib/format";
 import Navbar from "@/app/components/Navbar";
+import GAPageEvent from "@/app/components/analytics/GAPageEvent";
 import Footer from "@/app/components/Footer";
 import Breadcrumbs from "@/app/components/Breadcrumbs";
 import ProjectCard from "@/app/components/ProjectCard";
@@ -82,6 +83,7 @@ export default async function TransactionReportPage() {
 
   return (
     <div className="flex min-h-screen flex-1 flex-col bg-background">
+      <GAPageEvent event="report_viewed" params={{ report_type: "transactions" }} />
       <Navbar />
       <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: "Reports", href: "/reports" }, { label: "Transaction Report" }]} />
 

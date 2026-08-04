@@ -48,6 +48,7 @@ import { getPublicSession } from "@/lib/public-auth/session";
 import MapEmbed from "@/app/admin/components/MapEmbed";
 import Breadcrumbs from "@/app/components/Breadcrumbs";
 import JsonLd from "@/app/components/JsonLd";
+import GAPageEvent from "@/app/components/analytics/GAPageEvent";
 import ProjectMarketSnapshot from "@/app/components/ProjectMarketSnapshot";
 import TransactionTable from "@/app/components/TransactionTable";
 import { ConfigurationDistribution, TransactionLineChart, TransactionVolumeChart } from "@/app/components/charts/TransactionCharts";
@@ -200,6 +201,7 @@ export default async function ProjectDetailPage({
   return (
     <div className="flex min-h-screen flex-1 flex-col bg-background">
       <JsonLd data={productSchema} />
+      <GAPageEvent event="project_viewed" params={{ project_id: project.id, project_name: project.name }} />
       <Navbar />
 
       <Breadcrumbs

@@ -4,6 +4,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { BUILDER_SORT_OPTIONS } from "@/lib/project-meta";
 import { saveRecentSearch, useRecentSearches } from "@/lib/recent-searches";
+import { trackFilterApplied, trackSearchPerformed } from "@/lib/analytics/ga";
 import ActiveFilters, { type ActiveFilterChip } from "@/app/components/ui/ActiveFilters";
 import { selectClass, selectStyle } from "@/app/components/ui/formStyles";
 
@@ -26,6 +27,10 @@ export default function BuilderFilters({ cities }: { cities: FilterOption[] }) {
     else params.delete(key);
     params.delete("page");
     router.push(`${pathname}?${params.toString()}`);
+    if (value) {
+      if (key === "q") trackSearchPerformed(value);
+      else trackFilterApplied("builders", { [key]: value });
+    }
   }
 
   useEffect(() => {
