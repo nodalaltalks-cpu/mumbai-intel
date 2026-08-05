@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import GlobalSearch from "./GlobalSearch";
 import ProfileMenu from "./ProfileMenu";
 import Button from "@/app/components/ui/Button";
 import { IconSearch } from "@/app/components/ui/icons";
 import { useCompareList } from "@/lib/compare-list";
+import { usePremiumGate } from "@/lib/premium/gate-context";
 
 export interface NavbarPublicUser {
   name: string | null;
@@ -18,6 +20,9 @@ export interface NavbarPublicUser {
 export default function NavbarActions({ publicUser }: { publicUser: NavbarPublicUser | null }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const compareList = useCompareList();
+  const { openGate } = usePremiumGate();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -51,7 +56,15 @@ export default function NavbarActions({ publicUser }: { publicUser: NavbarPublic
       {publicUser ? (
         <ProfileMenu user={publicUser} />
       ) : (
-        <Button href="/login" variant="ghost" size="sm">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            const next = searchParams.size > 0 ? `${pathname}?${searchParams.toString()}` : pathname;
+            openGate("direct-signin", next);
+          }}
+        >
           Sign In
         </Button>
       )}

@@ -7,7 +7,8 @@ export type PremiumFeature =
   | "brochure"
   | "wishlist"
   | "save-search"
-  | "reports";
+  | "reports"
+  | "direct-signin";
 
 export const PREMIUM_FEATURE_LABEL: Record<PremiumFeature, string> = {
   "transaction-history": "Transaction Intelligence",
@@ -18,6 +19,7 @@ export const PREMIUM_FEATURE_LABEL: Record<PremiumFeature, string> = {
   wishlist: "Wishlist",
   "save-search": "Saved Searches",
   reports: "Market Reports",
+  "direct-signin": "Sign In (Nav)",
 };
 
 export const PREMIUM_CARD_TITLE = "Continue Your Research";
