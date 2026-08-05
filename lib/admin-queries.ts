@@ -35,17 +35,17 @@ export async function getDashboardStats() {
   return safeQuery("getDashboardStats", EMPTY_STATS, async () => {
     const [projectCount, publishedCount, reviewCount, archivedCount, builderCount, localityCount, transactionCount, imageCount, priceAgg] =
       await Promise.all([
-        prisma.project.count(),
-        prisma.project.count({ where: { isPublished: true } }),
-        prisma.project.count({ where: { isPublished: false, submittedForReviewAt: { not: null } } }),
-        prisma.project.count({ where: { isArchived: true } }),
-        prisma.builder.count(),
-        prisma.locality.count(),
-        prisma.transaction.count(),
-        prisma.projectImage.count(),
+        prisma.project.count({ where: { deletedAt: null } }),
+        prisma.project.count({ where: { isPublished: true, deletedAt: null } }),
+        prisma.project.count({ where: { isPublished: false, submittedForReviewAt: { not: null }, deletedAt: null } }),
+        prisma.project.count({ where: { isArchived: true, deletedAt: null } }),
+        prisma.builder.count({ where: { deletedAt: null } }),
+        prisma.locality.count({ where: { deletedAt: null } }),
+        prisma.transaction.count({ where: { deletedAt: null } }),
+        prisma.projectImage.count({ where: { project: { deletedAt: null } } }),
         prisma.project.aggregate({
           _avg: { priceMinPaise: true, priceMaxPaise: true },
-          where: { OR: [{ priceMinPaise: { not: null } }, { priceMaxPaise: { not: null } }] },
+          where: { OR: [{ priceMinPaise: { not: null } }, { priceMaxPaise: { not: null } }], deletedAt: null },
         }),
       ]);
 
@@ -102,22 +102,24 @@ export async function getDashboardCharts() {
         prisma.project.groupBy({
           by: ["localityId"],
           _count: { _all: true },
+          where: { deletedAt: null },
           orderBy: { _count: { localityId: "desc" } },
           take: 8,
         }),
         prisma.project.groupBy({
           by: ["builderId"],
           _count: { _all: true },
-          where: { builderId: { not: null } },
+          where: { builderId: { not: null }, deletedAt: null },
           orderBy: { _count: { builderId: "desc" } },
           take: 8,
         }),
         prisma.project.groupBy({
           by: ["status"],
           _count: { _all: true },
+          where: { deletedAt: null },
         }),
         prisma.project.findMany({
-          where: { OR: [{ priceMinPaise: { not: null } }, { priceMaxPaise: { not: null } }] },
+          where: { OR: [{ priceMinPaise: { not: null } }, { priceMaxPaise: { not: null } }], deletedAt: null },
           select: { priceMinPaise: true, priceMaxPaise: true },
         }),
       ]);

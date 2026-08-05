@@ -566,7 +566,16 @@ export default function ProjectForm({
       </div>
 
       <div className={activeTab === "description" ? "flex flex-col gap-4" : "hidden"}>
-        <RichTextEditor label="Description" name="description" important defaultValue={project?.description ?? ""} />
+        <RichTextEditor
+          label="Description"
+          name="description"
+          important
+          defaultValue={project?.description ?? ""}
+          onChange={() => {
+            dirtyRef.current = true;
+            recomputeProgress();
+          }}
+        />
       </div>
 
       <div className={activeTab === "media" ? "flex flex-col gap-4" : "hidden"}>

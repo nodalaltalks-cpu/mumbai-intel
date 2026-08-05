@@ -103,12 +103,19 @@ export default function RichTextEditor({
   defaultValue,
   hint,
   important,
+  onChange,
 }: {
   name: string;
   label: string;
   defaultValue?: string | null;
   hint?: string;
   important?: boolean;
+  /** Fires after every edit — React's controlled `value` update on the hidden
+   * input below doesn't dispatch a native `input`/`change` event, so a parent
+   * form relying on `<form onChange>` (e.g. ProjectForm's live completion %)
+   * would otherwise never see typing in this field until some other input
+   * happens to fire a change first. */
+  onChange?: () => void;
 }) {
   const [html, setHtml] = useState(defaultValue ?? "");
 
@@ -123,6 +130,7 @@ export default function RichTextEditor({
     },
     onUpdate: ({ editor: updatedEditor }) => {
       setHtml(updatedEditor.getHTML());
+      onChange?.();
     },
   });
 
