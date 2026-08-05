@@ -28,6 +28,9 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# local database backups (contain real production data — never commit)
+/backups/
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
