@@ -189,7 +189,20 @@ export async function sendContactMessageEmail(params: { name: string; email: str
 // as sendPasswordResetEmail above) via emailShell() instead of each
 // re-inlining the full wrapper markup — purely a DRY convenience for these
 // six newer templates, the existing ones above are left exactly as they are.
+//
+// TEMPORARY PRODUCTION PAUSE — all six of these are paused (no-op, logged
+// only) until an email provider is finalized. Password reset / newsletter /
+// inquiry / report-issue / contact emails above are NOT affected by this
+// flag and keep sending normally through Resend as before. Nothing about
+// the Resend integration, sendEmail(), or these templates has been removed
+// — flip TRANSACTIONAL_EMAILS_PAUSED back to false to resume sending.
 // ─────────────────────────────────────────────────────────────────────────
+
+const TRANSACTIONAL_EMAILS_PAUSED = true;
+
+function logPausedEmail(subject: string, to: string): void {
+  console.log(`[email] Transactional emails are paused — skipped "${subject}" to ${to}`);
+}
 
 function emailButton(label: string, url: string): string {
   const safeUrl = escapeHtml(url);
@@ -232,6 +245,7 @@ function emailShell(bodyHtml: string): string {
 
 /** Sent once, right after signup completes (credentials or Google) — see signupAction in lib/actions/public-auth.ts and the new-user branch of app/api/auth/google/callback/route.ts. */
 export async function sendWelcomeEmail(to: string, name: string | null): Promise<void> {
+  if (TRANSACTIONAL_EMAILS_PAUSED) return logPausedEmail("Welcome to NoDalalTalks", to);
   const greeting = name ? `Welcome, ${escapeHtml(name)}!` : "Welcome!";
   const html = emailShell(`
     <h1 style="margin:0 0 12px;font-size:20px;line-height:1.3;font-weight:600;color:#18181b;">${greeting}</h1>
@@ -248,6 +262,7 @@ export async function sendWelcomeEmail(to: string, name: string | null): Promise
 
 /** Accepts a pre-built verification URL (same shape as sendPasswordResetEmail's resetUrl) — ready to call once a verification-token flow exists; see PublicPasswordResetToken for the analogous pattern that would back one. */
 export async function sendEmailVerificationEmail(to: string, verifyUrl: string, expiryMinutes: number): Promise<void> {
+  if (TRANSACTIONAL_EMAILS_PAUSED) return logPausedEmail("Verify your NoDalalTalks email", to);
   const safeUrl = escapeHtml(verifyUrl);
   const html = emailShell(`
     <h1 style="margin:0 0 12px;font-size:20px;line-height:1.3;font-weight:600;color:#18181b;">Verify your email</h1>
@@ -271,6 +286,7 @@ export async function sendBrochureDownloadEmail(
   to: string,
   params: { projectName: string; projectUrl: string; brochureUrl: string }
 ): Promise<void> {
+  if (TRANSACTIONAL_EMAILS_PAUSED) return logPausedEmail(`Brochure — ${params.projectName}`, to);
   const html = emailShell(`
     <h1 style="margin:0 0 12px;font-size:20px;line-height:1.3;font-weight:600;color:#18181b;">Your brochure is ready</h1>
     <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#52525b;">
@@ -300,6 +316,7 @@ export async function sendWeeklyMarketIntelligenceEmail(
   to: string,
   params: { weekLabel: string; topLocalities: WeeklyMarketIntelligenceLocality[]; topProjects: WeeklyMarketIntelligenceProject[] }
 ): Promise<void> {
+  if (TRANSACTIONAL_EMAILS_PAUSED) return logPausedEmail(`Weekly Market Intelligence — ${params.weekLabel}`, to);
   const localityRows = params.topLocalities
     .map(
       (l) => `
@@ -348,6 +365,9 @@ export async function sendSavedSearchAlertEmail(
   to: string,
   params: { searchName: string; searchUrl: string; newMatchesCount: number; sampleProjects: WeeklyMarketIntelligenceProject[] }
 ): Promise<void> {
+  if (TRANSACTIONAL_EMAILS_PAUSED) {
+    return logPausedEmail(`${params.newMatchesCount} new match${params.newMatchesCount === 1 ? "" : "es"} — ${params.searchName}`, to);
+  }
   const projectLinks = params.sampleProjects
     .map((p) => `<li style="margin:0 0 6px;"><a href="${escapeHtml(p.url)}" style="color:#4f46e5;font-size:13px;">${escapeHtml(p.name)}</a></li>`)
     .join("");
@@ -372,6 +392,7 @@ export async function sendPriceAlertEmail(
   to: string,
   params: { projectName: string; projectUrl: string; oldPriceLabel: string; newPriceLabel: string; changeLabel: string }
 ): Promise<void> {
+  if (TRANSACTIONAL_EMAILS_PAUSED) return logPausedEmail(`Price update — ${params.projectName}`, to);
   const html = emailShell(`
     <h1 style="margin:0 0 12px;font-size:20px;line-height:1.3;font-weight:600;color:#18181b;">Price update — ${escapeHtml(params.projectName)}</h1>
     <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#52525b;">

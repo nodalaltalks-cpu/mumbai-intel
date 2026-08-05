@@ -20,19 +20,14 @@ export const PREMIUM_FEATURE_LABEL: Record<PremiumFeature, string> = {
   reports: "Market Reports",
 };
 
-export const PREMIUM_CARD_TITLE = "Unlock Complete Property Intelligence";
-export const PREMIUM_CARD_SUBTITLE =
-  "Create your FREE account to access verified market intelligence. No phone number. No spam calls. No sales follow-up.";
+export const PREMIUM_CARD_TITLE = "Continue Your Research";
+export const PREMIUM_CARD_SUBTITLE = "Create your free account to unlock powerful real estate research tools.";
 
 export const PREMIUM_BENEFITS: string[] = [
-  "Download Official Brochures",
-  "Exact Transaction Prices",
-  "Save Wishlist",
-  "Continue Research Across Devices",
-  "Recently Viewed Projects",
-  "Weekly Market Intelligence",
-  "AI Insights (Coming Soon)",
-  "Zero Spam Calls",
-  "No Sales Follow-up",
-  "Phone Number Not Required",
+  "No Phone Number Required",
+  "No Spam Calls Ever",
+  "Save Favourite Projects",
+  "Download Official Project Brochures",
+  "Track Your Research Across Devices",
+  "100% Free Account",
 ];

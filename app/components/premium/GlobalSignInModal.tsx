@@ -25,7 +25,7 @@ export default function GlobalSignInModal() {
 
   return (
     <div
-      className="mi-fade-in fixed inset-0 z-[100] flex items-end justify-center bg-background/60 backdrop-blur-sm sm:items-center sm:p-4"
+      className="mi-fade-in fixed inset-0 z-[100] flex items-end justify-center bg-background/50 backdrop-blur-md sm:items-center sm:p-4"
       onClick={closeGate}
     >
       <div
@@ -61,14 +61,23 @@ export default function GlobalSignInModal() {
             ))}
           </ul>
 
-          <div className="flex flex-col gap-2.5" onClick={fireLockedClick}>
-            <GoogleButton next={next} />
-            <Link
-              href={`/signup?next=${encodeURIComponent(next)}`}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-raised"
+          <div className="flex flex-col gap-2.5">
+            <div className="flex flex-col gap-2.5" onClick={fireLockedClick}>
+              <GoogleButton next={next} />
+              <Link
+                href={`/signup?next=${encodeURIComponent(next)}`}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-raised"
+              >
+                Continue with Email
+              </Link>
+            </div>
+            <button
+              type="button"
+              onClick={closeGate}
+              className="w-full py-1 text-center text-sm font-medium text-muted transition-colors hover:text-foreground"
             >
-              Continue with Email
-            </Link>
+              Maybe Later
+            </button>
           </div>
 
           <p className="text-center text-sm text-muted">
