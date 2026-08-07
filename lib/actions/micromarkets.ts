@@ -6,6 +6,7 @@ import { requireMutateSession } from "@/lib/auth/guard";
 import { prisma } from "@/lib/prisma";
 import { slugify } from "@/lib/slug";
 import { friendlyPrismaError } from "./errors";
+import type { InlineCreateResult } from "./builders";
 
 const microMarketSchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
@@ -13,6 +14,41 @@ const microMarketSchema = z.object({
 
 export interface MicroMarketActionState {
   error?: string;
+}
+
+async function uniqueMicroMarketSlug(localityId: string, name: string): Promise<string> {
+  const root = slugify(name) || "micro-market";
+  let slug = root;
+  let attempt = 1;
+  for (;;) {
+    const existing = await prisma.microMarket.findFirst({ where: { localityId, slug } });
+    if (!existing) return slug;
+    attempt += 1;
+    slug = `${root}-${attempt}`;
+  }
+}
+
+/**
+ * ProjectForm's inline "+ New Micro market" — same shape as
+ * createBuilderInlineAction/createLocalityInlineAction, name only, so an
+ * EDITOR never has to leave the Project form and go find the right Locality
+ * just to add a missing micro market.
+ */
+export async function createMicroMarketInlineAction(localityId: string, name: string): Promise<InlineCreateResult> {
+  await requireMutateSession();
+  const trimmed = name.trim();
+  if (!trimmed) return { error: "Name is required" };
+  if (!localityId) return { error: "Select a locality first" };
+
+  const slug = await uniqueMicroMarketSlug(localityId, trimmed);
+
+  try {
+    const created = await prisma.microMarket.create({ data: { localityId, name: trimmed, slug } });
+    revalidatePath(`/admin/localities/${localityId}/edit`);
+    return { id: created.id, name: created.name };
+  } catch (error) {
+    return { error: friendlyPrismaError(error) };
+  }
 }
 
 export async function addMicroMarketAction(
@@ -25,15 +61,7 @@ export async function addMicroMarketAction(
   const parsed = microMarketSchema.safeParse({ name: formData.get("name") });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 
-  const root = slugify(parsed.data.name) || "micro-market";
-  let slug = root;
-  let attempt = 1;
-  for (;;) {
-    const existing = await prisma.microMarket.findFirst({ where: { localityId, slug } });
-    if (!existing) break;
-    attempt += 1;
-    slug = `${root}-${attempt}`;
-  }
+  const slug = await uniqueMicroMarketSlug(localityId, parsed.data.name);
 
   try {
     await prisma.microMarket.create({ data: { localityId, name: parsed.data.name, slug } });

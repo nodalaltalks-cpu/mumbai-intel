@@ -29,6 +29,7 @@ import InlineEntityCreate from "./InlineEntityCreate";
 import ProjectReviewModal, { type ReviewSection } from "./ProjectReviewModal";
 import { createBuilderInlineAction } from "@/lib/actions/builders";
 import { createLocalityInlineAction } from "@/lib/actions/localities";
+import { createMicroMarketInlineAction } from "@/lib/actions/micromarkets";
 import type { ConfigurationRow } from "./ConfigurationsManager";
 import type { SpecificationRow } from "./SpecificationsManager";
 import type { NearbyLinkRow } from "./NearbyPlacesManager";
@@ -170,6 +171,7 @@ export default function ProjectForm({
   const [builderOptions, setBuilderOptions] = useState(builders);
   const [selectedLocalityId, setSelectedLocalityId] = useState(project?.localityId ?? "");
   const [selectedBuilderId, setSelectedBuilderId] = useState(project?.builderId ?? "");
+  const [selectedMicroMarketId, setSelectedMicroMarketId] = useState(project?.microMarketId ?? "");
   const [brochureFileName, setBrochureFileName] = useState<string | null>(null);
   const brochureFileInputRef = useRef<HTMLInputElement>(null);
   const [coverImageFileName, setCoverImageFileName] = useState<string | null>(null);
@@ -346,7 +348,7 @@ export default function ProjectForm({
     dirtyRef.current = true;
     recomputeProgress();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedBuilderId, selectedLocalityId]);
+  }, [selectedBuilderId, selectedLocalityId, selectedMicroMarketId]);
 
   return (
     <form ref={formRef} action={formAction} onChange={handleFormChange} onBlur={scheduleAutosave} className="flex flex-col gap-4">
@@ -467,7 +469,10 @@ export default function ProjectForm({
               required
               important
               value={selectedLocalityId}
-              onChange={(e) => setSelectedLocalityId(e.target.value)}
+              onChange={(e) => {
+                setSelectedLocalityId(e.target.value);
+                setSelectedMicroMarketId("");
+              }}
             >
               <option value="" disabled>
                 Select a locality
@@ -487,19 +492,48 @@ export default function ProjectForm({
               onCreated={({ id, name }) => {
                 setLocalityOptions((prev) => [...prev, { id, name, microMarkets: [] }]);
                 setSelectedLocalityId(id);
+                setSelectedMicroMarketId("");
               }}
             />
           </div>
-          <SelectField label="Micro market (optional)" name="microMarketId" defaultValue={project?.microMarketId ?? ""}>
-            <option value="">
-              {microMarketOptions.length === 0 ? "None catalogued for this locality" : "None"}
-            </option>
-            {microMarketOptions.map((mm) => (
-              <option key={mm.id} value={mm.id}>
-                {mm.name}
+          <div>
+            <SelectField
+              label="Micro market (optional)"
+              name="microMarketId"
+              value={selectedMicroMarketId}
+              onChange={(e) => setSelectedMicroMarketId(e.target.value)}
+            >
+              <option value="">
+                {microMarketOptions.length === 0 ? "None catalogued for this locality" : "None"}
               </option>
-            ))}
-          </SelectField>
+              {microMarketOptions.map((mm) => (
+                <option key={mm.id} value={mm.id}>
+                  {mm.name}
+                </option>
+              ))}
+            </SelectField>
+            {selectedLocalityId ? (
+              <InlineEntityCreate
+                label="Micro market"
+                action={async (name) => {
+                  const result = await createMicroMarketInlineAction(selectedLocalityId, name);
+                  return result;
+                }}
+                onCreated={({ id, name }) => {
+                  setLocalityOptions((prev) =>
+                    prev.map((locality) =>
+                      locality.id === selectedLocalityId
+                        ? { ...locality, microMarkets: [...locality.microMarkets, { id, name }] }
+                        : locality
+                    )
+                  );
+                  setSelectedMicroMarketId(id);
+                }}
+              />
+            ) : (
+              <p className="mt-1 text-[11px] text-muted">Select a locality first to add a micro market.</p>
+            )}
+          </div>
         </FieldGroup>
         <Field label="Address" name="address" important defaultValue={project?.address ?? ""} />
         <FieldGroup>
