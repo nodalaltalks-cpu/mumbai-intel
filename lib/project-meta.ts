@@ -57,9 +57,9 @@ export const PAYMENT_PLAN_TYPE_LABEL: Record<PaymentPlanType, string> = {
  * render time, only ever as a starting value.
  */
 export const PAYMENT_PLAN_TYPE_DEFAULT_DESCRIPTION: Record<PaymentPlanType, string> = {
-  CONSTRUCTION_LINKED: "Payments are made according to construction milestones.",
-  BUILDER_SUBVENTION: "Builder pays the pre-EMI during the agreed subvention period. Buyer eligibility is defined by the builder's scheme.",
-  BANK_SUBVENTION: "Bank-funded subvention subject to buyer income eligibility and lender approval.",
+  CONSTRUCTION_LINKED: "Payments are made according to construction progress — no separate subvention or income eligibility involved.",
+  BUILDER_SUBVENTION: "Builder pays the pre-EMI during the agreed subvention period. No bank income eligibility check required — approval is per the builder's own scheme.",
+  BANK_SUBVENTION: "Bank pays the pre-EMI during the agreed subvention period, subject to the buyer's income eligibility and lender approval.",
   DOWN_PAYMENT: "Buyer pays a major portion upfront with the remaining balance as per the agreed schedule.",
   FLEXI_PAYMENT: "Payment is split across booking, construction milestones and possession.",
   NO_PAYMENT_PLAN: "No structured payment plan has been published for this project.",
