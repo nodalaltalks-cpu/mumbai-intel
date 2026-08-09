@@ -89,6 +89,36 @@ export const STATUS_CLASS: Record<ProjectStatus, string> = {
   STALLED: "text-negative border-negative/40 bg-negative/10",
 };
 
+/**
+ * Project-card "construction status" pill — a deliberately smaller vocabulary
+ * (5 labels) than the full STATUS_LABEL/ProjectStatus enum, matching what
+ * property-portal cards conventionally show. NEARING_POSSESSION and STALLED
+ * have no clean home in that 5-label set, so both fall back to "Under
+ * Construction" (closest bucket — still incomplete, not yet ready). "Sold
+ * Out" has no data source anywhere in the schema (no inventory/units-sold
+ * tracking) and is intentionally never produced by this map.
+ */
+export const CONSTRUCTION_BADGE_LABEL: Record<ProjectStatus, string> = {
+  ANNOUNCED: "Coming Soon",
+  PRE_LAUNCH: "New Launch",
+  UNDER_CONSTRUCTION: "Under Construction",
+  NEARING_POSSESSION: "Under Construction",
+  READY_TO_MOVE: "Ready to Move",
+  DELIVERED: "Ready to Move",
+  STALLED: "Under Construction",
+};
+
+/** Soft, low-opacity fills — deliberately calmer than STATUS_CLASS's badge (same tokens, lower opacity) so the card doesn't read as colorful. */
+export const CONSTRUCTION_BADGE_CLASS: Record<ProjectStatus, string> = {
+  ANNOUNCED: "text-info border-info/20 bg-info/8",
+  PRE_LAUNCH: "text-accent border-accent/20 bg-accent/8",
+  UNDER_CONSTRUCTION: "text-muted border-border bg-surface-raised",
+  NEARING_POSSESSION: "text-muted border-border bg-surface-raised",
+  READY_TO_MOVE: "text-positive border-positive/20 bg-positive/8",
+  DELIVERED: "text-positive border-positive/20 bg-positive/8",
+  STALLED: "text-muted border-border bg-surface-raised",
+};
+
 export const STATUS_CHART_COLOR: Record<ProjectStatus, string> = {
   ANNOUNCED: "--chart-2",
   PRE_LAUNCH: "--chart-6",

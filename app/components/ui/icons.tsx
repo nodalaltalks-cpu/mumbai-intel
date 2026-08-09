@@ -66,3 +66,13 @@ export function IconClose({ className = "h-4 w-4", ...props }: IconProps) {
     </svg>
   );
 }
+
+export function IconInfo({ className = "h-3.5 w-3.5", ...props }: IconProps) {
+  return (
+    <svg {...base} className={className} {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5.5" />
+      <path d="M12 7.5h.01" strokeLinecap="round" />
+    </svg>
+  );
+}

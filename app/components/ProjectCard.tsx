@@ -6,10 +6,13 @@ import { useEffect, useRef, useState } from "react";
 import Button from "@/app/components/ui/Button";
 import CompareToggleButton from "@/app/components/CompareToggleButton";
 import BrochureDownloadLink from "@/app/components/BrochureDownloadLink";
+import InfoTooltip from "@/app/components/ui/InfoTooltip";
 import { IconClose } from "@/app/components/ui/icons";
-import { formatDate, formatPriceBand, formatPricePerSqft } from "@/lib/format";
+import { formatDate, formatPossessionBadge, formatPriceBand, formatPriceFrom, formatPricePerSqft, formatProjectSize } from "@/lib/format";
 import { maskPricePerSqft } from "@/lib/premium/mask";
 import {
+  CONSTRUCTION_BADGE_CLASS,
+  CONSTRUCTION_BADGE_LABEL,
   SOURCE_CLASS,
   SOURCE_LABEL,
   STATUS_CLASS,
@@ -35,6 +38,13 @@ export interface ProjectCardData {
   pricePerSqftPaise?: number | null;
   possessionDate?: Date | string | null;
   constructionPercent?: number | null;
+  totalUnits?: number | null;
+  totalTowers?: number | null;
+  landAreaAcres?: number | null;
+  /** No current data source feeds these (no `paymentPlan` field exists on Project yet) — always undefined today. Card renders "No Plan" and hides the info icon whenever this is absent, ready for a future field without another card change. */
+  paymentPlanRatio?: string | null;
+  /** Bullet lines shown in the payment-plan tooltip, e.g. ["10% Booking", "80% During Construction", "10% On Possession"]. Only rendered (and only shows the info icon) when both this and paymentPlanRatio are present. */
+  paymentPlanBreakdown?: string[] | null;
   dataSource: DataSource;
   imageUrl?: string | null;
   /** Null when guest-locked (see lib/premium/mask.ts's maskProjectBrochure) — use `brochureAvailable` for the "does a brochure exist" check, never truthiness of this field, since it's intentionally null for locked guests even when a brochure exists. */
@@ -58,11 +68,16 @@ function initials(name: string): string {
 
 export default function ProjectCard({ project }: { project: ProjectCardData }) {
   const [quickViewOpen, setQuickViewOpen] = useState(false);
+  const projectSize = formatProjectSize(project.totalUnits, project.totalTowers, project.landAreaAcres);
+  const paymentPlanBreakdown = project.paymentPlanRatio && project.paymentPlanBreakdown ? project.paymentPlanBreakdown : [];
 
   return (
     <>
-      <div className="group relative flex flex-col overflow-hidden rounded-sm border border-border bg-surface transition-[color,background-color,border-color,transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-accent/50 hover:bg-surface-raised hover:shadow-md">
-        <Link href={`/projects/${project.slug}`} className="contents">
+      <div className="group relative flex flex-col overflow-hidden rounded-sm border border-border bg-surface transition-[box-shadow,border-color] duration-150 md:hover:border-accent/40 md:hover:shadow-md">
+        {/* Stretched link: an invisible full-card click target rendered as a sibling (not an ancestor) of the content below, so the Payment Plan info icon — a real nested button — never ends up inside an <a>. Non-interactive content is pointer-events-none and lets clicks fall through to this link; only actual controls opt back in with pointer-events-auto. */}
+        <Link href={`/projects/${project.slug}`} aria-label={project.name} className="absolute inset-0 z-0 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent" />
+
+        <div className="pointer-events-none relative z-[1] flex flex-1 flex-col">
           <div className="relative h-36 w-full shrink-0 overflow-hidden bg-[linear-gradient(135deg,_var(--surface-raised),_var(--background))]">
             {project.imageUrl ? (
               <Image src={project.imageUrl} alt={project.name} fill sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw" className="object-cover" />
@@ -71,63 +86,73 @@ export default function ProjectCard({ project }: { project: ProjectCardData }) {
                 <span className="font-mono text-3xl font-bold text-border">{initials(project.name)}</span>
               </div>
             )}
-            <span
-              className={`absolute left-2 top-2 rounded-sm border px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wide ${STATUS_CLASS[project.status]} bg-background/80 backdrop-blur`}
-            >
-              {STATUS_LABEL[project.status]}
-            </span>
+            <div className="absolute left-2 top-2 flex flex-wrap items-center gap-1">
+              <span
+                className={`rounded-sm border px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wide backdrop-blur ${CONSTRUCTION_BADGE_CLASS[project.status]}`}
+              >
+                {CONSTRUCTION_BADGE_LABEL[project.status]}
+              </span>
+              <span className="rounded-sm border border-border bg-background/85 px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wide text-muted backdrop-blur">
+                {formatPossessionBadge(project.possessionDate, project.status)}
+              </span>
+            </div>
           </div>
 
-          <div className="flex flex-1 flex-col gap-3 p-4">
+          <div className="flex flex-1 flex-col gap-2 p-4">
             <div className="flex items-start gap-2">
               {project.builderLogoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={project.builderLogoUrl} alt="" className="mt-0.5 h-6 w-6 shrink-0 rounded-sm border border-border object-cover" />
               ) : null}
-              <div className="min-w-0">
-                <h3 className="truncate font-mono text-sm font-semibold text-foreground group-hover:text-accent">
-                  {project.name}
-                </h3>
-                <p className="mt-0.5 truncate text-xs text-muted">
-                  {project.builderName ? `${project.builderName} · ` : ""}
-                  {project.localityName}
-                  {project.zoneName ? ` · ${project.zoneName}` : ""}
-                </p>
-              </div>
+              <h3 className="min-w-0 truncate font-mono text-sm font-semibold text-foreground group-hover:text-accent">
+                {project.name}
+              </h3>
             </div>
 
-            {project.configurationSummary ? (
-              <p className="text-xs text-muted">{project.configurationSummary}</p>
+            <p className="truncate text-xs text-muted">
+              {project.localityName}
+              {project.zoneName ? ` · ${project.zoneName}` : ""}
+            </p>
+
+            {project.builderName ? <p className="truncate text-xs text-muted">{project.builderName}</p> : null}
+
+            {project.configurationSummary || projectSize ? (
+              <p className="truncate text-[11px] text-muted">
+                {[project.configurationSummary, projectSize].filter(Boolean).join(" · ")}
+              </p>
             ) : project.tagline ? (
               <p className="line-clamp-2 text-xs text-muted">{project.tagline}</p>
             ) : null}
 
-            <div className="mt-auto flex items-end justify-between gap-2 border-t border-border pt-3">
-              <div>
-                <p className="text-[10px] uppercase tracking-wide text-muted">Price band</p>
-                <p className="font-mono text-sm text-foreground">
-                  {formatPriceBand(project.priceMinPaise, project.priceMaxPaise)}
+            <div className="mt-auto border-t border-border pt-2.5">
+              <p className="text-[10px] uppercase tracking-wide text-muted">Price From</p>
+              <p className="font-mono text-sm font-semibold text-foreground">
+                {formatPriceFrom(project.priceMinPaise) ?? formatPriceBand(project.priceMinPaise, project.priceMaxPaise)}
+              </p>
+              {project.pricePerSqftPaise ? (
+                <p className="font-mono text-[10px] text-muted">{formatPricePerSqft(project.pricePerSqftPaise)}</p>
+              ) : project.pricePerSqftMasked ? (
+                <p className="font-mono text-[10px] text-muted" title="🔒 Sign in to unlock verified intelligence">
+                  {maskPricePerSqft()}
                 </p>
-                {project.pricePerSqftPaise ? (
-                  <p className="font-mono text-[10px] text-muted">{formatPricePerSqft(project.pricePerSqftPaise)}</p>
-                ) : project.pricePerSqftMasked ? (
-                  <p className="font-mono text-[10px] text-muted" title="🔒 Sign in to unlock verified intelligence">
-                    {maskPricePerSqft()}
-                  </p>
-                ) : null}
-              </div>
-              {typeof project.constructionPercent === "number" ? (
-                <div className="text-right">
-                  <p className="text-[10px] uppercase tracking-wide text-muted">Construction</p>
-                  <p className="font-mono text-sm text-foreground">{project.constructionPercent}%</p>
-                </div>
-              ) : project.possessionDate ? (
-                <div className="text-right">
-                  <p className="text-[10px] uppercase tracking-wide text-muted">Possession</p>
-                  <p className="font-mono text-sm text-foreground">{formatDate(project.possessionDate)}</p>
-                </div>
               ) : null}
             </div>
+
+            <div className="flex items-center gap-1">
+              <p className="text-[10px] uppercase tracking-wide text-muted">Payment Plan</p>
+              {paymentPlanBreakdown.length > 0 ? (
+                <span className="pointer-events-auto">
+                  <InfoTooltip label={`${project.name} payment plan breakdown`}>
+                    <ul className="list-disc space-y-0.5 pl-3">
+                      {paymentPlanBreakdown.map((line) => (
+                        <li key={line}>{line}</li>
+                      ))}
+                    </ul>
+                  </InfoTooltip>
+                </span>
+              ) : null}
+            </div>
+            <p className="-mt-1.5 font-mono text-xs text-foreground">{project.paymentPlanRatio ?? "No Plan"}</p>
 
             <div className="flex flex-wrap items-center gap-1.5">
               <span
@@ -141,8 +166,13 @@ export default function ProjectCard({ project }: { project: ProjectCardData }) {
                 </span>
               ) : null}
             </div>
+
+            <span aria-hidden="true" className="mt-0.5 inline-flex items-center gap-1 text-xs font-semibold text-accent">
+              View Details
+              <span className="transition-transform group-hover:translate-x-0.5">→</span>
+            </span>
           </div>
-        </Link>
+        </div>
 
         <button
           type="button"
