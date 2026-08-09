@@ -41,10 +41,10 @@ datasource db {
 enum DataSource {
   OFFICIAL_GOVERNMENT // IGR / MahaRERA / other official registries (future + any verified-official today)
   BUILDER_INFORMATION // developer-provided: brochures, price lists, amenities
-  MANUALLY_VERIFIED   // curated from domain expertise / network / public sources (MVP PRIMARY)
-  AI_GENERATED        // model outputs: summaries, estimates, scores
-  USER_SUBMITTED      // community-contributed, unverified
-  EXTERNAL_OPEN_DATA  // public open-data feeds we don't control or curate (OSM, Census) — not an official registry, not ours
+  MANUALLY_VERIFIED // curated from domain expertise / network / public sources (MVP PRIMARY)
+  AI_GENERATED // model outputs: summaries, estimates, scores
+  USER_SUBMITTED // community-contributed, unverified
+  EXTERNAL_OPEN_DATA // public open-data feeds we don't control or curate (OSM, Census) — not an official registry, not ours
 }
 
 /// How confident we are in a resolved/curated fact.
@@ -69,63 +69,63 @@ model Country {
 }
 
 model State {
-  id        String  @id @default(cuid())
-  countryId String
-  country   Country @relation(fields: [countryId], references: [id])
-  name      String // "Maharashtra"
-  code      String // "MH"
+  id            String   @id @default(cuid())
+  countryId     String
+  country       Country  @relation(fields: [countryId], references: [id])
+  name          String // "Maharashtra"
+  code          String // "MH"
   /// Official RERA portal for the state (MahaRERA) — used by future ingestion.
   reraPortalUrl String?
-  cities    City[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  cities        City[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@unique([countryId, code])
   @@unique([countryId, name])
 }
 
 model City {
-  id      String @id @default(cuid())
-  stateId String
-  state   State  @relation(fields: [stateId], references: [id])
-  name    String // "Mumbai"
-  slug    String @unique // "mumbai"
+  id          String     @id @default(cuid())
+  stateId     String
+  state       State      @relation(fields: [stateId], references: [id])
+  name        String // "Mumbai"
+  slug        String     @unique // "mumbai"
   /// Coverage flag. Drives UI, search scope, sitemaps. Mumbai=true, others=false today.
-  isLive  Boolean @default(false)
+  isLive      Boolean    @default(false)
   /// Centroid for map default view. Lat/lng kept as plain floats (no PostGIS dependency in MVP).
   centroidLat Float?
   centroidLng Float?
-  zones      Zone[]
-  localities Locality[]
-  projects   Project[]
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  zones       Zone[]
+  localities  Locality[]
+  projects    Project[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
   @@unique([stateId, name])
 }
 
 model Zone {
-  id     String @id @default(cuid())
-  cityId String
-  city   City   @relation(fields: [cityId], references: [id])
-  name   String // "Western Suburbs", "South Mumbai"
-  slug   String
+  id         String     @id @default(cuid())
+  cityId     String
+  city       City       @relation(fields: [cityId], references: [id])
+  name       String // "Western Suburbs", "South Mumbai"
+  slug       String
   localities Locality[]
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
 
   @@unique([cityId, slug])
 }
 
 model Locality {
-  id      String  @id @default(cuid())
-  cityId  String
-  city    City    @relation(fields: [cityId], references: [id])
-  zoneId  String?
-  zone    Zone?   @relation(fields: [zoneId], references: [id])
-  name    String // "Lower Parel", "Bandra West"
-  slug    String // unique per city
-  pincode String?
+  id          String  @id @default(cuid())
+  cityId      String
+  city        City    @relation(fields: [cityId], references: [id])
+  zoneId      String?
+  zone        Zone?   @relation(fields: [zoneId], references: [id])
+  name        String // "Lower Parel", "Bandra West"
+  slug        String // unique per city
+  pincode     String?
   /// Rich-text editorial description (SEO + the public Locality page), same
   /// HTML convention as Project.description / Builder.description.
   description String?
@@ -134,8 +134,8 @@ model Locality {
 
   // ── Market snapshot (curated; same swap-ready pattern as Transaction) ──
   avgPricePerSqftPaise BigInt?
-  rentalYieldPercent   Decimal? @db.Decimal(5, 2)
-  growthPercentYoy     Decimal? @db.Decimal(5, 2)
+  rentalYieldPercent   Decimal?    @db.Decimal(5, 2)
+  growthPercentYoy     Decimal?    @db.Decimal(5, 2)
   marketDataSource     DataSource?
   marketAsOf           DateTime?
   /// Freeform curated summary of road/highway/transit connectivity — the
@@ -178,8 +178,8 @@ model Locality {
   transactions Transaction[]
   amenities    LocalityAmenity[]
   images       LocalityImage[]
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
 
   @@unique([cityId, slug])
   @@index([zoneId])
@@ -229,14 +229,14 @@ model LocalityAlias {
 /// Finer-than-locality grain (Pali Hill within Bandra West). Mumbai needs this;
 /// the schema has it now so it's an SEO/analytics surface, not a later migration.
 model MicroMarket {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   localityId String
-  locality   Locality @relation(fields: [localityId], references: [id], onDelete: Cascade)
+  locality   Locality  @relation(fields: [localityId], references: [id], onDelete: Cascade)
   name       String
   slug       String
   projects   Project[]
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@unique([localityId, slug])
 }
@@ -246,24 +246,24 @@ model MicroMarket {
 // ═══════════════════════════════════════════════════════════════════════════
 
 model Builder {
-  id          String  @id @default(cuid())
-  slug        String  @unique
-  name        String // "Lodha Group"
+  id            String     @id @default(cuid())
+  slug          String     @unique
+  name          String // "Lodha Group"
   /// Subsidiary / SPV legal names resolved to this one economic builder.
-  legalNames  String[] @default([])
-  logoUrl     String?
+  legalNames    String[]   @default([])
+  logoUrl       String?
   /// Wide banner image for the builder's public profile hero.
   coverImageUrl String?
-  description String? // rich-text HTML, same convention as Project.description
-  foundedYear Int?
-  headquarters String?
-  websiteUrl  String?
-  reraNumber  String?
+  description   String? // rich-text HTML, same convention as Project.description
+  foundedYear   Int?
+  headquarters  String?
+  websiteUrl    String?
+  reraNumber    String?
   /// Notable awards/recognitions — simple curated strings, not a taxonomy.
-  awards      String[] @default([])
+  awards        String[]   @default([])
   /// Provenance of this builder record.
-  dataSource  DataSource @default(MANUALLY_VERIFIED)
-  confidence  Confidence @default(HIGH)
+  dataSource    DataSource @default(MANUALLY_VERIFIED)
+  confidence    Confidence @default(HIGH)
 
   // ── Flags — same admin-controlled visibility model as Project ──
   isPublished Boolean @default(false)
@@ -280,13 +280,13 @@ model Builder {
   metaDescription String?
   ogImageUrl      String?
 
-  projects    Project[]
+  projects       Project[]
   scoreSnapshots BuilderScoreSnapshot[]
-  timeline    BuilderTimelineEvent[]
-  amenities   BuilderAmenity[]
-  images      BuilderImage[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  timeline       BuilderTimelineEvent[]
+  amenities      BuilderAmenity[]
+  images         BuilderImage[]
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
 
   @@index([name])
   @@index([isPublished])
@@ -337,19 +337,19 @@ model BuilderTimelineEvent {
 
 /// Versioned builder score — never overwritten, so history is reproducible.
 model BuilderScoreSnapshot {
-  id                String   @id @default(cuid())
-  builderId         String
-  builder           Builder  @relation(fields: [builderId], references: [id], onDelete: Cascade)
-  asOf              DateTime
-  overallScore      Decimal  @db.Decimal(4, 2) // 0–10
-  onTimeDeliveryPct Decimal? @db.Decimal(5, 2)
-  avgDelayMonths    Decimal? @db.Decimal(5, 1)
-  deliveredProjects Int      @default(0)
-  activeProjects    Int      @default(0)
-  litigationFlags   Int      @default(0)
+  id                 String     @id @default(cuid())
+  builderId          String
+  builder            Builder    @relation(fields: [builderId], references: [id], onDelete: Cascade)
+  asOf               DateTime
+  overallScore       Decimal    @db.Decimal(4, 2) // 0–10
+  onTimeDeliveryPct  Decimal?   @db.Decimal(5, 2)
+  avgDelayMonths     Decimal?   @db.Decimal(5, 1)
+  deliveredProjects  Int        @default(0)
+  activeProjects     Int        @default(0)
+  litigationFlags    Int        @default(0)
   methodologyVersion String
-  dataSource        DataSource @default(AI_GENERATED) // computed score is a derived estimate
-  createdAt         DateTime @default(now())
+  dataSource         DataSource @default(AI_GENERATED) // computed score is a derived estimate
+  createdAt          DateTime   @default(now())
 
   @@unique([builderId, asOf])
 }
@@ -371,42 +371,56 @@ enum PropertyCategory {
   MIXED_USE
 }
 
-model Project {
-  id            String   @id @default(cuid())
-  slug          String   @unique // "lodha-park"
-  name          String // "Lodha Park"
-  tagline       String?
-  description   String?
+/// India-specific payment-plan structures — replaces the UAE-style ratio
+/// (80/20, 30/70…) that doesn't map to how Indian projects are sold.
+enum PaymentPlanType {
+  CONSTRUCTION_LINKED
+  BUILDER_SUBVENTION
+  BANK_SUBVENTION
+  DOWN_PAYMENT
+  FLEXI_PAYMENT
+  NO_PAYMENT_PLAN
+}
 
-  builderId     String?
-  builder       Builder? @relation(fields: [builderId], references: [id])
+model Project {
+  id          String  @id @default(cuid())
+  slug        String  @unique // "lodha-park"
+  name        String // "Lodha Park"
+  tagline     String?
+  description String?
+
+  builderId      String?
+  builder        Builder? @relation(fields: [builderId], references: [id])
   /// Free-text developer group / holding entity when it differs from the
   /// resolved Builder record (e.g. an SPV name on the RERA filing).
   developerGroup String?
 
   cityId        String
-  city          City     @relation(fields: [cityId], references: [id])
+  city          City         @relation(fields: [cityId], references: [id])
   localityId    String
-  locality      Locality @relation(fields: [localityId], references: [id])
+  locality      Locality     @relation(fields: [localityId], references: [id])
   microMarketId String?
   microMarket   MicroMarket? @relation(fields: [microMarketId], references: [id])
 
-  status        ProjectStatus
-  category      PropertyCategory @default(RESIDENTIAL)
+  status   ProjectStatus
+  category PropertyCategory @default(RESIDENTIAL)
 
-  address       String?
-  latitude      Float?
-  longitude     Float?
+  address   String?
+  latitude  Float?
+  longitude Float?
 
   // ── Timeline ──
-  launchDate            DateTime?
-  promisedPossession    DateTime? // from builder / RERA filing
-  actualPossession      DateTime? // reality — feeds health & builder score
-  constructionPercent   Int? // 0–100, current progress
+  launchDate          DateTime?
+  promisedPossession  DateTime? // from builder / RERA filing — kept as the DateTime that filters/sort ("possession_asc", the ready/1yr/2yr/later range filter) key off; auto-derived (1st of month) from possessionMonth/possessionYear below whenever an admin sets those, so there is only one place data entry happens
+  actualPossession    DateTime? // reality — feeds health & builder score
+  /// Buyer-facing possession display, India-localized (month + year, never a UAE-style quarter). Independent of promisedPossession's day-level precision — this is what Project Card / Project Detail / admin preview actually render. Null on legacy records that predate this field; those fall back to deriving month/year from promisedPossession at render time.
+  possessionMonth     Int? // 1–12
+  possessionYear      Int?
+  constructionPercent Int? // 0–100, current progress
 
   // ── RERA (official when present) ──
-  reraNumber    String?  @unique
-  reraStatus    String?
+  reraNumber String? @unique
+  reraStatus String?
 
   // ── Scale ──
   totalUnits    Int?
@@ -417,6 +431,11 @@ model Project {
   priceMinPaise BigInt?
   priceMaxPaise BigInt?
 
+  // ── Payment plan (India) ──
+  paymentPlanType        PaymentPlanType?
+  /// Free text, admin-editable per project (e.g. the actual "10:80:10" split) — the admin form auto-fills a sensible default from PAYMENT_PLAN_TYPE_DEFAULT_DESCRIPTION (lib/project-meta.ts) when paymentPlanType is chosen, but this is what's actually stored and rendered everywhere (card tooltip, detail page) — single source, no separate default lookup at render time.
+  paymentPlanDescription String?
+
   // ── Provenance of the project RECORD itself ──
   dataSource    DataSource @default(MANUALLY_VERIFIED)
   confidence    Confidence @default(HIGH)
@@ -425,59 +444,59 @@ model Project {
   ingestBatchId String?
 
   // ── Flags ──
-  isPublished   Boolean @default(false) // admin-controlled visibility
-  isFeatured    Boolean @default(false) // admin-curated homepage/spotlight placement
-  isArchived    Boolean @default(false) // soft-removed from admin/public lists, not hard-deleted
+  isPublished            Boolean                  @default(false) // admin-controlled visibility
+  isFeatured             Boolean                  @default(false) // admin-curated homepage/spotlight placement
+  isArchived             Boolean                  @default(false) // soft-removed from admin/public lists, not hard-deleted
   /// Trash — separate from isArchived: "pending permanent deletion" in the
   /// admin-only Trash view, forced alongside isArchived=true/isPublished=false
   /// so every existing public query (already filtering on those two) needs
   /// no changes to exclude trashed projects.
-  deletedAt       DateTime?
-  deletedByUserId String?
+  deletedAt              DateTime?
+  deletedByUserId        String?
   /// Set by an EDITOR to flag a draft as ready for an ADMIN to review before
   /// publishing (Draft → Under Review → Published). Cleared automatically on
   /// publish. Null = not currently in review — independent of isPublished so
   /// existing publish/archive logic never needs to branch on it.
-  submittedForReviewAt DateTime?
+  submittedForReviewAt   DateTime?
   /// Server-computed % of the admin form's required fields that are filled in
   /// (see computeProjectCompletionPercent in lib/project-data.ts) — recomputed
   /// on every create/update/autosave. Purely an admin-side data-quality
   /// indicator; never read by any public query.
-  completionPercent Int @default(0)
+  completionPercent      Int                      @default(0)
   /// Merchandising tags. Deliberately NOT duplicating `status` — READY_TO_MOVE
   /// and PRE_LAUNCH ("new launch") are already derivable from `status`; these
   /// three are independent editorial calls a status enum can't express.
-  isTrending    Boolean @default(false)
-  isLuxury      Boolean @default(false)
-  isAffordable  Boolean @default(false)
+  isTrending             Boolean                  @default(false)
+  isLuxury               Boolean                  @default(false)
+  isAffordable           Boolean                  @default(false)
   /// Current brochure — mirrors the latest row in `brochureVersions` for
   /// cheap reads on the public project page (no join needed to show/hide the
   /// Download Brochure button or its filename). `brochureVersions` is the
   /// source of truth for history; these fields are a denormalized "current
   /// pointer" onto it, updated together on every upload/replace/delete.
-  brochureUrl        String?
-  brochureFileName   String?
-  brochureFileSize   Int?
-  brochureMimeType   String?
-  brochureUploadedAt DateTime?
-  brochureUploadedBy String?
-  brochureVersion    Int      @default(0)
+  brochureUrl            String?
+  brochureFileName       String?
+  brochureFileSize       Int?
+  brochureMimeType       String?
+  brochureUploadedAt     DateTime?
+  brochureUploadedBy     String?
+  brochureVersion        Int                      @default(0)
   /// Clickable preview image for the brochure download card — a normal
   /// Cloudinary `image` upload (reuses uploadImageFile/deleteImageByPublicId),
   /// distinct from the PDF itself. Optional; falls back to a text/icon
   /// treatment on the public site when absent.
-  brochureThumbnailUrl String?
-  brochureVersions   ProjectBrochureVersion[]
+  brochureThumbnailUrl   String?
+  brochureVersions       ProjectBrochureVersion[]
   brochureDownloadEvents BrochureDownloadEvent[]
 
   /// Short bullet differentiators ("5 min to metro", "Sea-facing") shown near
   /// the top of the detail page. Order-preserving list, not a relation — no
   /// row ever needs its own identity, sort order, or edit history.
-  highlights    String[] @default([])
+  highlights String[] @default([])
 
   // ── Media ──
-  videoUrl      String?
-  tour360Url    String?
+  videoUrl   String?
+  tour360Url String?
 
   // ── SEO ──
   metaTitle       String?
@@ -485,23 +504,23 @@ model Project {
   ogImageUrl      String?
 
   // ── Relations ──
-  images        ProjectImage[]
-  configurations Configuration[]
-  amenities     ProjectAmenity[]
-  transactions  Transaction[]
-  priceHistory  PriceHistoryPoint[]
-  infraLinks    ProjectInfra[]
-  metrics       ProjectMetric[]
+  images          ProjectImage[]
+  configurations  Configuration[]
+  amenities       ProjectAmenity[]
+  transactions    Transaction[]
+  priceHistory    PriceHistoryPoint[]
+  infraLinks      ProjectInfra[]
+  metrics         ProjectMetric[]
   investmentNotes InvestmentNote[]
-  specifications ProjectSpecification[]
-  documents     ProjectDocument[]
-  timelineEvents ProjectTimelineEvent[]
-  faqs          ProjectFaq[]
-  sections      ProjectSection[]
-  savedBy       SavedProject[]
+  specifications  ProjectSpecification[]
+  documents       ProjectDocument[]
+  timelineEvents  ProjectTimelineEvent[]
+  faqs            ProjectFaq[]
+  sections        ProjectSection[]
+  savedBy         SavedProject[]
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([cityId, status])
   @@index([localityId])
@@ -583,9 +602,9 @@ model ProjectBrochureVersion {
 /// scoring, or demand-forecasting later without a schema change — only new
 /// read queries would be needed.
 model BrochureDownloadEvent {
-  id            String   @id @default(cuid())
+  id            String  @id @default(cuid())
   projectId     String
-  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project       Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   builderId     String?
   localityId    String?
   microMarketId String?
@@ -669,35 +688,35 @@ model ProjectSection {
 }
 
 model ProjectImage {
-  id        String  @id @default(cuid())
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  url       String
-  alt       String?
-  kind      String  @default("hero") // hero | gallery | floorplan | elevation
-  sortOrder Int     @default(0)
+  id         String     @id @default(cuid())
+  projectId  String
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  url        String
+  alt        String?
+  kind       String     @default("hero") // hero | gallery | floorplan | elevation
+  sortOrder  Int        @default(0)
   dataSource DataSource @default(BUILDER_INFORMATION)
-  createdAt DateTime @default(now())
+  createdAt  DateTime   @default(now())
 
   @@index([projectId, sortOrder])
 }
 
 /// Unit configurations (2BHK / 3BHK …) with carpet area and price band.
 model Configuration {
-  id            String   @id @default(cuid())
+  id            String     @id @default(cuid())
   projectId     String
-  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project       Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   label         String // "2 BHK", "3 BHK", "4 BHK Duplex"
-  bedrooms      Decimal  @db.Decimal(3, 1) // 1, 1.5, 2, 2.5 …
-  carpetSqft    Decimal? @db.Decimal(9, 2)
-  builtUpSqft   Decimal? @db.Decimal(9, 2)
+  bedrooms      Decimal    @db.Decimal(3, 1) // 1, 1.5, 2, 2.5 …
+  carpetSqft    Decimal?   @db.Decimal(9, 2)
+  builtUpSqft   Decimal?   @db.Decimal(9, 2)
   priceMinPaise BigInt?
   priceMaxPaise BigInt?
   dataSource    DataSource @default(BUILDER_INFORMATION)
   confidence    Confidence @default(MEDIUM)
-  sortOrder     Int      @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  sortOrder     Int        @default(0)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
   @@index([projectId, sortOrder])
 }
@@ -716,15 +735,15 @@ enum AmenityCategory {
 /// consistently across every project — the DXB-Interact-style filter bar this
 /// schema is built toward needs a fixed vocabulary, not per-project spelling.
 model Amenity {
-  id       String   @id @default(cuid())
-  slug     String   @unique
-  name     String
-  icon     String? // icon key resolved client-side, no binary asset stored
-  category AmenityCategory @default(CONVENIENCE)
-  projects ProjectAmenity[]
-  builders BuilderAmenity[]
+  id         String            @id @default(cuid())
+  slug       String            @unique
+  name       String
+  icon       String? // icon key resolved client-side, no binary asset stored
+  category   AmenityCategory   @default(CONVENIENCE)
+  projects   ProjectAmenity[]
+  builders   BuilderAmenity[]
   localities LocalityAmenity[]
-  createdAt DateTime @default(now())
+  createdAt  DateTime          @default(now())
 
   @@index([category])
 }
@@ -765,34 +784,34 @@ enum BuyerType {
 /// the same fields and render the source tag. `@@unique([dataSource, sourceRef])`
 /// makes future ingestion idempotent without touching manual rows.
 model Transaction {
-  id              String   @id @default(cuid())
-  projectId       String?
-  project         Project? @relation(fields: [projectId], references: [id])
-  localityId      String
-  locality        Locality @relation(fields: [localityId], references: [id])
+  id         String   @id @default(cuid())
+  projectId  String?
+  project    Project? @relation(fields: [projectId], references: [id])
+  localityId String
+  locality   Locality @relation(fields: [localityId], references: [id])
 
-  type            TransactionType @default(SALE)
+  type             TransactionType @default(SALE)
   registrationDate DateTime
 
   // ── The facts (money in paise, area in sqft) ──
-  valuePaise      BigInt
-  carpetSqft      Decimal? @db.Decimal(10, 2)
-  builtUpSqft     Decimal? @db.Decimal(10, 2)
+  valuePaise        BigInt
+  carpetSqft        Decimal?   @db.Decimal(10, 2)
+  builtUpSqft       Decimal?   @db.Decimal(10, 2)
   pricePerSqftPaise BigInt? // derived + stored for query speed
-  bedrooms        Decimal? @db.Decimal(3, 1)
-  floor           Int?
-  tower           String?
-  unitLabel       String? // "A-1204"
-  buyerType       BuyerType?
+  bedrooms          Decimal?   @db.Decimal(3, 1)
+  floor             Int?
+  tower             String?
+  unitLabel         String? // "A-1204"
+  buyerType         BuyerType?
 
   // ── Provenance & lineage (the swap contract) ──
-  dataSource      DataSource @default(MANUALLY_VERIFIED)
-  confidence      Confidence @default(MEDIUM)
+  dataSource    DataSource @default(MANUALLY_VERIFIED)
+  confidence    Confidence @default(MEDIUM)
   /// For manual: a note/reference. For IGR: the registry document number.
-  sourceRef       String?
-  ingestBatchId   String?
+  sourceRef     String?
+  ingestBatchId String?
   /// Free-text note on where a manual figure came from (network, deal sheet…).
-  sourceNote      String?
+  sourceNote    String?
 
   /// Trash — Transaction has no isPublished/isArchived (market data is live
   /// immediately, no editorial gate), so unlike Project/Builder/Locality this
@@ -801,8 +820,8 @@ model Transaction {
   deletedAt       DateTime?
   deletedByUserId String?
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Idempotency key: same (source, ref) never duplicates. NULL sourceRef allowed
   // for manual rows without a formal reference; those are dedupe-exempt.
@@ -820,15 +839,15 @@ model Transaction {
 /// Monthly price series per project (observed / curated). Same swap logic:
 /// manual points today, IGR-derived points later, all tagged.
 model PriceHistoryPoint {
-  id                String   @id @default(cuid())
-  projectId         String
-  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  month             DateTime // first of month
+  id                   String     @id @default(cuid())
+  projectId            String
+  project              Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  month                DateTime // first of month
   avgPricePerSqftPaise BigInt
-  sampleSize        Int      @default(0) // # transactions behind the point (0 = curated estimate)
-  dataSource        DataSource @default(MANUALLY_VERIFIED)
-  confidence        Confidence @default(MEDIUM)
-  createdAt         DateTime @default(now())
+  sampleSize           Int        @default(0) // # transactions behind the point (0 = curated estimate)
+  dataSource           DataSource @default(MANUALLY_VERIFIED)
+  confidence           Confidence @default(MEDIUM)
+  createdAt            DateTime   @default(now())
 
   @@unique([projectId, month])
   @@index([projectId, month])
@@ -838,21 +857,21 @@ model PriceHistoryPoint {
 /// Page (demand score, health score, market-trend %, avg ppsf…). Each metric
 /// is a named row so new metrics are new rows, not new columns.
 model ProjectMetric {
-  id          String   @id @default(cuid())
-  projectId   String
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  key         String // "demand_score" | "health_score" | "market_trend_pct" | "avg_ppsf_paise"
+  id                 String     @id @default(cuid())
+  projectId          String
+  project            Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  key                String // "demand_score" | "health_score" | "market_trend_pct" | "avg_ppsf_paise"
   /// Numeric value. Interpretation depends on `key` (documented in code).
-  valueNumeric Decimal? @db.Decimal(18, 2)
+  valueNumeric       Decimal?   @db.Decimal(18, 2)
   /// Optional string value / band (e.g. health band "A", trend label).
-  valueText   String?
-  unit        String? // "score_0_100" | "bps" | "paise" | "percent"
-  dataSource  DataSource @default(AI_GENERATED)
-  confidence  Confidence @default(MEDIUM)
+  valueText          String?
+  unit               String? // "score_0_100" | "bps" | "paise" | "percent"
+  dataSource         DataSource @default(AI_GENERATED)
+  confidence         Confidence @default(MEDIUM)
   methodologyVersion String?
-  asOf        DateTime @default(now())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  asOf               DateTime   @default(now())
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
 
   @@unique([projectId, key])
   @@index([projectId])
@@ -860,16 +879,16 @@ model ProjectMetric {
 
 /// AI Investment Summary + pros/cons, stored so it's cached and inspectable.
 model InvestmentNote {
-  id          String   @id @default(cuid())
-  projectId   String
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  kind        String // "summary" | "pro" | "con"
-  body        String
-  dataSource  DataSource @default(AI_GENERATED)
-  confidence  Confidence @default(MEDIUM)
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String     @id @default(cuid())
+  projectId  String
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  kind       String // "summary" | "pro" | "con"
+  body       String
+  dataSource DataSource @default(AI_GENERATED)
+  confidence Confidence @default(MEDIUM)
+  sortOrder  Int        @default(0)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
 
   @@index([projectId, kind, sortOrder])
 }
@@ -892,38 +911,38 @@ enum InfraType {
 }
 
 model InfraAsset {
-  id        String    @id @default(cuid())
-  cityId    String
-  type      InfraType
-  name      String
-  latitude  Float?
-  longitude Float?
+  id            String         @id @default(cuid())
+  cityId        String
+  type          InfraType
+  name          String
+  latitude      Float?
+  longitude     Float?
   /// e.g. metro line name, hospital speciality, mall anchor.
-  detail    String?
-  status    String    @default("operational") // operational | under_construction | planned
-  dataSource DataSource @default(OFFICIAL_GOVERNMENT)
+  detail        String?
+  status        String         @default("operational") // operational | under_construction | planned
+  dataSource    DataSource     @default(OFFICIAL_GOVERNMENT)
   /// Idempotency key for ingestion (e.g. "osm:node/123456"). Null for manually
   /// entered rows — same swap-ready pattern as Transaction.sourceRef.
-  sourceRef     String?   @unique
+  sourceRef     String?        @unique
   ingestBatchId String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  projectLinks ProjectInfra[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  projectLinks  ProjectInfra[]
 
   @@index([cityId, type])
 }
 
 /// Precomputed proximity of an infra asset to a project (distance + walk time).
 model ProjectInfra {
-  id          String     @id @default(cuid())
-  projectId   String
-  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  infraId     String
-  infra       InfraAsset @relation(fields: [infraId], references: [id], onDelete: Cascade)
+  id             String     @id @default(cuid())
+  projectId      String
+  project        Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  infraId        String
+  infra          InfraAsset @relation(fields: [infraId], references: [id], onDelete: Cascade)
   distanceMeters Int
-  walkMinutes Int?
-  dataSource  DataSource @default(MANUALLY_VERIFIED)
-  createdAt   DateTime   @default(now())
+  walkMinutes    Int?
+  dataSource     DataSource @default(MANUALLY_VERIFIED)
+  createdAt      DateTime   @default(now())
 
   @@unique([projectId, infraId])
   @@index([projectId, distanceMeters])
@@ -940,16 +959,16 @@ enum UserRole {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id           String     @id @default(cuid())
+  email        String     @unique
   name         String?
   passwordHash String
-  role         UserRole @default(EDITOR)
-  isActive     Boolean  @default(true)
+  role         UserRole   @default(EDITOR)
+  isActive     Boolean    @default(true)
   lastLoginAt  DateTime?
   auditLogs    AuditLog[]
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 }
 
 /// Every admin mutation is recorded — provenance discipline applies to the
@@ -985,33 +1004,33 @@ enum AuthProvider {
 }
 
 model PublicUser {
-  id            String       @id @default(cuid())
-  name          String?
-  email         String       @unique
-  phone         String?      @unique
+  id                       String       @id @default(cuid())
+  name                     String?
+  email                    String       @unique
+  phone                    String?      @unique
   /// Null for OAuth-only accounts (e.g. Google sign-up with no password set).
-  passwordHash  String?
-  provider      AuthProvider @default(CREDENTIALS)
+  passwordHash             String?
+  provider                 AuthProvider @default(CREDENTIALS)
   /// Google's `sub` claim — null until the account is linked to Google.
-  googleId      String?      @unique
+  googleId                 String?      @unique
   /// Google's profile photo URL — the only current source of an avatar; null for credentials-only accounts (Navbar falls back to initials).
-  image         String?
-  emailVerifiedAt DateTime?
-  lastLoginAt   DateTime?
+  image                    String?
+  emailVerifiedAt          DateTime?
+  lastLoginAt              DateTime?
   /// Recomputed by lib/profile-completion.ts whenever a scored field changes
   /// (name/phone/emailVerifiedAt here, or UserPreferences' budget/locality/
   /// category) — never hand-edited elsewhere.
-  profileCompletionPercent Int @default(0)
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  profileCompletionPercent Int          @default(0)
+  createdAt                DateTime     @default(now())
+  updatedAt                DateTime     @updatedAt
 
-  resetTokens   PublicPasswordResetToken[]
-  savedProjects SavedProject[]
-  wishlist      Wishlist[]
-  recentViews   RecentView[]
-  savedSearches SavedSearch[]
-  searchHistory SearchHistory[]
-  preferences   UserPreferences?
+  resetTokens             PublicPasswordResetToken[]
+  savedProjects           SavedProject[]
+  wishlist                Wishlist[]
+  recentViews             RecentView[]
+  savedSearches           SavedSearch[]
+  searchHistory           SearchHistory[]
+  preferences             UserPreferences?
   notificationPreferences NotificationPreferences?
   newsletterSubscription  NewsletterSubscriber?
   researchEvents          ResearchEvent[]
@@ -1021,12 +1040,12 @@ model PublicUser {
 
 /// A public user's bookmarked project — the "Saved Projects" list on /account.
 model SavedProject {
-  id            String     @id @default(cuid())
-  publicUserId  String
-  publicUser    PublicUser @relation(fields: [publicUserId], references: [id], onDelete: Cascade)
-  projectId     String
-  project       Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdAt     DateTime   @default(now())
+  id           String     @id @default(cuid())
+  publicUserId String
+  publicUser   PublicUser @relation(fields: [publicUserId], references: [id], onDelete: Cascade)
+  projectId    String
+  project      Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
 
   @@unique([publicUserId, projectId])
   @@index([publicUserId])
@@ -1071,20 +1090,20 @@ model IngestSource {
 }
 
 model IngestBatch {
-  id              String    @id @default(cuid())
-  sourceKey       String // "igr-maharashtra" | "maharera" | "manual-import"
-  trigger         String    @default("manual") // "manual" | "scheduled"
+  id                String    @id @default(cuid())
+  sourceKey         String // "igr-maharashtra" | "maharera" | "manual-import"
+  trigger           String    @default("manual") // "manual" | "scheduled"
   triggeredByUserId String?
-  startedAt       DateTime  @default(now())
-  finishedAt      DateTime?
-  status          String    @default("pending") // pending | running | success | failed
-  recordsWritten  Int       @default(0)
-  recordsSkipped  Int       @default(0)
-  recordsFailed   Int       @default(0)
-  note            String?
+  startedAt         DateTime  @default(now())
+  finishedAt        DateTime?
+  status            String    @default("pending") // pending | running | success | failed
+  recordsWritten    Int       @default(0)
+  recordsSkipped    Int       @default(0)
+  recordsFailed     Int       @default(0)
+  note              String?
 
-  logEntries      IngestLogEntry[]
-  stagingRecords  IngestStagingRecord[]
+  logEntries     IngestLogEntry[]
+  stagingRecords IngestStagingRecord[]
 
   @@index([sourceKey, startedAt])
 }
@@ -1244,18 +1263,18 @@ enum NewsletterStatus {
 /// signed in, purely for the founder-dashboard "how many subscribers are
 /// also registered users" view, not a functional dependency.
 model NewsletterSubscriber {
-  id             String    @id @default(cuid())
-  email          String    @unique
+  id             String           @id @default(cuid())
+  email          String           @unique
   status         NewsletterStatus @default(SUBSCRIBED)
-  publicUserId   String?   @unique
-  publicUser     PublicUser? @relation(fields: [publicUserId], references: [id], onDelete: SetNull)
+  publicUserId   String?          @unique
+  publicUser     PublicUser?      @relation(fields: [publicUserId], references: [id], onDelete: SetNull)
   /// Which surface subscribed them — "footer" today; kept open for a future
   /// dedicated placement without a schema change.
   source         String?
-  subscribedAt   DateTime  @default(now())
+  subscribedAt   DateTime         @default(now())
   unsubscribedAt DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
   @@index([status])
   @@index([subscribedAt])

@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { CONFIDENCE_LEVELS, DATA_SOURCES, PROJECT_STATUSES, PROPERTY_CATEGORIES } from "@/lib/project-meta";
+import { CONFIDENCE_LEVELS, DATA_SOURCES, PAYMENT_PLAN_TYPES, PROJECT_STATUSES, PROPERTY_CATEGORIES } from "@/lib/project-meta";
 
 /**
  * Plain (non-"use server") module — Next.js requires every export of a
@@ -31,8 +31,14 @@ export const projectSchema = z.object({
   latitude: z.preprocess(emptyToUndefined, z.coerce.number().optional()),
   longitude: z.preprocess(emptyToUndefined, z.coerce.number().optional()),
   launchDate: z.preprocess(emptyToUndefined, z.coerce.date().optional()),
+  // promisedPossession is only ever supplied directly by non-form callers (bulk-import CSV
+  // rows carry a real date) — the admin form instead submits possessionMonth/possessionYear
+  // below, and buildProjectData()'s reconcilePossession() derives promisedPossession from
+  // those so `possession_asc` sort and the ready/1yr/2yr/later filter keep working unchanged.
   promisedPossession: z.preprocess(emptyToUndefined, z.coerce.date().optional()),
   actualPossession: z.preprocess(emptyToUndefined, z.coerce.date().optional()),
+  possessionMonth: z.preprocess(emptyToUndefined, z.coerce.number().int().min(1).max(12).optional()),
+  possessionYear: z.preprocess(emptyToUndefined, z.coerce.number().int().min(2000).max(2100).optional()),
   constructionPercent: z.preprocess(emptyToUndefined, z.coerce.number().int().min(0).max(100).optional()),
   reraNumber: z.preprocess(emptyToUndefined, z.string().trim().optional()),
   reraStatus: z.preprocess(emptyToUndefined, z.string().trim().optional()),
@@ -41,6 +47,8 @@ export const projectSchema = z.object({
   landAreaAcres: z.preprocess(emptyToUndefined, z.coerce.number().min(0).optional()),
   priceMinRupees: z.preprocess(emptyToUndefined, z.coerce.number().min(0).optional()),
   priceMaxRupees: z.preprocess(emptyToUndefined, z.coerce.number().min(0).optional()),
+  paymentPlanType: z.preprocess(emptyToUndefined, z.enum(PAYMENT_PLAN_TYPES).optional()),
+  paymentPlanDescription: z.preprocess(emptyToUndefined, z.string().trim().optional()),
   dataSource: z.enum(DATA_SOURCES),
   confidence: z.enum(CONFIDENCE_LEVELS),
   sourceRef: z.preprocess(emptyToUndefined, z.string().trim().optional()),
@@ -77,6 +85,8 @@ export function parseProjectForm(formData: FormData) {
     launchDate: formData.get("launchDate"),
     promisedPossession: formData.get("promisedPossession"),
     actualPossession: formData.get("actualPossession"),
+    possessionMonth: formData.get("possessionMonth"),
+    possessionYear: formData.get("possessionYear"),
     constructionPercent: formData.get("constructionPercent"),
     reraNumber: formData.get("reraNumber"),
     reraStatus: formData.get("reraStatus"),
@@ -85,6 +95,8 @@ export function parseProjectForm(formData: FormData) {
     landAreaAcres: formData.get("landAreaAcres"),
     priceMinRupees: formData.get("priceMinRupees"),
     priceMaxRupees: formData.get("priceMaxRupees"),
+    paymentPlanType: formData.get("paymentPlanType"),
+    paymentPlanDescription: formData.get("paymentPlanDescription"),
     dataSource: formData.get("dataSource"),
     confidence: formData.get("confidence"),
     sourceRef: formData.get("sourceRef"),
@@ -115,12 +127,40 @@ export function parseHighlights(raw: string | undefined): string[] {
 }
 
 /**
+ * Reconciles the two ways a project's possession can arrive: the admin form
+ * submits possessionMonth/possessionYear directly (India-localized, no
+ * quarters); bulk-import CSV rows instead carry a real promisedPossession
+ * date (see lib/actions/ingestion.ts) with no month/year fields to fill in.
+ * Whichever side is present wins and populates the other, so
+ * promisedPossession — which "possession_asc" sort and the ready/1yr/2yr/
+ * later filter key off — never goes stale relative to what's displayed.
+ * Only defined possessionMonth/Year takes precedence over promisedPossession
+ * when a caller (or an autosave whose selects were left blank) supplies
+ * neither, both come back null — a legitimate "possession not yet known"
+ * state.
+ */
+function reconcilePossession(
+  possessionMonth: number | undefined,
+  possessionYear: number | undefined,
+  promisedPossession: Date | undefined
+): { possessionMonth: number | null; possessionYear: number | null; promisedPossession: Date | null } {
+  if (possessionMonth && possessionYear) {
+    return { possessionMonth, possessionYear, promisedPossession: new Date(Date.UTC(possessionYear, possessionMonth - 1, 1)) };
+  }
+  if (promisedPossession) {
+    return { possessionMonth: promisedPossession.getUTCMonth() + 1, possessionYear: promisedPossession.getUTCFullYear(), promisedPossession };
+  }
+  return { possessionMonth: null, possessionYear: null, promisedPossession: null };
+}
+
+/**
  * Every field shared between create and update (everything except `slug`
  * and `cityId`, which each caller resolves differently) — one place so the
  * admin form and the bulk-import approve path (lib/actions/ingestion.ts)
  * can never drift apart on field mapping.
  */
 export function buildProjectData(data: ProjectSchemaInput) {
+  const possession = reconcilePossession(data.possessionMonth, data.possessionYear, data.promisedPossession);
   return {
     name: data.name,
     tagline: data.tagline ?? null,
@@ -136,8 +176,10 @@ export function buildProjectData(data: ProjectSchemaInput) {
     latitude: data.latitude ?? null,
     longitude: data.longitude ?? null,
     launchDate: data.launchDate ?? null,
-    promisedPossession: data.promisedPossession ?? null,
+    promisedPossession: possession.promisedPossession,
     actualPossession: data.actualPossession ?? null,
+    possessionMonth: possession.possessionMonth,
+    possessionYear: possession.possessionYear,
     constructionPercent: data.constructionPercent ?? null,
     reraNumber: data.reraNumber ?? null,
     reraStatus: data.reraStatus ?? null,
@@ -146,6 +188,8 @@ export function buildProjectData(data: ProjectSchemaInput) {
     landAreaAcres: data.landAreaAcres ?? null,
     priceMinPaise: toPaise(data.priceMinRupees),
     priceMaxPaise: toPaise(data.priceMaxRupees),
+    paymentPlanType: data.paymentPlanType ?? null,
+    paymentPlanDescription: data.paymentPlanDescription ?? null,
     dataSource: data.dataSource,
     confidence: data.confidence,
     sourceRef: data.sourceRef ?? null,

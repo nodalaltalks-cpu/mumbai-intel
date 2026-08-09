@@ -13,10 +13,15 @@ import {
   CATEGORY_LABEL,
   CONFIDENCE_LEVELS,
   DATA_SOURCES,
+  PAYMENT_PLAN_TYPES,
+  PAYMENT_PLAN_TYPE_DEFAULT_DESCRIPTION,
+  PAYMENT_PLAN_TYPE_LABEL,
+  POSSESSION_MONTH_LABEL,
   PROJECT_STATUSES,
   PROPERTY_CATEGORIES,
   SOURCE_LABEL,
   STATUS_LABEL,
+  type PaymentPlanType,
 } from "@/lib/project-meta";
 import { formatPaise } from "@/lib/format";
 import { CheckboxField, Field, FieldGroup, FormError, SelectField, TextareaField } from "./FormField";
@@ -60,6 +65,8 @@ export interface ProjectFormData {
   launchDate: Date | null;
   promisedPossession: Date | null;
   actualPossession: Date | null;
+  possessionMonth: number | null;
+  possessionYear: number | null;
   constructionPercent: number | null;
   reraNumber: string | null;
   reraStatus: string | null;
@@ -68,6 +75,8 @@ export interface ProjectFormData {
   landAreaAcres: number | null;
   priceMinPaise: bigint | null;
   priceMaxPaise: bigint | null;
+  paymentPlanType: string | null;
+  paymentPlanDescription: string | null;
   dataSource: string;
   confidence: string;
   sourceRef: string | null;
@@ -172,6 +181,25 @@ export default function ProjectForm({
   const [selectedLocalityId, setSelectedLocalityId] = useState(project?.localityId ?? "");
   const [selectedBuilderId, setSelectedBuilderId] = useState(project?.builderId ?? "");
   const [selectedMicroMarketId, setSelectedMicroMarketId] = useState(project?.microMarketId ?? "");
+  // Legacy records saved before possessionMonth/possessionYear existed only have promisedPossession
+  // (a plain date) — derive the select defaults from it so re-saving the form without touching
+  // Possession doesn't silently null the fields out (see reconcilePossession in lib/project-data.ts).
+  const [possessionMonth, setPossessionMonth] = useState(
+    project?.possessionMonth
+      ? String(project.possessionMonth)
+      : project?.promisedPossession
+        ? String(new Date(project.promisedPossession).getMonth() + 1)
+        : ""
+  );
+  const [possessionYear, setPossessionYear] = useState(
+    project?.possessionYear
+      ? String(project.possessionYear)
+      : project?.promisedPossession
+        ? String(new Date(project.promisedPossession).getFullYear())
+        : ""
+  );
+  const [paymentPlanType, setPaymentPlanType] = useState(project?.paymentPlanType ?? "");
+  const [paymentPlanDescription, setPaymentPlanDescription] = useState(project?.paymentPlanDescription ?? "");
   const [brochureFileName, setBrochureFileName] = useState<string | null>(null);
   const brochureFileInputRef = useRef<HTMLInputElement>(null);
   const [coverImageFileName, setCoverImageFileName] = useState<string | null>(null);
@@ -237,13 +265,20 @@ export default function ProjectForm({
           { label: "Price max", value: priceMax ? formatPaise(Number(priceMax) * 100) : "" },
           { label: "RERA number", value: g("reraNumber"), important: true },
           { label: "RERA status", value: g("reraStatus") },
+          {
+            label: "Payment plan",
+            value: g("paymentPlanType") ? label(PAYMENT_PLAN_TYPE_LABEL, g("paymentPlanType")) : "",
+          },
         ],
       },
       {
         title: "Construction",
         rows: [
           { label: "Launch date", value: g("launchDate"), important: true },
-          { label: "Promised possession", value: g("promisedPossession") },
+          {
+            label: "Possession",
+            value: g("possessionMonth") && g("possessionYear") ? `${POSSESSION_MONTH_LABEL[Number(g("possessionMonth"))]} ${g("possessionYear")}` : "",
+          },
           { label: "Actual possession", value: g("actualPossession") },
           { label: "Construction complete", value: g("constructionPercent") ? `${g("constructionPercent")}%` : "" },
           { label: "Land area", value: g("landAreaAcres") ? `${g("landAreaAcres")} acres` : "" },
@@ -566,13 +601,78 @@ export default function ProjectForm({
           <Field label="RERA number" name="reraNumber" important defaultValue={project?.reraNumber ?? ""} />
           <Field label="RERA status" name="reraStatus" defaultValue={project?.reraStatus ?? ""} />
         </FieldGroup>
+        <SelectField
+          label="Payment Plan Type"
+          name="paymentPlanType"
+          value={paymentPlanType}
+          onChange={(e) => {
+            const next = e.target.value as PaymentPlanType | "";
+            setPaymentPlanType(next);
+            // Auto-fills the description with a sensible default — still just a starting
+            // value in a normal textarea, so the admin can edit it (e.g. the actual
+            // "10:80:10" split) without it fighting back on every keystroke.
+            if (next && !paymentPlanDescription.trim()) {
+              setPaymentPlanDescription(PAYMENT_PLAN_TYPE_DEFAULT_DESCRIPTION[next]);
+            }
+          }}
+        >
+          <option value="">Not set</option>
+          {PAYMENT_PLAN_TYPES.map((type) => (
+            <option key={type} value={type}>
+              {PAYMENT_PLAN_TYPE_LABEL[type]}
+            </option>
+          ))}
+        </SelectField>
+        <TextareaField
+          label="Payment Plan Description"
+          name="paymentPlanDescription"
+          value={paymentPlanDescription}
+          onChange={(e) => setPaymentPlanDescription(e.target.value)}
+          placeholder="Shown in the Payment Plan info tooltip on the Project Card and detail page"
+          hint="Auto-filled from the selected type — edit freely, e.g. to record the actual split (10:80:10)"
+        />
       </div>
 
       <div className={activeTab === "construction" ? "flex flex-col gap-4" : "hidden"}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label="Launch date" name="launchDate" type="date" important defaultValue={toDateInputValue(project?.launchDate ?? null)} />
-          <Field label="Promised possession" name="promisedPossession" type="date" defaultValue={toDateInputValue(project?.promisedPossession ?? null)} />
           <Field label="Actual possession" name="actualPossession" type="date" defaultValue={toDateInputValue(project?.actualPossession ?? null)} />
+        </div>
+        <div>
+          <span className="text-[11px] uppercase tracking-wide text-muted">Possession</span>
+          <div className="mt-1.5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <SelectField
+              label="Possession Month"
+              name="possessionMonth"
+              value={possessionMonth}
+              onChange={(e) => setPossessionMonth(e.target.value)}
+            >
+              <option value="">Not set</option>
+              {POSSESSION_MONTH_LABEL.slice(1).map((name, i) => (
+                <option key={name} value={i + 1}>
+                  {name}
+                </option>
+              ))}
+            </SelectField>
+            <Field
+              label="Possession Year"
+              name="possessionYear"
+              type="number"
+              min={2000}
+              max={2100}
+              value={possessionYear}
+              onChange={(e) => setPossessionYear(e.target.value)}
+              placeholder="e.g. 2028"
+            />
+          </div>
+          <p className="mt-1.5 text-[11px] text-muted">
+            Preview:{" "}
+            <span className="font-mono text-foreground">
+              {possessionMonth && possessionYear ? `${POSSESSION_MONTH_LABEL[Number(possessionMonth)]} ${possessionYear}` : "—"}
+            </span>
+            {" · "}Shown as-is on the Project Card, Project Detail Page, search results and Featured Projects — no
+            quarters, ever.
+          </p>
         </div>
         <FieldGroup>
           <Field label="Construction complete (%)" name="constructionPercent" type="number" min={0} max={100} defaultValue={project?.constructionPercent ?? ""} />

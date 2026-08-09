@@ -1,3 +1,5 @@
+import { POSSESSION_MONTH_LABEL } from "@/lib/project-meta";
+
 export function formatPaise(paise: number | bigint | null | undefined): string {
   if (paise === null || paise === undefined) return "--";
   const rupees = Number(paise) / 100;
@@ -78,28 +80,40 @@ export function formatMonth(date: Date | string): string {
   return MONTH_FORMATTER.format(new Date(date));
 }
 
-const MONTH_YEAR_FORMATTER = new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric" });
+type PossessionStatus = "ANNOUNCED" | "PRE_LAUNCH" | "UNDER_CONSTRUCTION" | "NEARING_POSSESSION" | "READY_TO_MOVE" | "DELIVERED" | "STALLED";
 
 /**
- * Project-card "possession" badge — always renders something (per the card
- * design spec) rather than being hidden when data is missing. Ready-ish
- * statuses collapse to "Ready"; a date within 6 months shows month precision
- * ("Dec 2027"), further out shows quarter precision ("Q4 2028"); "TBD" when
- * neither a ready status nor a possession date exists.
+ * India-localized possession display — month + year, never a UAE-style
+ * quarter ("Q4 2028"). `possessionMonth`/`possessionYear` are the
+ * authoritative source (Project.possessionMonth/possessionYear); `legacyDate`
+ * is promisedPossession, used only as a fallback for records created before
+ * those fields existed — still rendered as month + year, never as a raw date
+ * or a quarter.
  */
-export function formatPossessionBadge(
-  date: Date | string | null | undefined,
-  status: "ANNOUNCED" | "PRE_LAUNCH" | "UNDER_CONSTRUCTION" | "NEARING_POSSESSION" | "READY_TO_MOVE" | "DELIVERED" | "STALLED"
+export function formatPossessionMonthYear(
+  possessionMonth: number | null | undefined,
+  possessionYear: number | null | undefined,
+  status: PossessionStatus,
+  legacyDate?: Date | string | null
 ): string {
-  if (status === "READY_TO_MOVE" || status === "DELIVERED") return "Ready";
-  if (!date) return "TBD";
-  const d = new Date(date);
-  const now = new Date();
-  if (d.getTime() <= now.getTime()) return "Ready";
-  const monthsAway = (d.getFullYear() - now.getFullYear()) * 12 + (d.getMonth() - now.getMonth());
-  if (monthsAway <= 6) return MONTH_YEAR_FORMATTER.format(d);
-  const quarter = Math.floor(d.getMonth() / 3) + 1;
-  return `Q${quarter} ${d.getFullYear()}`;
+  if (status === "READY_TO_MOVE" || status === "DELIVERED") return "Ready to Move";
+  if (possessionMonth && possessionYear) return `${POSSESSION_MONTH_LABEL[possessionMonth]} ${possessionYear}`;
+  if (legacyDate) {
+    const d = new Date(legacyDate);
+    if (!Number.isNaN(d.getTime())) return `${POSSESSION_MONTH_LABEL[d.getMonth() + 1]} ${d.getFullYear()}`;
+  }
+  return "TBD";
+}
+
+/** Prose variant for the project detail page ("Possession in March 2028") — same rules, just wrapped in a sentence when there's an actual date. */
+export function formatPossessionSentence(
+  possessionMonth: number | null | undefined,
+  possessionYear: number | null | undefined,
+  status: PossessionStatus,
+  legacyDate?: Date | string | null
+): string {
+  const base = formatPossessionMonthYear(possessionMonth, possessionYear, status, legacyDate);
+  return base === "Ready to Move" || base === "TBD" ? base : `Possession in ${base}`;
 }
 
 /** Project-card "size" line — "412 Units · 6 Towers · 18 Acres", omitting whichever pieces are missing; null (hide the row) only when all three are. */

@@ -2,8 +2,19 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getProjectForEdit } from "@/lib/admin-queries";
-import { formatDate, formatPriceBand } from "@/lib/format";
-import { CATEGORY_LABEL, SOURCE_CLASS, SOURCE_LABEL, STATUS_CLASS, STATUS_LABEL, type DataSource, type ProjectStatus, type PropertyCategory } from "@/lib/project-meta";
+import { formatPossessionMonthYear, formatPriceBand } from "@/lib/format";
+import {
+  CATEGORY_LABEL,
+  PAYMENT_PLAN_TYPE_LABEL,
+  SOURCE_CLASS,
+  SOURCE_LABEL,
+  STATUS_CLASS,
+  STATUS_LABEL,
+  type DataSource,
+  type PaymentPlanType,
+  type ProjectStatus,
+  type PropertyCategory,
+} from "@/lib/project-meta";
 
 export const metadata: Metadata = { title: "Preview — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
@@ -77,7 +88,15 @@ export default async function ProjectPreviewPage({ params }: { params: Promise<{
         </div>
         <div>
           <p className="text-[10px] uppercase tracking-wide text-muted">Possession</p>
-          <p className="font-mono text-sm text-foreground">{formatDate(project.promisedPossession)}</p>
+          <p className="font-mono text-sm text-foreground">
+            {formatPossessionMonthYear(project.possessionMonth, project.possessionYear, project.status as ProjectStatus, project.promisedPossession)}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-wide text-muted">Payment Plan</p>
+          <p className="font-mono text-sm text-foreground">
+            {project.paymentPlanType ? PAYMENT_PLAN_TYPE_LABEL[project.paymentPlanType as PaymentPlanType] : "No Payment Plan"}
+          </p>
         </div>
       </div>
 

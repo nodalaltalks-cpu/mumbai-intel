@@ -12,6 +12,59 @@ export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 export const PROPERTY_CATEGORIES = ["RESIDENTIAL", "COMMERCIAL", "PLOT", "MIXED_USE"] as const;
 export type PropertyCategory = (typeof PROPERTY_CATEGORIES)[number];
 
+/** India-localized possession month — index 0 unused so POSSESSION_MONTH_LABEL[possessionMonth] works directly against the 1–12 values stored on Project.possessionMonth. */
+export const POSSESSION_MONTH_LABEL: readonly string[] = [
+  "",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+export const PAYMENT_PLAN_TYPES = [
+  "CONSTRUCTION_LINKED",
+  "BUILDER_SUBVENTION",
+  "BANK_SUBVENTION",
+  "DOWN_PAYMENT",
+  "FLEXI_PAYMENT",
+  "NO_PAYMENT_PLAN",
+] as const;
+export type PaymentPlanType = (typeof PAYMENT_PLAN_TYPES)[number];
+
+export const PAYMENT_PLAN_TYPE_LABEL: Record<PaymentPlanType, string> = {
+  CONSTRUCTION_LINKED: "Construction Linked Plan (CLP)",
+  BUILDER_SUBVENTION: "Builder Subvention",
+  BANK_SUBVENTION: "Bank Subvention",
+  DOWN_PAYMENT: "Down Payment",
+  FLEXI_PAYMENT: "Flexi Payment",
+  NO_PAYMENT_PLAN: "No Payment Plan",
+};
+
+/**
+ * Auto-fills the admin form's description textarea when a Payment Plan Type
+ * is picked (still editable — e.g. to record the actual "10:80:10" split).
+ * Also the fallback shown if an existing project has a type but blank
+ * description. The stored `paymentPlanDescription` text is always what's
+ * actually rendered on the card/detail page — this map never runs at
+ * render time, only ever as a starting value.
+ */
+export const PAYMENT_PLAN_TYPE_DEFAULT_DESCRIPTION: Record<PaymentPlanType, string> = {
+  CONSTRUCTION_LINKED: "Payments are made according to construction milestones.",
+  BUILDER_SUBVENTION: "Builder pays the pre-EMI during the agreed subvention period. Buyer eligibility is defined by the builder's scheme.",
+  BANK_SUBVENTION: "Bank-funded subvention subject to buyer income eligibility and lender approval.",
+  DOWN_PAYMENT: "Buyer pays a major portion upfront with the remaining balance as per the agreed schedule.",
+  FLEXI_PAYMENT: "Payment is split across booking, construction milestones and possession.",
+  NO_PAYMENT_PLAN: "No structured payment plan has been published for this project.",
+};
+
 export const DATA_SOURCES = [
   "OFFICIAL_GOVERNMENT",
   "BUILDER_INFORMATION",

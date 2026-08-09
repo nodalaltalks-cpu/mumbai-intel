@@ -8,16 +8,18 @@ import CompareToggleButton from "@/app/components/CompareToggleButton";
 import BrochureDownloadLink from "@/app/components/BrochureDownloadLink";
 import InfoTooltip from "@/app/components/ui/InfoTooltip";
 import { IconClose } from "@/app/components/ui/icons";
-import { formatDate, formatPossessionBadge, formatPriceBand, formatPriceFrom, formatPricePerSqft, formatProjectSize } from "@/lib/format";
+import { formatPossessionMonthYear, formatPriceBand, formatPriceFrom, formatPricePerSqft, formatProjectSize } from "@/lib/format";
 import { maskPricePerSqft } from "@/lib/premium/mask";
 import {
   CONSTRUCTION_BADGE_CLASS,
   CONSTRUCTION_BADGE_LABEL,
+  PAYMENT_PLAN_TYPE_LABEL,
   SOURCE_CLASS,
   SOURCE_LABEL,
   STATUS_CLASS,
   STATUS_LABEL,
   type DataSource,
+  type PaymentPlanType,
   type ProjectStatus,
 } from "@/lib/project-meta";
 
@@ -36,15 +38,18 @@ export interface ProjectCardData {
   priceMinPaise?: number | null;
   priceMaxPaise?: number | null;
   pricePerSqftPaise?: number | null;
+  /** Legacy fallback only — real records created before possessionMonth/possessionYear existed. Never rendered as a quarter or a raw date, only ever reduced to month+year (see formatPossessionMonthYear). */
   possessionDate?: Date | string | null;
   constructionPercent?: number | null;
+  /** India-localized possession (1–12 / e.g. 2028) — the authoritative source for display; falls back to possessionDate above only for pre-migration records. */
+  possessionMonth?: number | null;
+  possessionYear?: number | null;
   totalUnits?: number | null;
   totalTowers?: number | null;
   landAreaAcres?: number | null;
-  /** No current data source feeds these (no `paymentPlan` field exists on Project yet) — always undefined today. Card renders "No Plan" and hides the info icon whenever this is absent, ready for a future field without another card change. */
-  paymentPlanRatio?: string | null;
-  /** Bullet lines shown in the payment-plan tooltip, e.g. ["10% Booking", "80% During Construction", "10% On Possession"]. Only rendered (and only shows the info icon) when both this and paymentPlanRatio are present. */
-  paymentPlanBreakdown?: string[] | null;
+  paymentPlanType?: PaymentPlanType | null;
+  /** Shown verbatim in the Payment Plan info tooltip — the info icon only renders when this is present. */
+  paymentPlanDescription?: string | null;
   dataSource: DataSource;
   imageUrl?: string | null;
   /** Null when guest-locked (see lib/premium/mask.ts's maskProjectBrochure) — use `brochureAvailable` for the "does a brochure exist" check, never truthiness of this field, since it's intentionally null for locked guests even when a brochure exists. */
@@ -69,7 +74,7 @@ function initials(name: string): string {
 export default function ProjectCard({ project }: { project: ProjectCardData }) {
   const [quickViewOpen, setQuickViewOpen] = useState(false);
   const projectSize = formatProjectSize(project.totalUnits, project.totalTowers, project.landAreaAcres);
-  const paymentPlanBreakdown = project.paymentPlanRatio && project.paymentPlanBreakdown ? project.paymentPlanBreakdown : [];
+  const paymentPlanLabel = project.paymentPlanType ? PAYMENT_PLAN_TYPE_LABEL[project.paymentPlanType] : "No Payment Plan";
 
   return (
     <>
@@ -93,7 +98,7 @@ export default function ProjectCard({ project }: { project: ProjectCardData }) {
                 {CONSTRUCTION_BADGE_LABEL[project.status]}
               </span>
               <span className="rounded-sm border border-border bg-background/85 px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wide text-muted backdrop-blur">
-                {formatPossessionBadge(project.possessionDate, project.status)}
+                {formatPossessionMonthYear(project.possessionMonth, project.possessionYear, project.status, project.possessionDate)}
               </span>
             </div>
           </div>
@@ -140,19 +145,13 @@ export default function ProjectCard({ project }: { project: ProjectCardData }) {
 
             <div className="flex items-center gap-1">
               <p className="text-[10px] uppercase tracking-wide text-muted">Payment Plan</p>
-              {paymentPlanBreakdown.length > 0 ? (
+              {project.paymentPlanDescription ? (
                 <span className="pointer-events-auto">
-                  <InfoTooltip label={`${project.name} payment plan breakdown`}>
-                    <ul className="list-disc space-y-0.5 pl-3">
-                      {paymentPlanBreakdown.map((line) => (
-                        <li key={line}>{line}</li>
-                      ))}
-                    </ul>
-                  </InfoTooltip>
+                  <InfoTooltip label={`${paymentPlanLabel} — payment plan details`}>{project.paymentPlanDescription}</InfoTooltip>
                 </span>
               ) : null}
             </div>
-            <p className="-mt-1.5 font-mono text-xs text-foreground">{project.paymentPlanRatio ?? "No Plan"}</p>
+            <p className="-mt-1.5 font-mono text-xs text-foreground">{paymentPlanLabel}</p>
 
             <div className="flex flex-wrap items-center gap-1.5">
               <span
@@ -286,12 +285,12 @@ function QuickViewModal({ project, onClose }: { project: ProjectCardData; onClos
                 <p className="font-mono text-sm text-foreground">{project.constructionPercent}%</p>
               </div>
             ) : null}
-            {project.possessionDate ? (
-              <div>
-                <p className="text-[10px] uppercase tracking-wide text-muted">Possession</p>
-                <p className="font-mono text-sm text-foreground">{formatDate(project.possessionDate)}</p>
-              </div>
-            ) : null}
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-muted">Possession</p>
+              <p className="font-mono text-sm text-foreground">
+                {formatPossessionMonthYear(project.possessionMonth, project.possessionYear, project.status, project.possessionDate)}
+              </p>
+            </div>
           </div>
 
           <div className="mt-1 flex gap-2">

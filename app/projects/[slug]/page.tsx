@@ -14,7 +14,8 @@ import {
   getTransactionMonthlyTrend,
   getTransactionStats,
 } from "@/lib/queries";
-import { formatBytes, formatDate, formatMonth, formatPaise, formatPriceBand, formatPricePerSqft } from "@/lib/format";
+import { formatBytes, formatDate, formatMonth, formatPaise, formatPossessionMonthYear, formatPriceBand, formatPricePerSqft } from "@/lib/format";
+import InfoTooltip from "@/app/components/ui/InfoTooltip";
 import BrochureDownloadLink from "@/app/components/BrochureDownloadLink";
 import PremiumGate from "@/app/components/premium/PremiumGate";
 import { gated, maskPaise, maskPricePerSqft, maskProjectBrochure } from "@/lib/premium/mask";
@@ -25,6 +26,7 @@ import {
   CATEGORY_LABEL,
   CONFIDENCE_LABEL,
   INFRA_TYPE_LABEL,
+  PAYMENT_PLAN_TYPE_LABEL,
   SOURCE_CLASS,
   SOURCE_LABEL,
   STATUS_CLASS,
@@ -275,7 +277,9 @@ export default async function ProjectDetailPage({
             ) : null}
             <div>
               <p className="text-[10px] uppercase tracking-wide text-muted">Possession</p>
-              <p className="font-mono text-sm text-foreground">{formatDate(project.promisedPossession)}</p>
+              <p className="font-mono text-sm text-foreground">
+                {formatPossessionMonthYear(project.possessionMonth, project.possessionYear, project.status, project.promisedPossession)}
+              </p>
             </div>
             {project.builder ? (
               <div>
@@ -328,7 +332,10 @@ export default async function ProjectDetailPage({
             <Fact label="Total towers" value={project.totalTowers ?? "--"} />
             <Fact label="Land area" value={project.landAreaAcres !== null ? `${project.landAreaAcres} acres` : "--"} />
             <Fact label="Launch date" value={formatDate(project.launchDate)} />
-            <Fact label="Possession" value={formatDate(project.promisedPossession)} />
+            <Fact
+              label="Possession"
+              value={formatPossessionMonthYear(project.possessionMonth, project.possessionYear, project.status, project.promisedPossession)}
+            />
             <Fact label="RERA" value={project.reraNumber ?? "--"} />
             <Fact label="RERA status" value={project.reraStatus ?? "--"} />
           </div>
@@ -438,6 +445,21 @@ export default async function ProjectDetailPage({
             <Fact label="Price band" value={formatPriceBand(project.priceMinPaise, project.priceMaxPaise)} accent />
             <Fact label="Min price" value={formatPaise(project.priceMinPaise)} />
             <Fact label="Max price" value={formatPaise(project.priceMaxPaise)} />
+            <div>
+              <div className="flex items-center gap-1">
+                <p className="text-[10px] uppercase tracking-wide text-muted">Payment Plan</p>
+                {project.paymentPlanDescription ? (
+                  <InfoTooltip
+                    label={`${project.paymentPlanType ? PAYMENT_PLAN_TYPE_LABEL[project.paymentPlanType] : "Payment plan"} — payment plan details`}
+                  >
+                    {project.paymentPlanDescription}
+                  </InfoTooltip>
+                ) : null}
+              </div>
+              <p className="font-mono text-sm text-foreground">
+                {project.paymentPlanType ? PAYMENT_PLAN_TYPE_LABEL[project.paymentPlanType] : "No Payment Plan"}
+              </p>
+            </div>
           </div>
         </section>
 
