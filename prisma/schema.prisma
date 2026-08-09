@@ -405,9 +405,17 @@ model Project {
   status   ProjectStatus
   category PropertyCategory @default(RESIDENTIAL)
 
-  address   String?
-  latitude  Float?
-  longitude Float?
+  address       String?
+  latitude      Float?
+  longitude     Float?
+  /// Direct link to the project's actual Google Maps location — what the admin
+  /// pastes and what "View on Google Maps" links to everywhere. latitude/
+  /// longitude above are auto-parsed from this URL when the format allows
+  /// (e.g. an "@lat,lng" or "q=lat,lng" pattern) so the OSM MapEmbed preview
+  /// and infra-linking distance calculations keep working without the admin
+  /// ever typing coordinates by hand; they stay null if the pasted link is a
+  /// shortened form (goo.gl/maps/…) that doesn't expose coordinates.
+  googleMapsUrl String?
 
   // ── Timeline ──
   launchDate          DateTime?
@@ -419,8 +427,12 @@ model Project {
   constructionPercent Int? // 0–100, current progress
 
   // ── RERA (official when present) ──
-  reraNumber String? @unique
-  reraStatus String?
+  reraNumber         String? @unique
+  reraStatus         String?
+  /// Direct link to this project's official MahaRERA (or other state RERA)
+  /// registration page on the government portal — the actual government
+  /// commitment record, not our own reraNumber/reraStatus fields.
+  reraCertificateUrl String?
 
   // ── Scale ──
   totalUnits    Int?

@@ -100,6 +100,21 @@ export default async function ProjectPreviewPage({ params }: { params: Promise<{
         </div>
       </div>
 
+      {project.googleMapsUrl || project.reraCertificateUrl ? (
+        <div className="flex flex-wrap gap-4 text-xs">
+          {project.googleMapsUrl ? (
+            <a href={project.googleMapsUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-accent hover:underline">
+              View on Google Maps →
+            </a>
+          ) : null}
+          {project.reraCertificateUrl ? (
+            <a href={project.reraCertificateUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-accent hover:underline">
+              View RERA Certificate →
+            </a>
+          ) : null}
+        </div>
+      ) : null}
+
       {project.description ? (
         <div className="rounded-sm border border-border bg-surface p-4">
           <h2 className="mb-2 font-mono text-xs font-semibold uppercase tracking-wide text-muted">Description</h2>

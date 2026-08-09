@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, useTransition, type ChangeEvent } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import {
   autosaveProjectAction,
   createProjectAction,
@@ -62,6 +62,7 @@ export interface ProjectFormData {
   address: string | null;
   latitude: number | null;
   longitude: number | null;
+  googleMapsUrl: string | null;
   launchDate: Date | null;
   promisedPossession: Date | null;
   actualPossession: Date | null;
@@ -70,6 +71,7 @@ export interface ProjectFormData {
   constructionPercent: number | null;
   reraNumber: string | null;
   reraStatus: string | null;
+  reraCertificateUrl: string | null;
   totalUnits: number | null;
   totalTowers: number | null;
   landAreaAcres: number | null;
@@ -151,6 +153,91 @@ function toDateInputValue(date: Date | null): string {
   return date ? date.toISOString().slice(0, 10) : "";
 }
 
+/**
+ * Extracts lat/lng from a pasted Google Maps link so the OSM MapEmbed preview
+ * and infra-linking distance calculations keep working without the admin
+ * ever typing coordinates by hand. Tries the common share-link shapes in
+ * order; returns null (not thrown) for shortened links (goo.gl/maps/…) that
+ * don't expose coordinates — the admin just won't get a map preview for those.
+ */
+function parseLatLngFromGoogleMapsUrl(url: string): { lat: number; lng: number } | null {
+  const patterns = [/@(-?\d+\.\d+),(-?\d+\.\d+)/, /[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/, /[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)/, /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return { lat: Number(match[1]), lng: Number(match[2]) };
+  }
+  return null;
+}
+
+type PriceUnit = "cr" | "lakh" | "exact";
+
+/** Splits a stored rupee amount back into the natural unit an Indian admin would type it in — "1.35" + Cr, not "13500000" + exact — so editing an existing project never shows the raw zero-padded number. */
+function rupeesToAmountUnit(rupees: number | null | undefined): { amount: string; unit: PriceUnit } {
+  if (!rupees) return { amount: "", unit: "cr" };
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  if (rupees >= 1e7) return { amount: String(round2(rupees / 1e7)), unit: "cr" };
+  if (rupees >= 1e5) return { amount: String(round2(rupees / 1e5)), unit: "lakh" };
+  return { amount: String(rupees), unit: "exact" };
+}
+
+/** Amount + unit → the plain rupee number the server action still expects under name="priceMinRupees"/"priceMaxRupees" — no schema or backend change needed, the Cr/Lakh convenience is purely a form-input affordance. */
+function amountUnitToRupees(amount: string, unit: PriceUnit): string {
+  const n = Number(amount);
+  if (!amount.trim() || Number.isNaN(n)) return "";
+  const multiplier = unit === "cr" ? 1e7 : unit === "lakh" ? 1e5 : 1;
+  return String(Math.round(n * multiplier));
+}
+
+function PriceAmountField({
+  label,
+  name,
+  amount,
+  unit,
+  onAmountChange,
+  onUnitChange,
+  rupees,
+  important,
+}: {
+  label: string;
+  name: string;
+  amount: string;
+  unit: PriceUnit;
+  onAmountChange: (v: string) => void;
+  onUnitChange: (v: PriceUnit) => void;
+  rupees: string;
+  important?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[11px] uppercase tracking-wide text-muted">
+        {label} {important ? <span className="text-negative">*</span> : null}
+      </span>
+      <div className="flex gap-2">
+        <input
+          type="number"
+          step="any"
+          min={0}
+          value={amount}
+          onChange={(e) => onAmountChange(e.target.value)}
+          placeholder="e.g. 1.5"
+          className="min-w-0 flex-1 rounded-sm border border-border bg-surface px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+        />
+        <select
+          value={unit}
+          onChange={(e) => onUnitChange(e.target.value as PriceUnit)}
+          className="rounded-sm border border-border bg-surface px-2 py-2 font-mono text-sm text-foreground focus:border-accent focus:outline-none"
+        >
+          <option value="cr">Cr</option>
+          <option value="lakh">Lakh</option>
+          <option value="exact">₹ exact</option>
+        </select>
+      </div>
+      <span className="text-[10px] text-muted">{rupees ? `= ₹${Number(rupees).toLocaleString("en-IN")}` : "No zeros needed — e.g. 1.5 Cr, or 78 Lakh"}</span>
+      <input type="hidden" name={name} value={rupees} />
+    </div>
+  );
+}
+
 export default function ProjectForm({
   project,
   localities,
@@ -176,6 +263,17 @@ export default function ProjectForm({
   const [isReviewPending, startReviewTransition] = useTransition();
   const [lat, setLat] = useState<number | null>(project?.latitude ?? null);
   const [lng, setLng] = useState<number | null>(project?.longitude ?? null);
+  const [googleMapsUrl, setGoogleMapsUrl] = useState(project?.googleMapsUrl ?? "");
+  // Only updates lat/lng when the pasted link actually parses — never clears
+  // previously-detected coordinates just because a mid-edit link is momentarily unparseable.
+  function handleGoogleMapsUrlChange(value: string) {
+    setGoogleMapsUrl(value);
+    const coords = parseLatLngFromGoogleMapsUrl(value);
+    if (coords) {
+      setLat(coords.lat);
+      setLng(coords.lng);
+    }
+  }
   const [localityOptions, setLocalityOptions] = useState(localities);
   const [builderOptions, setBuilderOptions] = useState(builders);
   const [selectedLocalityId, setSelectedLocalityId] = useState(project?.localityId ?? "");
@@ -200,6 +298,12 @@ export default function ProjectForm({
   );
   const [paymentPlanType, setPaymentPlanType] = useState(project?.paymentPlanType ?? "");
   const [paymentPlanDescription, setPaymentPlanDescription] = useState(project?.paymentPlanDescription ?? "");
+  const initialPriceMin = rupeesToAmountUnit(project?.priceMinPaise !== null && project?.priceMinPaise !== undefined ? Number(project.priceMinPaise) / 100 : null);
+  const initialPriceMax = rupeesToAmountUnit(project?.priceMaxPaise !== null && project?.priceMaxPaise !== undefined ? Number(project.priceMaxPaise) / 100 : null);
+  const [priceMinAmount, setPriceMinAmount] = useState(initialPriceMin.amount);
+  const [priceMinUnit, setPriceMinUnit] = useState<PriceUnit>(initialPriceMin.unit);
+  const [priceMaxAmount, setPriceMaxAmount] = useState(initialPriceMax.amount);
+  const [priceMaxUnit, setPriceMaxUnit] = useState<PriceUnit>(initialPriceMax.unit);
   const [brochureFileName, setBrochureFileName] = useState<string | null>(null);
   const brochureFileInputRef = useRef<HTMLInputElement>(null);
   const [coverImageFileName, setCoverImageFileName] = useState<string | null>(null);
@@ -254,8 +358,7 @@ export default function ProjectForm({
           { label: "Locality", value: localityName, important: true },
           { label: "Micro market", value: microMarketName },
           { label: "Address", value: g("address"), important: true },
-          { label: "Latitude", value: g("latitude") },
-          { label: "Longitude", value: g("longitude") },
+          { label: "Google Maps Link", value: g("googleMapsUrl") ? "Provided" : "" },
         ],
       },
       {
@@ -265,6 +368,7 @@ export default function ProjectForm({
           { label: "Price max", value: priceMax ? formatPaise(Number(priceMax) * 100) : "" },
           { label: "RERA number", value: g("reraNumber"), important: true },
           { label: "RERA status", value: g("reraStatus") },
+          { label: "RERA certificate link", value: g("reraCertificateUrl") ? "Provided" : "" },
           {
             label: "Payment plan",
             value: g("paymentPlanType") ? label(PAYMENT_PLAN_TYPE_LABEL, g("paymentPlanType")) : "",
@@ -333,14 +437,9 @@ export default function ProjectForm({
     setReviewOpen(true);
   }
 
-  function handleFormChange(event: ChangeEvent<HTMLFormElement>) {
+  function handleFormChange() {
     dirtyRef.current = true;
     recomputeProgress();
-    const target = event.target;
-    if (target instanceof HTMLInputElement) {
-      if (target.name === "latitude") setLat(target.value ? Number(target.value) : null);
-      if (target.name === "longitude") setLng(target.value ? Number(target.value) : null);
-    }
   }
 
   // Autosave draft: only meaningful once the project exists (edit mode).
@@ -571,36 +670,58 @@ export default function ProjectForm({
           </div>
         </FieldGroup>
         <Field label="Address" name="address" important defaultValue={project?.address ?? ""} />
-        <FieldGroup>
-          <Field label="Latitude" name="latitude" type="number" step="any" defaultValue={project?.latitude ?? ""} />
-          <Field label="Longitude" name="longitude" type="number" step="any" defaultValue={project?.longitude ?? ""} />
-        </FieldGroup>
+        <Field
+          label="Google Maps Link"
+          name="googleMapsUrl"
+          type="url"
+          value={googleMapsUrl}
+          onChange={(e) => handleGoogleMapsUrlChange(e.target.value)}
+          placeholder="Open the site in Google Maps → Share → Copy link, then paste it here"
+          hint={
+            lat !== null && lng !== null
+              ? `Coordinates detected: ${lat.toFixed(5)}, ${lng.toFixed(5)}`
+              : "Shown as a direct \"View on Google Maps\" link for users — coordinates for the map preview below are picked up automatically when the link contains them"
+          }
+        />
+        <input type="hidden" name="latitude" value={lat ?? ""} />
+        <input type="hidden" name="longitude" value={lng ?? ""} />
         <MapEmbed latitude={lat} longitude={lng} />
       </div>
 
       <div className={activeTab === "pricing" ? "flex flex-col gap-4" : "hidden"}>
         <FieldGroup>
-          <Field
-            label="Price min (₹)"
+          <PriceAmountField
+            label="Price min"
             name="priceMinRupees"
-            type="number"
-            step="any"
             important
-            defaultValue={project?.priceMinPaise !== null && project?.priceMinPaise !== undefined ? Number(project.priceMinPaise) / 100 : ""}
-            placeholder="e.g. 45000000 for ₹4.5 Cr"
+            amount={priceMinAmount}
+            unit={priceMinUnit}
+            onAmountChange={setPriceMinAmount}
+            onUnitChange={setPriceMinUnit}
+            rupees={amountUnitToRupees(priceMinAmount, priceMinUnit)}
           />
-          <Field
-            label="Price max (₹)"
+          <PriceAmountField
+            label="Price max"
             name="priceMaxRupees"
-            type="number"
-            step="any"
-            defaultValue={project?.priceMaxPaise !== null && project?.priceMaxPaise !== undefined ? Number(project.priceMaxPaise) / 100 : ""}
+            amount={priceMaxAmount}
+            unit={priceMaxUnit}
+            onAmountChange={setPriceMaxAmount}
+            onUnitChange={setPriceMaxUnit}
+            rupees={amountUnitToRupees(priceMaxAmount, priceMaxUnit)}
           />
         </FieldGroup>
         <FieldGroup>
           <Field label="RERA number" name="reraNumber" important defaultValue={project?.reraNumber ?? ""} />
           <Field label="RERA status" name="reraStatus" defaultValue={project?.reraStatus ?? ""} />
         </FieldGroup>
+        <Field
+          label="RERA Certificate Link"
+          name="reraCertificateUrl"
+          type="url"
+          defaultValue={project?.reraCertificateUrl ?? ""}
+          placeholder="Link to this project's registration on the official MahaRERA site"
+          hint="Shown as a direct link on the Project Detail Page — the government record of this project's RERA commitment, not just the number"
+        />
         <SelectField
           label="Payment Plan Type"
           name="paymentPlanType"

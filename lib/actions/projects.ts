@@ -364,6 +364,7 @@ export async function duplicateProjectAction(projectId: string): Promise<{ error
         address: source.address,
         latitude: source.latitude,
         longitude: source.longitude,
+        googleMapsUrl: source.googleMapsUrl,
         launchDate: source.launchDate,
         promisedPossession: source.promisedPossession,
         possessionMonth: source.possessionMonth,

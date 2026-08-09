@@ -336,7 +336,20 @@ export default async function ProjectDetailPage({
               label="Possession"
               value={formatPossessionMonthYear(project.possessionMonth, project.possessionYear, project.status, project.promisedPossession)}
             />
-            <Fact label="RERA" value={project.reraNumber ?? "--"} />
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-muted">RERA</p>
+              <p className="font-mono text-sm text-foreground">{project.reraNumber ?? "--"}</p>
+              {project.reraCertificateUrl ? (
+                <a
+                  href={project.reraCertificateUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-[10px] font-semibold text-accent hover:underline"
+                >
+                  View RERA Certificate →
+                </a>
+              ) : null}
+            </div>
             <Fact label="RERA status" value={project.reraStatus ?? "--"} />
           </div>
 
@@ -584,7 +597,19 @@ export default async function ProjectDetailPage({
         {/* Location + Nearby */}
         <section id="location" className="scroll-mt-32">
           <h2 className="font-mono text-lg font-semibold text-foreground">Location</h2>
-          <p className="mt-1 text-sm text-muted">{project.address ?? `${project.locality.name}, ${project.locality.city.name}`}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-3">
+            <p className="text-sm text-muted">{project.address ?? `${project.locality.name}, ${project.locality.city.name}`}</p>
+            {project.googleMapsUrl ? (
+              <a
+                href={project.googleMapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-semibold text-accent hover:underline"
+              >
+                View on Google Maps →
+              </a>
+            ) : null}
+          </div>
           <div className="mt-3">
             <MapEmbed latitude={project.latitude} longitude={project.longitude} />
           </div>

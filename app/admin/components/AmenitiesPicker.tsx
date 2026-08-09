@@ -41,10 +41,33 @@ export default function AmenitiesPicker({
     category,
     items: amenityOptions.filter((a) => a.category === category),
   })).filter((group) => group.items.length > 0);
+  const selectedAmenities = amenityOptions.filter((a) => checkedIds.has(a.id));
 
   return (
     <div className="flex flex-col gap-4">
-      {amenityOptions.length === 0 ? <p className="text-xs text-muted">No amenities defined yet.</p> : null}
+      {/* This project's actual selection — everything below is the shared catalogue to pick more from, not what's live on the page. */}
+      <div className="rounded-sm border border-accent/30 bg-accent/5 p-3">
+        <p className="text-[10px] uppercase tracking-wide text-muted">
+          Added to this project ({selectedAmenities.length})
+        </p>
+        {selectedAmenities.length > 0 ? (
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {selectedAmenities.map((a) => (
+              <span key={a.id} className="rounded-sm border border-accent/40 bg-surface px-2 py-1 text-xs text-foreground">
+                {a.name}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-1 text-xs text-muted">None yet — check any amenity below to add it to this project only.</p>
+        )}
+      </div>
+
+      {amenityOptions.length === 0 ? (
+        <p className="text-xs text-muted">No amenities defined yet.</p>
+      ) : (
+        <p className="text-[10px] uppercase tracking-wide text-muted">Shared catalogue — check to add, uncheck to remove from this project</p>
+      )}
       {byCategory.map((group) => (
         <div key={group.category}>
           <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted/70">
