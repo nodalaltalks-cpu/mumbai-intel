@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import GoogleButton from "@/app/components/auth/GoogleButton";
 import { trackResearchEvent } from "@/lib/track-research";
 import { useGateRequest } from "@/lib/premium/gate-context";
@@ -15,6 +17,21 @@ import { IconClose } from "@/app/components/ui/icons";
  */
 export default function GlobalSignInModal() {
   const { request, closeGate } = useGateRequest();
+  const pathname = usePathname();
+  const previousPathname = useRef(pathname);
+
+  // "Continue with Email" / "Sign In" below are next/link Links (client-side
+  // transitions), unlike GoogleButton's plain <a> which forces a full page
+  // load. Because this modal lives in the root layout, a soft transition left
+  // it mounted and stacked on top of the destination page — the click looked
+  // like it did nothing since the new page was rendering right underneath it.
+  useEffect(() => {
+    if (previousPathname.current !== pathname) {
+      previousPathname.current = pathname;
+      closeGate();
+    }
+  }, [pathname, closeGate]);
+
   if (!request) return null;
 
   const { feature, next, trigger } = request;

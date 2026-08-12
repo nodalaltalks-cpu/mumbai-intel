@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { setSessionCookie } from "@/lib/auth/session";
 import { setPublicSessionCookie } from "@/lib/public-auth/session";
 import { exchangeGoogleCode, fetchGoogleUserInfo } from "@/lib/public-auth/google";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
@@ -35,6 +36,22 @@ export async function GET(request: NextRequest) {
     const tokens = await exchangeGoogleCode(code, redirectUri);
     const profile = await fetchGoogleUserInfo(tokens.access_token);
     if (!profile.email) return failure(origin, "google_auth_failed");
+
+    // Same "founder table checked first" rule as the email/password path
+    // (lib/actions/public-auth.ts's loginAction) — a Google account whose
+    // email matches an active founder/admin account signs in as admin
+    // instead of being created as a PublicUser. This is why admin Google
+    // sign-in previously appeared to do nothing useful: it always logged
+    // the founder into the public account system and redirected to the
+    // public site instead of /admin.
+    const admin = await prisma.user.findUnique({ where: { email: profile.email } });
+    if (admin && admin.isActive) {
+      await prisma.user.update({ where: { id: admin.id }, data: { lastLoginAt: new Date() } });
+      await setSessionCookie({ userId: admin.id, email: admin.email, name: admin.name, role: admin.role });
+      const response = NextResponse.redirect(new URL("/admin", origin));
+      response.cookies.delete(OAUTH_STATE_COOKIE_NAME);
+      return response;
+    }
 
     let user = await prisma.publicUser.findUnique({ where: { googleId: profile.sub } });
     let authEvent: "LOGIN_COMPLETED" | "SIGNUP_COMPLETED" = "LOGIN_COMPLETED";

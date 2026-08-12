@@ -8,7 +8,8 @@ export type PremiumFeature =
   | "wishlist"
   | "save-search"
   | "reports"
-  | "direct-signin";
+  | "direct-signin"
+  | "research-nudge";
 
 export const PREMIUM_FEATURE_LABEL: Record<PremiumFeature, string> = {
   "transaction-history": "Transaction Intelligence",
@@ -20,6 +21,7 @@ export const PREMIUM_FEATURE_LABEL: Record<PremiumFeature, string> = {
   "save-search": "Saved Searches",
   reports: "Market Reports",
   "direct-signin": "Sign In (Nav)",
+  "research-nudge": "60s Guest Nudge",
 };
 
 export const PREMIUM_CARD_TITLE = "Continue Your Research";

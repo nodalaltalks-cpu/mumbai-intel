@@ -60,7 +60,16 @@ export async function signupAction(_prevState: PublicAuthState, formData: FormDa
 
   await setPublicSessionCookie({ userId: user.id, email: user.email, name: user.name, image: user.image });
   await recordResearchEvent("SIGNUP_COMPLETED", { entityType: "PublicUser", entityId: user.id, metadata: { method: "credentials" } });
-  await sendWelcomeEmail(user.email, user.name);
+  // Best-effort — same reasoning as the Google callback: a transient Resend
+  // failure must never strand an otherwise-successful signup before its
+  // redirect (this action has no outer catch, so an unhandled throw here
+  // previously surfaced as a crashed signup even though the account and
+  // session were already created).
+  try {
+    await sendWelcomeEmail(user.email, user.name);
+  } catch (error) {
+    console.error("[email] failed to send welcome email:", error);
+  }
   const signupNext = formData.get("next");
   redirect(typeof signupNext === "string" && signupNext ? sanitizeNextPath(signupNext) : "/");
 }

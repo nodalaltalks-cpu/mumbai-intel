@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { GoogleAnalytics } from "@next/third-parties/google";
 import PremiumGateProvider from "@/app/components/premium/PremiumGateProvider";
 import GoogleLoginPing from "@/app/components/analytics/GoogleLoginPing";
+import { getSession } from "@/lib/auth/session";
+import { getPublicSession } from "@/lib/public-auth/session";
 import "./globals.css";
 
 // Public by design — a GA4 Measurement ID is not a secret (it's visible in
@@ -58,11 +60,17 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Read once here (in addition to Navbar's own read — cheap, JWT-only, no DB
+  // call) so the 60s guest research nudge knows to stay off for anyone
+  // already signed in, founder or public, on every route including /admin.
+  const [founderSession, publicSession] = await Promise.all([getSession(), getPublicSession()]);
+  const isGuest = !founderSession && !publicSession;
+
   return (
     <html
       lang="en"
@@ -75,7 +83,7 @@ export default function RootLayout({
         >
           Skip to content
         </a>
-        <PremiumGateProvider>{children}</PremiumGateProvider>
+        <PremiumGateProvider isGuest={isGuest}>{children}</PremiumGateProvider>
         <GoogleLoginPing />
         {GA_MEASUREMENT_ID ? <GoogleAnalytics gaId={GA_MEASUREMENT_ID} /> : null}
       </body>
