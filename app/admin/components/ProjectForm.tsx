@@ -531,7 +531,7 @@ export default function ProjectForm({
 
       <div className={activeTab === "general" ? "flex flex-col gap-4" : "hidden"}>
         <FieldGroup>
-          <Field label="Name" name="name" required important defaultValue={project?.name} placeholder="Lodha Park" />
+          <Field label="Name" name="name" important defaultValue={project?.name} placeholder="Lodha Park" />
           <Field label="Slug (optional)" name="slug" defaultValue={project?.slug} placeholder="auto-generated from name" />
         </FieldGroup>
         <Field label="Tagline" name="tagline" defaultValue={project?.tagline ?? ""} placeholder="One-line pitch" />
@@ -560,7 +560,7 @@ export default function ProjectForm({
           <Field label="Developer group (optional)" name="developerGroup" defaultValue={project?.developerGroup ?? ""} placeholder="SPV / holding entity, if different" />
         </FieldGroup>
         <FieldGroup>
-          <SelectField label="Status" name="status" required defaultValue={project?.status ?? ""}>
+          <SelectField label="Status" name="status" important defaultValue={project?.status ?? ""}>
             {!project ? (
               <option value="" disabled>
                 Select a status
@@ -572,7 +572,7 @@ export default function ProjectForm({
               </option>
             ))}
           </SelectField>
-          <SelectField label="Category" name="category" required defaultValue={project?.category ?? ""}>
+          <SelectField label="Category" name="category" important defaultValue={project?.category ?? ""}>
             {!project ? (
               <option value="" disabled>
                 Select a category
@@ -600,7 +600,6 @@ export default function ProjectForm({
             <SelectField
               label="Locality"
               name="localityId"
-              required
               important
               value={selectedLocalityId}
               onChange={(e) => {
