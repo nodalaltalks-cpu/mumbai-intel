@@ -21,6 +21,9 @@ const GateContext = createContext<GateContextValue | null>(null);
 /** A guest who dismisses the modal for a given feature won't be re-shown it for this long if they click the *same* feature again — avoids nagging on repeat clicks while a click on a different feature still opens it immediately. */
 const DISMISS_COOLDOWN_MS = 5 * 60 * 1000;
 
+/** Explicit "I want to sign in" entry points — a deliberate re-click here is always intent, never incidental nagging, so the cooldown above must never suppress it (unlike an accidental repeat click on a blurred data section). */
+const COOLDOWN_EXEMPT_FEATURES: PremiumFeature[] = ["direct-signin"];
+
 /**
  * Single app-wide source of truth for the sign-in gate: whichever surface
  * calls openGate() last wins, so only one <GlobalSignInModal> can ever be
@@ -32,7 +35,8 @@ export function PremiumGateStateProvider({ children }: { children: ReactNode }) 
 
   const openGate = useCallback((feature: PremiumFeature, next: string, trigger: "inline" | "modal" = "modal") => {
     const dismissed = lastDismissed.current;
-    if (dismissed && dismissed.feature === feature && Date.now() - dismissed.at < DISMISS_COOLDOWN_MS) return;
+    const cooldownApplies = !COOLDOWN_EXEMPT_FEATURES.includes(feature);
+    if (cooldownApplies && dismissed && dismissed.feature === feature && Date.now() - dismissed.at < DISMISS_COOLDOWN_MS) return;
     trackGuestPaywallTriggered(feature);
     setRequest({ feature, next, trigger });
   }, []);

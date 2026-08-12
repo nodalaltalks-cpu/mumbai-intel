@@ -9,6 +9,7 @@ import { setSessionCookie } from "@/lib/auth/session";
 import { clearPublicSessionCookie, setPublicSessionCookie } from "@/lib/public-auth/session";
 import { sanitizeNextPath } from "@/lib/public-auth/next-path";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
+import { recalculatePublicUserCompletion } from "@/lib/profile-completion";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/request-ip";
 import { sendPasswordResetEmail, sendWelcomeEmail } from "@/lib/email";
@@ -60,6 +61,11 @@ export async function signupAction(_prevState: PublicAuthState, formData: FormDa
 
   await setPublicSessionCookie({ userId: user.id, email: user.email, name: user.name, image: user.image });
   await recordResearchEvent("SIGNUP_COMPLETED", { entityType: "PublicUser", entityId: user.id, metadata: { method: "credentials" } });
+  // Every other writer of a scored field recomputes completion (see the
+  // Google callback) — credentials signup was the other path that didn't,
+  // so a fresh email/password account under-reported 0% the same way a
+  // fresh Google signup used to.
+  await recalculatePublicUserCompletion(user.id);
   // Best-effort — same reasoning as the Google callback: a transient Resend
   // failure must never strand an otherwise-successful signup before its
   // redirect (this action has no outer catch, so an unhandled throw here
