@@ -14,8 +14,14 @@ export interface ImageActionState {
   uploadedCount?: number;
 }
 
+// A genuinely missing FormData entry (formData.get() returning null, not just an
+// empty string) hits Zod's generic "expected string, received null" type-mismatch
+// instead of a real message -- same class of issue fixed for the project form's own
+// schema in lib/project-data.ts.
+const nullToEmptyString = (v: unknown) => (v === null || v === undefined ? "" : v);
+
 const addImageSchema = z.object({
-  projectId: z.string().min(1),
+  projectId: z.preprocess(nullToEmptyString, z.string().min(1, "Missing project id")),
   kind: z.enum(IMAGE_KINDS),
   alt: z.string().trim().optional(),
 });
