@@ -32,8 +32,30 @@ export default function ProjectReviewModal({
   actions: ReactNode;
 }) {
   return (
-    <Dialog title="Review before submitting" onClose={onClose} maxWidth="max-w-2xl">
-      <div className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto pr-1">
+    <Dialog
+      title="Review before submitting"
+      onClose={onClose}
+      maxWidth="max-w-2xl"
+      footer={
+        <div className="flex flex-col gap-2">
+          <div className="rounded-sm border border-accent/30 bg-accent/5 px-3 py-2 text-[11px] text-muted">
+            By submitting, you confirm the details above are accurate to the best of your knowledge. This isn&apos;t
+            final — every field here (and every card below it) can be edited again anytime after saving.
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+            >
+              Go back and edit
+            </button>
+            {actions}
+          </div>
+        </div>
+      }
+    >
+      <div className="flex flex-col gap-4">
         <p className="text-xs text-muted">
           Check every section below. Fields marked <span className="text-negative">*</span> are important — if one is
           blank or shows <span className="font-mono text-foreground">NA</span>, make sure that&apos;s intentional
@@ -49,10 +71,12 @@ export default function ProjectReviewModal({
                 const isBlank = !row.value;
                 return (
                   <div key={row.label} className="flex items-baseline justify-between gap-2 text-xs">
-                    <span className="text-muted">
+                    <span className="shrink-0 text-muted">
                       {row.label} {row.important ? <span className="text-negative">*</span> : null}
                     </span>
-                    <span className={`truncate text-right font-mono ${row.important && isBlank ? "text-negative" : "text-foreground"}`}>
+                    <span
+                      className={`min-w-0 break-words text-right font-mono ${row.important && isBlank ? "text-negative" : "text-foreground"}`}
+                    >
                       {row.value || "--"}
                     </span>
                   </div>
@@ -61,22 +85,6 @@ export default function ProjectReviewModal({
             </div>
           </div>
         ))}
-      </div>
-
-      <div className="mt-4 rounded-sm border border-accent/30 bg-accent/5 px-3 py-2 text-[11px] text-muted">
-        By submitting, you confirm the details above are accurate to the best of your knowledge. This isn&apos;t
-        final — every field here (and every card below it) can be edited again anytime after saving.
-      </div>
-
-      <div className="mt-3 flex justify-end gap-2">
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
-        >
-          Go back and edit
-        </button>
-        {actions}
       </div>
     </Dialog>
   );

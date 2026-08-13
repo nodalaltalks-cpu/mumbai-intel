@@ -10,11 +10,14 @@ export default function Dialog({
   title,
   onClose,
   children,
+  footer,
   maxWidth = "max-w-md",
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  /** Rendered below the scrollable body, outside it — stays pinned/visible without scrolling (e.g. primary actions on a long review body). Omit for the original single-region layout. */
+  footer?: ReactNode;
   /** Tailwind max-width class — defaults to the original compact size; wider content (e.g. a PDF preview) can pass "max-w-3xl". */
   maxWidth?: string;
 }) {
@@ -35,16 +38,17 @@ export default function Dialog({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`mi-pop-in w-full ${maxWidth} overflow-hidden rounded-md border border-border bg-surface shadow-2xl`}
+        className={`mi-pop-in flex max-h-[calc(100vh-2rem)] w-full ${maxWidth} flex-col overflow-hidden rounded-md border border-border bg-surface shadow-2xl`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
           <h2 className="font-mono text-sm font-semibold text-foreground">{title}</h2>
           <Button ref={closeButtonRef} type="button" variant="secondary" size="sm" onClick={onClose} aria-label="Close">
             <IconClose className="h-3 w-3" />
           </Button>
         </div>
-        <div className="p-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
+        {footer ? <div className="shrink-0 border-t border-border p-4">{footer}</div> : null}
       </div>
     </div>
   );
