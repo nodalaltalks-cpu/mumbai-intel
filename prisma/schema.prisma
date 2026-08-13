@@ -402,7 +402,10 @@ model Project {
   microMarketId String?
   microMarket   MicroMarket? @relation(fields: [microMarketId], references: [id])
 
-  status   ProjectStatus
+  /// Defaults to the earliest lifecycle stage so an incomplete draft (admin
+  /// hasn't chosen a status yet) can still be saved — same pattern as
+  /// `category`'s default below, not a new convention.
+  status   ProjectStatus    @default(ANNOUNCED)
   category PropertyCategory @default(RESIDENTIAL)
 
   address       String?

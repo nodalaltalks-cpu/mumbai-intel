@@ -22,7 +22,7 @@ const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefi
 // "X is required" message -- confusing for an admin with no way to tell which field.
 const nullToEmptyString = (v: unknown) => (v === null || v === undefined ? "" : v);
 
-export const projectSchema = z.object({
+const projectSchemaShape = {
   name: z.preprocess(nullToEmptyString, z.string().trim().min(1, "Name is required")),
   slug: z.preprocess(emptyToUndefined, z.string().trim().optional()),
   tagline: z.preprocess(emptyToUndefined, z.string().trim().optional()),
@@ -32,8 +32,11 @@ export const projectSchema = z.object({
   localityId: z.preprocess(nullToEmptyString, z.string().min(1, "Locality is required")),
   microMarketId: z.preprocess(emptyToUndefined, z.string().optional()),
   highlights: z.preprocess(emptyToUndefined, z.string().optional()),
-  status: z.enum(PROJECT_STATUSES),
-  category: z.enum(PROPERTY_CATEGORIES),
+  // Both have a DB default (see prisma/schema.prisma) so a blank submission is never
+  // actually invalid at the storage layer -- required only to *publish*, enforced below
+  // by the superRefine instead of here, so an incomplete draft can still be saved.
+  status: z.preprocess(emptyToUndefined, z.enum(PROJECT_STATUSES).optional()),
+  category: z.preprocess(emptyToUndefined, z.enum(PROPERTY_CATEGORIES).optional()),
   address: z.preprocess(emptyToUndefined, z.string().trim().optional()),
   latitude: z.preprocess(emptyToUndefined, z.coerce.number().optional()),
   longitude: z.preprocess(emptyToUndefined, z.coerce.number().optional()),
@@ -58,8 +61,11 @@ export const projectSchema = z.object({
   priceMaxRupees: z.preprocess(emptyToUndefined, z.coerce.number().min(0).optional()),
   paymentPlanType: z.preprocess(emptyToUndefined, z.enum(PAYMENT_PLAN_TYPES).optional()),
   paymentPlanDescription: z.preprocess(emptyToUndefined, z.string().trim().optional()),
-  dataSource: z.enum(DATA_SOURCES),
-  confidence: z.enum(CONFIDENCE_LEVELS),
+  // Both also have a DB default; the admin form always pre-fills a real value, but a
+  // non-form caller (e.g. a bulk-import CSV row, see lib/actions/ingestion.ts) may
+  // genuinely omit them -- same blank-tolerance as status/category above.
+  dataSource: z.preprocess(emptyToUndefined, z.enum(DATA_SOURCES).optional()),
+  confidence: z.preprocess(emptyToUndefined, z.enum(CONFIDENCE_LEVELS).optional()),
   sourceRef: z.preprocess(emptyToUndefined, z.string().trim().optional()),
   videoUrl: z.preprocess(emptyToUndefined, z.string().trim().optional()),
   tour360Url: z.preprocess(emptyToUndefined, z.string().trim().optional()),
@@ -71,6 +77,24 @@ export const projectSchema = z.object({
   metaTitle: z.preprocess(emptyToUndefined, z.string().trim().max(MAX_META_TITLE).optional()),
   metaDescription: z.preprocess(emptyToUndefined, z.string().trim().max(MAX_META_DESCRIPTION).optional()),
   ogImageUrl: z.preprocess(emptyToUndefined, z.string().trim().optional()),
+};
+
+/**
+ * Draft vs publish is not a separate workflow/table -- it's the same `isPublished`
+ * flag already on the form (see the Publishing tab), just enforced here: a draft
+ * (isPublished false) can be saved with status/category left blank, same as every
+ * other "important"-but-optional field (RERA number, launch date, ...); flipping
+ * isPublished to true is what actually requires them, with a friendly per-field
+ * message instead of Zod's generic enum type-mismatch text.
+ */
+export const projectSchema = z.object(projectSchemaShape).superRefine((data, ctx) => {
+  if (!data.isPublished) return;
+  if (!data.status) {
+    ctx.addIssue({ code: "custom", path: ["status"], message: "Status is required to publish this project." });
+  }
+  if (!data.category) {
+    ctx.addIssue({ code: "custom", path: ["category"], message: "Category is required to publish this project." });
+  }
 });
 
 export type ProjectSchemaInput = z.infer<typeof projectSchema>;
