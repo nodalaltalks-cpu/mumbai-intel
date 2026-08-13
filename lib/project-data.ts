@@ -14,15 +14,22 @@ const MAX_META_TITLE = 70;
 const MAX_META_DESCRIPTION = 160;
 
 const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefined ? undefined : v);
+// Same null/undefined normalization as emptyToUndefined, but landing on "" instead of
+// undefined -- for the two fields that must stay REQUIRED (name, localityId) rather than
+// optional. A missing FormData entry (formData.get() returns null; e.g. a field that
+// isn't in the DOM at submit time for any reason) would otherwise hit Zod's generic
+// "expected string, received null" type-mismatch instead of the field's own friendly
+// "X is required" message -- confusing for an admin with no way to tell which field.
+const nullToEmptyString = (v: unknown) => (v === null || v === undefined ? "" : v);
 
 export const projectSchema = z.object({
-  name: z.string().trim().min(1, "Name is required"),
+  name: z.preprocess(nullToEmptyString, z.string().trim().min(1, "Name is required")),
   slug: z.preprocess(emptyToUndefined, z.string().trim().optional()),
   tagline: z.preprocess(emptyToUndefined, z.string().trim().optional()),
   description: z.preprocess(emptyToUndefined, z.string().trim().optional()),
   builderId: z.preprocess(emptyToUndefined, z.string().optional()),
   developerGroup: z.preprocess(emptyToUndefined, z.string().trim().optional()),
-  localityId: z.string().min(1, "Locality is required"),
+  localityId: z.preprocess(nullToEmptyString, z.string().min(1, "Locality is required")),
   microMarketId: z.preprocess(emptyToUndefined, z.string().optional()),
   highlights: z.preprocess(emptyToUndefined, z.string().optional()),
   status: z.enum(PROJECT_STATUSES),
