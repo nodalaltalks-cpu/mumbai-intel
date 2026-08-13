@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
-    "backup": "node scripts/backup-snapshot.mjs"
+    "backup": "node scripts/backup-snapshot.mjs",
+    "reset-admin-password": "node scripts/reset-admin-password.mjs"
   },
   "dependencies": {
     "@next/third-parties": "16.2.10",

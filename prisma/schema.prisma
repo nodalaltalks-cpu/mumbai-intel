@@ -979,6 +979,7 @@ model User {
   isActive     Boolean    @default(true)
   lastLoginAt  DateTime?
   auditLogs    AuditLog[]
+  resetTokens  AdminPasswordResetToken[]
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 }
@@ -1070,6 +1071,21 @@ model PublicPasswordResetToken {
   id        String     @id @default(cuid())
   userId    String
   user      PublicUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String     @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime   @default(now())
+
+  @@index([userId])
+}
+
+/// Same shape as PublicPasswordResetToken, kept as a separate table because the
+/// founder/staff account it resets (User) is a distinct table with its own FK,
+/// not because the reset semantics differ.
+model AdminPasswordResetToken {
+  id        String     @id @default(cuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   tokenHash String     @unique
   expiresAt DateTime
   usedAt    DateTime?

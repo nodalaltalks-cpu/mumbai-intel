@@ -154,6 +154,24 @@ export async function requestPasswordResetAction(_prevState: PublicAuthState, fo
   const emailLimit = checkRateLimit(`reset-request-email:${email}`, 5, 60 * 15);
   if (!emailLimit.allowed) return successState; // same generic response — a limit hit here must not reveal anything either
 
+  // Same "founder table checked first" rule as loginAction and the Google callback —
+  // an email that matches an active admin account resets that account's password,
+  // not a (likely nonexistent) PublicUser row with the same address.
+  const admin = await prisma.user.findUnique({ where: { email } });
+  if (admin && admin.isActive) {
+    const token = crypto.randomBytes(32).toString("base64url");
+    await prisma.adminPasswordResetToken.create({
+      data: {
+        userId: admin.id,
+        tokenHash: hashResetToken(token),
+        expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MINUTES * 60 * 1000),
+      },
+    });
+    const resetUrl = `${getSiteUrl()}/reset-password?token=${token}`;
+    await sendPasswordResetEmail(email, resetUrl, RESET_TOKEN_TTL_MINUTES);
+    return successState;
+  }
+
   const user = await prisma.publicUser.findUnique({ where: { email } });
   if (!user || !user.passwordHash) return successState; // never reveal existence, or offer to "reset" an OAuth-only account
 
@@ -192,6 +210,20 @@ export async function resetPasswordAction(_prevState: PublicAuthState, formData:
   const { token, password } = parsed.data;
 
   const tokenHash = hashResetToken(token);
+
+  // A reset link's token table (not the account's email) says which account it's
+  // for — requestPasswordResetAction only ever creates a row in one of the two.
+  const adminRecord = await prisma.adminPasswordResetToken.findUnique({ where: { tokenHash } });
+  if (adminRecord) {
+    if (adminRecord.usedAt || adminRecord.expiresAt < new Date()) {
+      return { error: "This reset link is invalid or has expired. Request a new one." };
+    }
+    const passwordHash = await hashPassword(password);
+    await prisma.user.update({ where: { id: adminRecord.userId }, data: { passwordHash } });
+    await prisma.adminPasswordResetToken.update({ where: { id: adminRecord.id }, data: { usedAt: new Date() } });
+    return { success: "Your password has been reset. You can now sign in." };
+  }
+
   const record = await prisma.publicPasswordResetToken.findUnique({ where: { tokenHash } });
   if (!record || record.usedAt || record.expiresAt < new Date()) {
     return { error: "This reset link is invalid or has expired. Request a new one." };
