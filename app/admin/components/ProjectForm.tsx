@@ -442,30 +442,12 @@ export default function ProjectForm({
     recomputeProgress();
   }
 
-  // Before the project exists, Name and Locality are the only two fields the database
-  // genuinely can't do without (Locality is a required, non-nullable foreign key with no
-  // sensible default -- unlike Status/Category, there's no "unknown locality" to fall back
-  // to). The moment both are filled, in whichever order, submit the form exactly as the
-  // "Save Draft" button already would -- reusing createProjectAction unchanged, so every
-  // other field already filled in on any tab gets saved too, not just these two. That one
-  // unavoidable transition lands on the edit page, where scheduleAutosave below takes over
-  // and every section from then on saves itself independently as the admin fills it in.
-  const hasAutoCreatedRef = useRef(false);
-  function maybeAutoCreateDraft() {
-    if (project || hasAutoCreatedRef.current || !formRef.current) return;
-    const name = (new FormData(formRef.current).get("name") as string | null)?.trim();
-    if (!name || !selectedLocalityId) return;
-    hasAutoCreatedRef.current = true;
-    formRef.current.requestSubmit();
-  }
-
-  // Autosave draft: only meaningful once the project exists (edit mode).
+  // Autosave draft: only meaningful once the project exists (edit mode). Before that, the
+  // whole form is plain client-side state (every tab panel stays mounted, just CSS-hidden --
+  // see the `activeTab === ... ? ... : "hidden"` wrappers below), so nothing needs saving or
+  // touches the database until the admin explicitly reviews and clicks Save Draft.
   function scheduleAutosave() {
-    if (!project) {
-      maybeAutoCreateDraft();
-      return;
-    }
-    if (!formRef.current) return;
+    if (!project || !formRef.current) return;
     if (!dirtyRef.current) return;
     dirtyRef.current = false;
     setAutosaveStatus("saving");
@@ -502,7 +484,6 @@ export default function ProjectForm({
     }
     dirtyRef.current = true;
     recomputeProgress();
-    maybeAutoCreateDraft();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBuilderId, selectedLocalityId, selectedMicroMarketId]);
 
