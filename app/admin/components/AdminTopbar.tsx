@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { logoutAction } from "@/lib/actions/auth";
 import type { SessionPayload } from "@/lib/auth/session";
 import { formatDate } from "@/lib/format";
@@ -26,6 +26,22 @@ const QUICK_ADD_LINKS = [
   { label: "Transaction", href: "/admin/transactions/new" },
 ];
 
+const ACTIVITY_LAST_SEEN_KEY = "mi_admin_activity_last_seen";
+
+// No cross-tab sync needed -- the only writer is this component's own click handler, which
+// already re-renders via setOpenMenu, so useSyncExternalStore just needs a snapshot getter
+// (re-read fresh each render) plus a stable no-op subscription and an SSR-safe server snapshot.
+function subscribeToActivitySeen() {
+  return () => {};
+}
+function getActivityLastSeen(): number {
+  const stored = Number(window.localStorage.getItem(ACTIVITY_LAST_SEEN_KEY) ?? "0");
+  return Number.isFinite(stored) ? stored : 0;
+}
+function getActivityLastSeenServer(): number {
+  return 0;
+}
+
 function describeActivity(item: ActivityItem): string {
   const actor = item.actor?.name ?? item.actor?.email ?? "System";
   const [entity, verb] = item.action.split(".").length >= 2 ? [item.action.split(".")[0], item.action.split(".").slice(1).join(" ")] : [item.entityType, item.action];
@@ -44,10 +60,48 @@ export default function AdminTopbar({
   onOpenSearch: () => void;
 }) {
   const [openMenu, setOpenMenu] = useState<MenuKey>(null);
+  const lastSeenAt = useSyncExternalStore(subscribeToActivitySeen, getActivityLastSeen, getActivityLastSeenServer);
+
+  const quickAddRef = useRef<HTMLDivElement>(null);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  // The old design used a "fixed inset-0" click-catcher rendered inside this header to close a
+  // menu on an outside click. The header has `backdrop-blur` (backdrop-filter), which per spec
+  // makes it a containing block for `position: fixed` descendants -- so that catcher was only
+  // ever "fixed" to the header's own ~48px bar, not the viewport, and clicking anywhere in the
+  // actual page below never reached it. A real document-level listener has no such trap.
+  useEffect(() => {
+    if (!openMenu) return;
+    const refs: Record<Exclude<MenuKey, null>, React.RefObject<HTMLDivElement | null>> = {
+      quickadd: quickAddRef,
+      notifications: notificationsRef,
+      profile: profileRef,
+    };
+    function handleClickOutside(event: MouseEvent) {
+      const activeRef = refs[openMenu as Exclude<MenuKey, null>];
+      if (activeRef.current && !activeRef.current.contains(event.target as Node)) {
+        setOpenMenu(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [openMenu]);
 
   function toggle(menu: MenuKey) {
     setOpenMenu((current) => (current === menu ? null : menu));
   }
+
+  function openNotifications() {
+    const wasOpen = openMenu === "notifications";
+    setOpenMenu(wasOpen ? null : "notifications");
+    if (!wasOpen && activity.length > 0) {
+      const latest = Math.max(...activity.map((item) => new Date(item.at).getTime()));
+      window.localStorage.setItem(ACTIVITY_LAST_SEEN_KEY, String(latest));
+    }
+  }
+
+  const unreadCount = activity.filter((item) => new Date(item.at).getTime() > lastSeenAt).length;
 
   return (
     <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-border bg-surface/95 px-4 py-2.5 backdrop-blur">
@@ -62,7 +116,7 @@ export default function AdminTopbar({
 
       <div className="flex-1" />
 
-      <div className="relative">
+      <div className="relative" ref={quickAddRef}>
         <button
           type="button"
           onClick={() => toggle("quickadd")}
@@ -71,62 +125,56 @@ export default function AdminTopbar({
           + Quick Add
         </button>
         {openMenu === "quickadd" ? (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setOpenMenu(null)} />
-            <div className="absolute right-0 z-40 mt-1.5 w-40 overflow-hidden rounded-sm border border-border bg-surface-raised shadow-xl">
-              {QUICK_ADD_LINKS.map((l) => (
-                <Link
-                  key={l.href}
-                  href={l.href}
-                  onClick={() => setOpenMenu(null)}
-                  className="block px-3 py-2 text-xs text-foreground hover:bg-accent/10 hover:text-accent"
-                >
-                  {l.label}
-                </Link>
-              ))}
-            </div>
-          </>
+          <div className="absolute right-0 z-40 mt-1.5 w-40 overflow-hidden rounded-sm border border-border bg-surface-raised shadow-xl">
+            {QUICK_ADD_LINKS.map((l) => (
+              <Link
+                key={l.href}
+                href={l.href}
+                onClick={() => setOpenMenu(null)}
+                className="block px-3 py-2 text-xs text-foreground hover:bg-accent/10 hover:text-accent"
+              >
+                {l.label}
+              </Link>
+            ))}
+          </div>
         ) : null}
       </div>
 
-      <div className="relative">
+      <div className="relative" ref={notificationsRef}>
         <button
           type="button"
-          onClick={() => toggle("notifications")}
+          onClick={openNotifications}
           className="relative rounded-sm border border-border px-2.5 py-1.5 text-xs text-muted hover:border-accent/50 hover:text-foreground"
         >
           Activity
-          {activity.length > 0 ? (
+          {unreadCount > 0 ? (
             <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-accent text-[9px] font-bold text-white">
-              {activity.length > 9 ? "9+" : activity.length}
+              {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           ) : null}
         </button>
         {openMenu === "notifications" ? (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setOpenMenu(null)} />
-            <div className="absolute right-0 z-40 mt-1.5 w-72 overflow-hidden rounded-sm border border-border bg-surface-raised shadow-xl">
-              <p className="border-b border-border px-3 py-2 text-[10px] font-semibold uppercase tracking-widest text-muted">
-                Recent activity
-              </p>
-              <div className="max-h-80 overflow-y-auto">
-                {activity.length === 0 ? (
-                  <p className="px-3 py-4 text-center text-xs text-muted">No activity recorded yet.</p>
-                ) : (
-                  activity.map((item) => (
-                    <div key={item.id} className="border-b border-border px-3 py-2 last:border-b-0">
-                      <p className="text-xs text-foreground">{describeActivity(item)}</p>
-                      <p className="text-[10px] text-muted">{formatDate(item.at)}</p>
-                    </div>
-                  ))
-                )}
-              </div>
+          <div className="absolute right-0 z-40 mt-1.5 w-72 overflow-hidden rounded-sm border border-border bg-surface-raised shadow-xl">
+            <p className="border-b border-border px-3 py-2 text-[10px] font-semibold uppercase tracking-widest text-muted">
+              Recent activity
+            </p>
+            <div className="max-h-80 overflow-y-auto">
+              {activity.length === 0 ? (
+                <p className="px-3 py-4 text-center text-xs text-muted">No activity recorded yet.</p>
+              ) : (
+                activity.map((item) => (
+                  <div key={item.id} className="border-b border-border px-3 py-2 last:border-b-0">
+                    <p className="text-xs text-foreground">{describeActivity(item)}</p>
+                    <p className="text-[10px] text-muted">{formatDate(item.at)}</p>
+                  </div>
+                ))
+              )}
             </div>
-          </>
+          </div>
         ) : null}
       </div>
 
-      <div className="relative">
+      <div className="relative" ref={profileRef}>
         <button
           type="button"
           onClick={() => toggle("profile")}
@@ -138,31 +186,28 @@ export default function AdminTopbar({
           <span className="hidden sm:inline">{session.name ?? session.email}</span>
         </button>
         {openMenu === "profile" ? (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setOpenMenu(null)} />
-            <div className="absolute right-0 z-40 mt-1.5 w-52 overflow-hidden rounded-sm border border-border bg-surface-raised shadow-xl">
-              <div className="border-b border-border px-3 py-2">
-                <p className="truncate text-xs text-foreground">{session.name ?? "Founder"}</p>
-                <p className="truncate text-[10px] text-muted">{session.email}</p>
-                <p className="mt-1 text-[10px] uppercase tracking-wide text-accent">{session.role}</p>
-              </div>
-              <Link
-                href="/admin/settings"
-                onClick={() => setOpenMenu(null)}
-                className="block px-3 py-2 text-xs text-foreground hover:bg-accent/10 hover:text-accent"
-              >
-                Settings
-              </Link>
-              <form action={logoutAction}>
-                <button
-                  type="submit"
-                  className="block w-full px-3 py-2 text-left text-xs text-foreground hover:bg-negative/10 hover:text-negative"
-                >
-                  Sign out
-                </button>
-              </form>
+          <div className="absolute right-0 z-40 mt-1.5 w-52 overflow-hidden rounded-sm border border-border bg-surface-raised shadow-xl">
+            <div className="border-b border-border px-3 py-2">
+              <p className="truncate text-xs text-foreground">{session.name ?? "Founder"}</p>
+              <p className="truncate text-[10px] text-muted">{session.email}</p>
+              <p className="mt-1 text-[10px] uppercase tracking-wide text-accent">{session.role}</p>
             </div>
-          </>
+            <Link
+              href="/admin/settings"
+              onClick={() => setOpenMenu(null)}
+              className="block px-3 py-2 text-xs text-foreground hover:bg-accent/10 hover:text-accent"
+            >
+              Settings
+            </Link>
+            <form action={logoutAction}>
+              <button
+                type="submit"
+                className="block w-full px-3 py-2 text-left text-xs text-foreground hover:bg-negative/10 hover:text-negative"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
         ) : null}
       </div>
     </header>
