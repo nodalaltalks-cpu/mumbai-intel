@@ -57,23 +57,19 @@ const LEGAL_LINKS: { label: string; href: string }[] = [
 
 const TRUST_BADGES = ["Verified Data", "Source Referenced", "RERA Referenced", "Privacy First"];
 
-/**
- * Icon-only, visually present but not yet linked to a real account. LinkedIn
- * and Instagram profile URLs for NoDalalTalks were not found configured
- * anywhere in this codebase (env vars, config, or existing links) — rather
- * than invent a URL, these stay disabled placeholders until the real URLs
- * are provided. X/YouTube were removed outright (no NoDalalTalks presence
- * on either), not left as dead links.
- */
-function SocialIcon({ label, children }: { label: string; children: React.ReactNode }) {
+/** X/YouTube were removed outright (no NoDalalTalks presence on either), not left as dead links. */
+function SocialIcon({ label, href, children }: { label: string; href: string; children: React.ReactNode }) {
   return (
-    <span
-      title={`${label} — coming soon`}
-      aria-label={`${label} (coming soon)`}
-      className="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-sm border border-border text-muted/60"
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={label}
+      aria-label={label}
+      className="flex h-7 w-7 items-center justify-center rounded-sm border border-border text-muted transition-colors hover:border-accent hover:text-accent"
     >
       {children}
-    </span>
+    </a>
   );
 }
 
@@ -168,12 +164,12 @@ export default async function Footer() {
           </p>
 
           <div className="mt-4 flex items-center gap-2">
-            <SocialIcon label="LinkedIn">
+            <SocialIcon label="LinkedIn" href="https://www.linkedin.com/company/nodalaltalks/">
               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M4.98 3.5a2.5 2.5 0 11-.02 5 2.5 2.5 0 01.02-5zM3 9h4v12H3zM9 9h3.8v1.7h.05c.53-.98 1.83-2 3.77-2 4.03 0 4.78 2.5 4.78 5.76V21h-4v-5.6c0-1.34-.03-3.06-1.9-3.06-1.9 0-2.2 1.44-2.2 2.96V21H9z" />
               </svg>
             </SocialIcon>
-            <SocialIcon label="Instagram">
+            <SocialIcon label="Instagram" href="https://www.instagram.com/nodalaltalks/">
               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
                 <rect x="3" y="3" width="18" height="18" rx="5" />
                 <circle cx="12" cy="12" r="4" />
