@@ -38,7 +38,7 @@ export default async function EditProjectPage({
     getProjectForEdit(id),
     getLocalitiesForSelect(),
     getBuildersForSelect(),
-    getAmenities(),
+    getAmenities(id),
     getInfraAssetsForCity(),
     getAuditHistory("Project", id),
     getBrochureVersions(id),
@@ -66,7 +66,14 @@ export default async function EditProjectPage({
       <FlashMessage type={query.created ? "created" : query.saved ? "saved" : null} warning={query.brochureError} />
 
       <div className="rounded-sm border border-border bg-surface p-4">
-        <ProjectForm project={project} localities={localities} builders={builders} amenities={amenities} images={project.images} />
+        <ProjectForm
+          project={project}
+          localities={localities}
+          builders={builders}
+          amenities={amenities}
+          images={project.images}
+          isAdmin={session.role === "ADMIN"}
+        />
       </div>
 
       <ConfigurationsManager projectId={project.id} configurations={project.configurations} />

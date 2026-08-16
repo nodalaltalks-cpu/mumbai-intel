@@ -522,6 +522,7 @@ model Project {
   images          ProjectImage[]
   configurations  Configuration[]
   amenities       ProjectAmenity[]
+  customAmenities Amenity[]
   transactions    Transaction[]
   priceHistory    PriceHistoryPoint[]
   infraLinks      ProjectInfra[]
@@ -736,31 +737,33 @@ model Configuration {
   @@index([projectId, sortOrder])
 }
 
-enum AmenityCategory {
-  RECREATION
-  SAFETY
-  CONVENIENCE
-  WELLNESS
-  UTILITIES
-  OUTDOOR
-}
-
 /// Master amenity list (Swimming Pool, Clubhouse, 24x7 Security…). A shared
 /// table rather than a free-text array so amenities are filterable/searchable
-/// consistently across every project — the DXB-Interact-style filter bar this
-/// schema is built toward needs a fixed vocabulary, not per-project spelling.
+/// consistently across every project.
 model Amenity {
   id         String            @id @default(cuid())
   slug       String            @unique
   name       String
   icon       String? // icon key resolved client-side, no binary asset stored
-  category   AmenityCategory   @default(CONVENIENCE)
+  /// Plain text, not an enum -- admins can group amenities under their own custom section name
+  /// (e.g. "Kids Zone") in addition to the built-in ones (Recreation, Safety & Security,
+  /// Convenience, Wellness, Utilities, Outdoor). See AMENITY_CATEGORY_LABEL in
+  /// lib/project-meta.ts, which only has entries for the built-in set -- anything else
+  /// displays as typed.
+  category   String            @default("CONVENIENCE")
+  /// Null (the default) = the shared catalogue described above. Set only when an admin adds
+  /// a one-off amenity via the Project form's "+ New Amenity" inline-create -- that row is
+  /// private to this project, never shown in the shared list or any other project's picker.
+  /// Builder/Locality's own "+ New Amenity" path never sets this, unaffected either way.
+  projectId  String?
+  project    Project?          @relation(fields: [projectId], references: [id], onDelete: Cascade)
   projects   ProjectAmenity[]
   builders   BuilderAmenity[]
   localities LocalityAmenity[]
   createdAt  DateTime          @default(now())
 
   @@index([category])
+  @@index([projectId])
 }
 
 model ProjectAmenity {

@@ -513,7 +513,7 @@ export default async function ProjectDetailPage({
             <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {Object.entries(amenitiesByCategory).map(([category, items]) => (
                 <div key={category} className="rounded-sm border border-border bg-surface p-3">
-                  <p className="font-mono text-[11px] uppercase tracking-wide text-accent">{AMENITY_CATEGORY_LABEL[category as AmenityCategoryValue]}</p>
+                  <p className="font-mono text-[11px] uppercase tracking-wide text-accent">{AMENITY_CATEGORY_LABEL[category as AmenityCategoryValue] ?? category}</p>
                   <ul className="mt-1.5 flex flex-col gap-1">
                     {items.map((item, i) => (
                       <li key={i} className="text-xs text-foreground">

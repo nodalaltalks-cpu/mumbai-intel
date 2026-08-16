@@ -523,7 +523,7 @@ export default async function LocalityDetailPage({
                 }, {})
               ).map(([category, names]) => (
                 <div key={category} className="rounded-sm border border-border bg-surface p-3">
-                  <p className="font-mono text-[11px] uppercase tracking-wide text-accent">{AMENITY_CATEGORY_LABEL[category as AmenityCategoryValue]}</p>
+                  <p className="font-mono text-[11px] uppercase tracking-wide text-accent">{AMENITY_CATEGORY_LABEL[category as AmenityCategoryValue] ?? category}</p>
                   <ul className="mt-1.5 flex flex-col gap-1">
                     {names.map((name, i) => (
                       <li key={i} className="text-xs text-foreground">

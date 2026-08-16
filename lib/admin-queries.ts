@@ -738,8 +738,16 @@ export async function getAllImagesAdmin() {
   );
 }
 
-export async function getAmenities() {
-  return safeQuery("getAmenities", [], () => prisma.amenity.findMany({ orderBy: [{ category: "asc" }, { name: "asc" }] }));
+/** Shared catalogue (projectId: null) plus, when editing an existing project, that project's own
+ * private custom amenities -- never another project's. Callers with no projectId (Builder/Locality
+ * forms, and the New Project page before a project exists) only ever see the shared catalogue. */
+export async function getAmenities(projectId?: string) {
+  return safeQuery("getAmenities", [], () =>
+    prisma.amenity.findMany({
+      where: projectId ? { OR: [{ projectId: null }, { projectId }] } : { projectId: null },
+      orderBy: [{ category: "asc" }, { name: "asc" }],
+    })
+  );
 }
 
 export interface GlobalSearchResult {
