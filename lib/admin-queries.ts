@@ -158,6 +158,100 @@ export async function getDashboardCharts() {
   );
 }
 
+export interface UserGrowthStats {
+  totalUsers: number;
+  newLast7d: number;
+  newLast30d: number;
+  /** Distinct signed-in users with a ResearchEvent (project view, search, compare, etc.) in the window -- not raw pageviews, not anonymous traffic (see GA for that). */
+  dau: number;
+  wau: number;
+  mau: number;
+  emailVerifiedCount: number;
+  emailVerifiedPercent: number;
+  /** Distinct active users per calendar day, last 14 days -- the one growth signal not already covered by /admin/analytics/registration-funnel's event-volume and signup-trend charts. */
+  activeTrend: ChartBucket[];
+}
+
+const EMPTY_USER_GROWTH: UserGrowthStats = {
+  totalUsers: 0,
+  newLast7d: 0,
+  newLast30d: 0,
+  dau: 0,
+  wau: 0,
+  mau: 0,
+  emailVerifiedCount: 0,
+  emailVerifiedPercent: 0,
+  activeTrend: [],
+};
+
+/**
+ * DAU/WAU/MAU here means "distinct registered PublicUsers with at least one
+ * ResearchEvent in the window" -- the same event log every project view,
+ * search, filter, compare and wishlist add already writes to (see
+ * lib/analytics/research-events.ts). Deliberately NOT derived from
+ * PublicUser.lastLoginAt, which only updates on a fresh sign-in and would
+ * badly undercount a user who stays logged in for weeks. Anonymous traffic
+ * (no account) isn't counted here -- that's what the GA4 integration is for.
+ *
+ * Signup trend, Google/Email split and "signups today/this week" already
+ * live on /admin/analytics/registration-funnel -- deliberately not
+ * recomputed here to avoid two divergent copies of the same chart.
+ */
+export async function getUserGrowthStats(): Promise<UserGrowthStats> {
+  return safeQuery("getUserGrowthStats", EMPTY_USER_GROWTH, async () => {
+    const now = new Date();
+    const since24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const since7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const since30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const since14d = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+    const [totalUsers, newLast7d, newLast30d, emailVerifiedCount, dauGroups, wauGroups, mauGroups, recentActiveEvents] = await Promise.all([
+      prisma.publicUser.count(),
+      prisma.publicUser.count({ where: { createdAt: { gte: since7d } } }),
+      prisma.publicUser.count({ where: { createdAt: { gte: since30d } } }),
+      prisma.publicUser.count({ where: { emailVerifiedAt: { not: null } } }),
+      prisma.researchEvent.groupBy({ by: ["publicUserId"], where: { publicUserId: { not: null }, createdAt: { gte: since24h } } }),
+      prisma.researchEvent.groupBy({ by: ["publicUserId"], where: { publicUserId: { not: null }, createdAt: { gte: since7d } } }),
+      prisma.researchEvent.groupBy({ by: ["publicUserId"], where: { publicUserId: { not: null }, createdAt: { gte: since30d } } }),
+      prisma.researchEvent.findMany({
+        where: { publicUserId: { not: null }, createdAt: { gte: since14d } },
+        select: { publicUserId: true, createdAt: true },
+      }),
+    ]);
+
+    const emailVerifiedPercent = totalUsers > 0 ? Math.round((emailVerifiedCount / totalUsers) * 100) : 0;
+
+    // Last 14 days, oldest -> newest, bucketed by calendar day (JS-side -- Prisma's groupBy
+    // can't date-trunc, and a raw SQL query isn't worth it for what's still a small early-stage
+    // event volume; same manual-bucketing approach getDashboardCharts already uses above).
+    const dayKeys: { key: string; label: string }[] = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+      dayKeys.push({ key: d.toISOString().slice(0, 10), label: d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) });
+    }
+
+    const activeSets = new Map(dayKeys.map((d) => [d.key, new Set<string>()]));
+    for (const e of recentActiveEvents) {
+      if (!e.publicUserId) continue;
+      const key = e.createdAt.toISOString().slice(0, 10);
+      activeSets.get(key)?.add(e.publicUserId);
+    }
+    const activeTrend: ChartBucket[] = dayKeys.map((d) => ({ label: d.label, count: activeSets.get(d.key)?.size ?? 0 }));
+
+    return {
+      totalUsers,
+      newLast7d,
+      newLast30d,
+      dau: dauGroups.length,
+      wau: wauGroups.length,
+      mau: mauGroups.length,
+      emailVerifiedCount,
+      emailVerifiedPercent,
+      activeTrend,
+    };
+  });
+}
+
 export async function getActivityFeed(limit = 15) {
   return safeQuery("getActivityFeed", [], () =>
     prisma.auditLog.findMany({

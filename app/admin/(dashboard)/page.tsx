@@ -7,6 +7,7 @@ import {
   getLatestUpload,
   getRecentProjectsAdmin,
   getRecentTransactionsAdmin,
+  getUserGrowthStats,
 } from "@/lib/admin-queries";
 import { formatDate, formatPaise } from "@/lib/format";
 import { STATUS_CHART_COLOR, STATUS_LABEL, type ProjectStatus } from "@/lib/project-meta";
@@ -16,14 +17,23 @@ import DonutChart from "@/app/admin/components/charts/DonutChart";
 export const metadata: Metadata = { title: "Dashboard — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
-function StatTile({ label, value, href }: { label: string; value: string | number; href: string }) {
+function StatTile({ label, value, href, hint }: { label: string; value: string | number; href?: string; hint?: string }) {
+  const body = (
+    <>
+      <p className="text-[10px] uppercase tracking-wide text-muted">{label}</p>
+      <p className="mt-1.5 font-mono text-2xl font-semibold text-foreground">{value}</p>
+      {hint ? <p className="mt-0.5 text-[10px] text-muted">{hint}</p> : null}
+    </>
+  );
+  if (!href) {
+    return <div className="rounded-sm border border-border bg-surface p-4">{body}</div>;
+  }
   return (
     <Link
       href={href}
       className="rounded-sm border border-border bg-surface p-4 transition-colors hover:border-accent/50 hover:bg-surface-raised"
     >
-      <p className="text-[10px] uppercase tracking-wide text-muted">{label}</p>
-      <p className="mt-1.5 font-mono text-2xl font-semibold text-foreground">{value}</p>
+      {body}
     </Link>
   );
 }
@@ -34,14 +44,17 @@ function describeActivity(action: string): string {
 }
 
 export default async function AdminDashboardPage() {
-  const [stats, charts, recentProjects, recentTransactions, activity, latestUpload] = await Promise.all([
+  const [stats, charts, recentProjects, recentTransactions, activity, latestUpload, growth] = await Promise.all([
     getDashboardStats(),
     getDashboardCharts(),
     getRecentProjectsAdmin(5),
     getRecentTransactionsAdmin(5),
     getActivityFeed(12),
     getLatestUpload(),
+    getUserGrowthStats(),
   ]);
+
+  const stickinessPercent = growth.mau > 0 ? Math.round((growth.dau / growth.mau) * 100) : 0;
 
   const statusDonutData = charts.byStatus.map((bucket) => ({
     label: STATUS_LABEL[bucket.label as ProjectStatus] ?? bucket.label,
@@ -97,6 +110,49 @@ export default async function AdminDashboardPage() {
             <p className="mt-1.5 text-xs text-muted">No images uploaded yet.</p>
           )}
         </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <div>
+          <h2 className="font-mono text-sm font-semibold text-foreground">Growth — registered users</h2>
+          <p className="text-xs text-muted">
+            Most property portals track signups and traffic and call it growth, then get surprised when neither
+            converts. Signups are cheap when research doesn&apos;t require a phone number; the number that actually
+            matters is how many of those people keep coming back. DAU/WAU/MAU and stickiness below are all
+            &quot;distinct registered users with real research activity&quot; (a project view, search, compare, or
+            wishlist add) — not raw traffic, which Google Analytics already covers.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatTile label="Registered Users" value={growth.totalUsers} />
+          <StatTile label="Daily Active" value={growth.dau} hint="Last 24h" />
+          <StatTile label="Weekly Active" value={growth.wau} hint="Last 7d" />
+          <StatTile label="Monthly Active" value={growth.mau} hint="Last 30d" />
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatTile label="Stickiness" value={`${stickinessPercent}%`} hint="DAU ÷ MAU" />
+          <StatTile label="New Signups" value={growth.newLast7d} hint="Last 7d" />
+          <StatTile label="New Signups" value={growth.newLast30d} hint="Last 30d" />
+          <StatTile label="Email Verified" value={`${growth.emailVerifiedPercent}%`} hint={`${growth.emailVerifiedCount} of ${growth.totalUsers}`} />
+        </div>
+
+        <section className="rounded-sm border border-border bg-surface p-4">
+          <h3 className="mb-3 font-mono text-sm font-semibold text-foreground">Active users, last 14 days</h3>
+          <BarChart data={growth.activeTrend} emptyLabel="No research activity in this window" />
+        </section>
+
+        <p className="text-[11px] text-muted">
+          Sign-up channel mix, the 30-day signup trend and per-feature funnel drop-off live on{" "}
+          <Link href="/admin/analytics/registration-funnel" className="text-accent hover:underline">
+            Registration Funnel
+          </Link>{" "}
+          · full event-level detail (top viewed projects/builders/localities, event type breakdown) on{" "}
+          <Link href="/admin/analytics/research" className="text-accent hover:underline">
+            Research Intent
+          </Link>
+          .
+        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
