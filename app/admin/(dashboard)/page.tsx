@@ -60,12 +60,6 @@ export default async function AdminDashboardPage() {
           <Link href="/admin/projects/new" className="rounded-sm bg-accent px-3 py-1.5 text-xs font-mono font-semibold uppercase tracking-wide text-white hover:bg-accent-dim">
             New Project
           </Link>
-          <Link href="/admin/builders/new" className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
-            New Builder
-          </Link>
-          <Link href="/admin/localities/new" className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
-            New Locality
-          </Link>
           <Link href="/admin/transactions/new" className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
             New Transaction
           </Link>

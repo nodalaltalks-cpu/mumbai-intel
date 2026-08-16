@@ -7,8 +7,6 @@ import type { GlobalSearchResult } from "@/lib/admin-queries";
 
 const QUICK_LINKS = [
   { label: "New Project", href: "/admin/projects/new", group: "Quick add" },
-  { label: "New Builder", href: "/admin/builders/new", group: "Quick add" },
-  { label: "New Locality", href: "/admin/localities/new", group: "Quick add" },
   { label: "New Transaction", href: "/admin/transactions/new", group: "Quick add" },
   { label: "Dashboard", href: "/admin", group: "Navigate" },
   { label: "Projects", href: "/admin/projects", group: "Navigate" },

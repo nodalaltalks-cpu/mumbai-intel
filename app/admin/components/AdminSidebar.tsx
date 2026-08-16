@@ -12,11 +12,7 @@ const NAV_SECTIONS: { label: string; links: { label: string; href: string }[] }[
   },
   {
     label: "Catalog",
-    links: [
-      { label: "Projects", href: "/admin/projects" },
-      { label: "Builders", href: "/admin/builders" },
-      { label: "Localities", href: "/admin/localities" },
-    ],
+    links: [{ label: "Projects", href: "/admin/projects" }],
   },
   {
     label: "Market data",

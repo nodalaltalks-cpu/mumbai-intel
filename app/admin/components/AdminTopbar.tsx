@@ -15,11 +15,12 @@ export interface ActivityItem {
   actor: { name: string | null; email: string } | null;
 }
 
-// Builder/Locality dropped from Quick Add -- Project creation already has inline
-// "+ New Builder"/"+ New Locality" (find-or-create), so a separate top-level shortcut here
-// just duplicated that workflow. Both admin pages (/admin/builders, /admin/localities) still
-// exist in the sidebar under Catalog for editing the richer content (awards, market
-// snapshots, SEO) that Project doesn't capture.
+// Builder/Locality dropped from Quick Add, the Catalog sidebar, and the command palette --
+// Project creation already has inline "+ New Builder"/"+ New Locality" (find-or-create), so a
+// separate top-level shortcut just duplicated that workflow. The underlying pages
+// (/admin/builders, /admin/localities) still exist and are reachable via their dashboard stat
+// tiles for editing richer content (awards, market snapshots, SEO) that Project doesn't
+// capture -- they're just no longer primary navigation destinations.
 const QUICK_ADD_LINKS = [
   { label: "Project", href: "/admin/projects/new" },
   { label: "Transaction", href: "/admin/transactions/new" },
