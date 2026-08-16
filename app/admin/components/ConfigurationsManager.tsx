@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import {
   addConfigurationAction,
   deleteConfigurationAction,
@@ -9,6 +9,8 @@ import {
 import ConfirmButton from "./ConfirmButton";
 import SubmitButton from "./SubmitButton";
 import { Field } from "./FormField";
+import PriceAmountField from "./PriceAmountField";
+import { amountUnitToRupees, type PriceUnit } from "@/lib/price-units";
 
 export interface ConfigurationRow {
   id: string;
@@ -31,6 +33,10 @@ export default function ConfigurationsManager({
 }) {
   const action = addConfigurationAction.bind(null, projectId);
   const [state, formAction] = useActionState(action, initialState);
+  const [priceMinAmount, setPriceMinAmount] = useState("");
+  const [priceMinUnit, setPriceMinUnit] = useState<PriceUnit>("cr");
+  const [priceMaxAmount, setPriceMaxAmount] = useState("");
+  const [priceMaxUnit, setPriceMaxUnit] = useState<PriceUnit>("cr");
 
   return (
     <div className="rounded-sm border border-border bg-surface p-4">
@@ -72,8 +78,24 @@ export default function ConfigurationsManager({
         </div>
         <Field label="Bedrooms" name="bedrooms" type="number" step="0.5" min={0} required />
         <Field label="Carpet sqft" name="carpetSqft" type="number" step="any" min={0} />
-        <Field label="Price min (₹)" name="priceMinRupees" type="number" step="any" min={0} />
-        <Field label="Price max (₹)" name="priceMaxRupees" type="number" step="any" min={0} />
+        <PriceAmountField
+          label="Price min"
+          name="priceMinRupees"
+          amount={priceMinAmount}
+          unit={priceMinUnit}
+          onAmountChange={setPriceMinAmount}
+          onUnitChange={setPriceMinUnit}
+          rupees={amountUnitToRupees(priceMinAmount, priceMinUnit)}
+        />
+        <PriceAmountField
+          label="Price max"
+          name="priceMaxRupees"
+          amount={priceMaxAmount}
+          unit={priceMaxUnit}
+          onAmountChange={setPriceMaxAmount}
+          onUnitChange={setPriceMaxUnit}
+          rupees={amountUnitToRupees(priceMaxAmount, priceMaxUnit)}
+        />
         <div className="sm:col-span-6">
           <SubmitButton pendingText="Adding...">Add configuration</SubmitButton>
         </div>
