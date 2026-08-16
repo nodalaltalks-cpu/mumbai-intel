@@ -32,7 +32,11 @@ export async function GET(request: NextRequest) {
   if (expected.state !== returnedState) return failure(origin, "google_auth_failed");
 
   try {
-    const redirectUri = `${origin}/api/auth/google/callback`;
+    // Must exactly match the redirect_uri sent in app/api/auth/google/route.ts's authorization
+    // request (Google validates the token exchange against it too) -- same canonical-origin
+    // pin, request origin only as a fallback (local dev).
+    const canonicalOrigin = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || origin;
+    const redirectUri = `${canonicalOrigin}/api/auth/google/callback`;
     const tokens = await exchangeGoogleCode(code, redirectUri);
     const profile = await fetchGoogleUserInfo(tokens.access_token);
     if (!profile.email) return failure(origin, "google_auth_failed");

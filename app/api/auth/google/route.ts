@@ -16,7 +16,13 @@ export async function GET(request: NextRequest) {
 
   const next = sanitizeNextPath(request.nextUrl.searchParams.get("next"));
   const state = crypto.randomBytes(16).toString("base64url");
-  const redirectUri = `${request.nextUrl.origin}/api/auth/google/callback`;
+  // Pinned to one fixed, pre-registered Google Cloud Console redirect URI per environment
+  // (NEXT_PUBLIC_APP_URL — the same var lib/actions/public-auth.ts's getSiteUrl() already
+  // uses for reset-password links) instead of the request's own origin, which is a fresh,
+  // never-registered Vercel preview URL on every single deploy and would otherwise need a
+  // new Google Console entry added every time.
+  const canonicalOrigin = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || request.nextUrl.origin;
+  const redirectUri = `${canonicalOrigin}/api/auth/google/callback`;
 
   const response = NextResponse.redirect(buildGoogleAuthUrl(redirectUri, state));
   response.cookies.set(OAUTH_STATE_COOKIE_NAME, JSON.stringify({ state, next }), {
