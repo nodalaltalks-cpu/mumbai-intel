@@ -10,6 +10,8 @@ import { INFRA_TYPES, INFRA_TYPE_LABEL, type InfraTypeValue } from "@/lib/projec
 import { Field, SelectField } from "./FormField";
 import SubmitButton from "./SubmitButton";
 import ConfirmButton from "./ConfirmButton";
+import DistanceAmountField from "./DistanceAmountField";
+import { amountUnitToMeters, type DistanceUnit } from "@/lib/distance-units";
 
 export interface NearbyLinkRow {
   id: string;
@@ -38,6 +40,10 @@ export default function NearbyPlacesManager({
   const createAction = createAndLinkProjectInfraAction.bind(null, projectId);
   const [linkState, linkFormAction] = useActionState(linkAction, { error: undefined });
   const [createState, createFormAction] = useActionState(createAction, { error: undefined });
+  const [linkDistanceAmount, setLinkDistanceAmount] = useState("");
+  const [linkDistanceUnit, setLinkDistanceUnit] = useState<DistanceUnit>("m");
+  const [createDistanceAmount, setCreateDistanceAmount] = useState("");
+  const [createDistanceUnit, setCreateDistanceUnit] = useState<DistanceUnit>("m");
 
   const linkedInfraIds = new Set(links.map((l) => l.infra.id));
   const availableOptions = infraOptions.filter((o) => !linkedInfraIds.has(o.id));
@@ -100,7 +106,15 @@ export default function NearbyPlacesManager({
               ))}
             </SelectField>
           </div>
-          <Field label="Distance (m)" name="distanceMeters" type="number" min={0} required />
+          <DistanceAmountField
+            label="Distance"
+            name="distanceMeters"
+            amount={linkDistanceAmount}
+            unit={linkDistanceUnit}
+            onAmountChange={setLinkDistanceAmount}
+            onUnitChange={setLinkDistanceUnit}
+            meters={amountUnitToMeters(linkDistanceAmount, linkDistanceUnit)}
+          />
           <Field label="Walk (min, optional)" name="walkMinutes" type="number" min={0} />
           <div className="col-span-2 sm:col-span-4">
             <SubmitButton pendingText="Linking...">Link place</SubmitButton>
@@ -117,7 +131,15 @@ export default function NearbyPlacesManager({
             ))}
           </SelectField>
           <Field label="Name" name="name" placeholder="Ghatkopar Metro Station" required />
-          <Field label="Distance (m)" name="distanceMeters" type="number" min={0} required />
+          <DistanceAmountField
+            label="Distance"
+            name="distanceMeters"
+            amount={createDistanceAmount}
+            unit={createDistanceUnit}
+            onAmountChange={setCreateDistanceAmount}
+            onUnitChange={setCreateDistanceUnit}
+            meters={amountUnitToMeters(createDistanceAmount, createDistanceUnit)}
+          />
           <Field label="Walk (min, optional)" name="walkMinutes" type="number" min={0} />
           <div className="col-span-2 sm:col-span-4">
             <SubmitButton pendingText="Adding...">Catalogue &amp; link</SubmitButton>
