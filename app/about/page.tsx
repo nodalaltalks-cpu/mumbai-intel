@@ -3,12 +3,12 @@ import LegalPageShell from "@/app/components/LegalPageShell";
 
 export const metadata: Metadata = {
   title: "About — NoDalalTalks",
-  description: "NoDalalTalks is a real estate research intelligence platform for Mumbai — zero spam calls, zero brokerage, every price, project and locality figure tagged with its data source and confidence level.",
+  description: "NoDalalTalks is a real estate research intelligence platform for Mumbai — no phone number required to research, every price, project and locality figure tagged with its data source and confidence level.",
 };
 
 export default function AboutPage() {
   return (
-    <LegalPageShell title="About NoDalalTalks" subtitle="Real estate research intelligence for Mumbai — no brokerage, no spam calls.">
+    <LegalPageShell title="About NoDalalTalks" subtitle="Real estate research intelligence for Mumbai — no phone number required, no spam calls.">
       <p>
         NoDalalTalks is a real estate research intelligence platform covering Mumbai&apos;s residential and commercial
         project landscape — developers, localities, live inventory, and registered transactions, all in one place, so

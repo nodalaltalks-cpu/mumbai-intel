@@ -8,8 +8,8 @@ import Button from "@/app/components/ui/Button";
 
 // The five primary product areas (Projects/Transactions/Reports/Market Data/Insights) --
 // Builders, Localities, and Map stay real, fully-built pages, just no longer competing for
-// space in the primary nav; Footer already links all three (see EXPLORE/MARKET_INTELLIGENCE
-// columns in Footer.tsx) so they're never more than one click away.
+// space in the primary nav or footer; they remain reachable through Project pages, filters,
+// and search rather than as standalone destinations.
 const NAV_LINKS = [
   { label: "Projects", href: "/projects" },
   { label: "Transactions", href: "/transactions" },

@@ -25,7 +25,7 @@ const geistMono = Geist_Mono({
 
 const SITE_NAME = "NoDalalTalks";
 const SITE_DESCRIPTION =
-  "Research Mumbai real estate projects, transactions, and builder track records — zero spam calls, zero brokerage, every fact tagged by source.";
+  "Research Mumbai real estate projects, transactions, and builder track records — no phone number required, every fact tagged by source.";
 const SITE_URL = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "http://localhost:3000";
 
 // A `title.template` would double up every page's title: the existing

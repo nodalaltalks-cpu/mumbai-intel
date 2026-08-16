@@ -12,97 +12,40 @@ interface FooterColumn {
 }
 
 /**
- * Every link below resolves to a page that actually exists today (verified
- * against the app/ route tree), or is explicitly marked `comingSoon` — none
- * are fabricated destinations. Several distinct labels intentionally point
- * at the same page (e.g. "Our Mission"/"Our Vision"/"Our Methodology" all
- * go to /about, which covers that ground in one place; "List Your
- * Project"/"Developer Portal"/etc. all go to /contact, a real working
- * channel, rather than five separate not-yet-built portal pages) — that's
- * a deliberate content-consolidation choice, not a placeholder.
+ * Mirrors the header's five primary product areas exactly (Navbar.tsx's
+ * NAV_LINKS) -- no separate "Market Intelligence" taxonomy, no Builder/
+ * Locality treated as standalone destinations. Every link resolves to a
+ * page that actually exists (verified against the app/ route tree).
  */
 const EXPLORE: FooterColumn = {
   title: "Explore",
   links: [
     { label: "Projects", href: "/projects" },
-    { label: "Builders", href: "/builders" },
-    { label: "Localities", href: "/localities" },
     { label: "Transactions", href: "/transactions" },
-    { label: "Market Reports", href: "/reports/market" },
-    { label: "Price Trends", href: "/market-data" },
-    { label: "Infrastructure", href: "/map" },
-    { label: "New Launches", href: "/projects?status=PRE_LAUNCH" },
-    { label: "Luxury Projects", href: "/projects?luxury=1" },
-    { label: "Affordable Housing", href: "/projects?affordable=1" },
-    { label: "Commercial Projects", href: "/projects?category=COMMERCIAL" },
-    { label: "Search", href: "/projects" },
-    { label: "Map Explorer", href: "/map" },
-  ],
-};
-
-const MARKET_INTELLIGENCE: FooterColumn = {
-  title: "Market Intelligence",
-  links: [
-    { label: "Project Intelligence", href: "/reports" },
-    { label: "Builder Intelligence", href: "/builders" },
-    { label: "Locality Intelligence", href: "/localities" },
-    { label: "Transaction Intelligence", href: "/reports/transactions" },
-    { label: "Price Analysis", href: "/reports/market" },
-    { label: "Construction Updates", href: "/projects" },
-    { label: "Market Trends", href: "/insights" },
-    { label: "Rental Insights", href: "/transactions?type=rental" },
-    { label: "Supply & Demand", href: "/reports/market" },
-    { label: "Infrastructure Pipeline", href: "/map" },
-    { label: "Future Developments", href: "/projects?status=ANNOUNCED" },
-    { label: "Research Reports", href: "/reports" },
+    { label: "Reports", href: "/reports" },
+    { label: "Market Data", href: "/market-data" },
+    { label: "Insights", href: "/insights" },
   ],
 };
 
 const COMPANY: FooterColumn = {
   title: "Company",
   links: [
-    { label: "About NoDalalTalks", href: "/about" },
-    { label: "Our Mission", href: "/about" },
-    { label: "Our Vision", href: "/about" },
-    { label: "Our Methodology", href: "/about" },
-    { label: "How We Verify Data", href: "/about" },
-    { label: "Data Collection Process", href: "/about" },
+    { label: "About Us", href: "/about" },
     { label: "Contact Us", href: "/contact" },
-    { label: "Business Partnerships", href: "/contact" },
-    { label: "Careers", comingSoon: true },
-    { label: "Media Kit", comingSoon: true },
-    { label: "Press", comingSoon: true },
-  ],
-};
-
-const DEVELOPERS: FooterColumn = {
-  title: "Developers",
-  links: [
-    { label: "List Your Project", href: "/contact" },
-    { label: "Developer Portal", href: "/contact" },
-    { label: "Marketing Solutions", href: "/contact" },
-    { label: "Enterprise Solutions", href: "/contact" },
-    { label: "Data Partnerships", href: "/contact" },
-    { label: "Developer Support", href: "/contact" },
-    { label: "API Access", comingSoon: true },
   ],
 };
 
 const RESOURCES: FooterColumn = {
   title: "Resources",
   links: [
-    { label: "Help Center", href: "/help" },
     { label: "FAQ", href: "/faq" },
-    { label: "Market Reports", href: "/reports" },
-    { label: "Support Center", href: "/contact" },
+    { label: "Help Center", href: "/help" },
     { label: "Blog", comingSoon: true },
-    { label: "Buying Guides", comingSoon: true },
-    { label: "Glossary", comingSoon: true },
-    { label: "RERA Guide", comingSoon: true },
   ],
 };
 
-const COLUMNS: FooterColumn[] = [EXPLORE, MARKET_INTELLIGENCE, COMPANY, DEVELOPERS, RESOURCES];
+const COLUMNS: FooterColumn[] = [EXPLORE, COMPANY, RESOURCES];
 
 /** Only real, published legal pages — a legal row is the wrong place for "coming soon" placeholders. */
 const LEGAL_LINKS: { label: string; href: string }[] = [
@@ -110,12 +53,18 @@ const LEGAL_LINKS: { label: string; href: string }[] = [
   { label: "Terms of Service", href: "/terms" },
   { label: "Cookie Policy", href: "/cookie-policy" },
   { label: "Disclaimer", href: "/disclaimer" },
-  { label: "Data Sources", href: "/about" },
 ];
 
-const TRUST_BADGES = ["Verified Data", "Source Referenced", "RERA Referenced", "Privacy First", "Enterprise Security", "Research Driven"];
+const TRUST_BADGES = ["Verified Data", "Source Referenced", "RERA Referenced", "Privacy First"];
 
-/** Icon-only, visually present but not yet linked to a real account — see comment below. */
+/**
+ * Icon-only, visually present but not yet linked to a real account. LinkedIn
+ * and Instagram profile URLs for NoDalalTalks were not found configured
+ * anywhere in this codebase (env vars, config, or existing links) — rather
+ * than invent a URL, these stay disabled placeholders until the real URLs
+ * are provided. X/YouTube were removed outright (no NoDalalTalks presence
+ * on either), not left as dead links.
+ */
 function SocialIcon({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <span
@@ -205,31 +154,23 @@ export default async function Footer() {
 
   return (
     <footer className="border-t border-border bg-surface">
-      <div className="mx-auto grid w-full max-w-6xl grid-cols-2 gap-x-8 gap-y-10 px-4 py-12 sm:px-6 md:grid-cols-6 lg:grid-cols-7">
-        <div className="col-span-2 md:col-span-2 lg:col-span-2">
+      <div className="mx-auto grid w-full max-w-6xl grid-cols-2 gap-x-8 gap-y-10 px-4 py-12 sm:px-6 md:grid-cols-5">
+        <div className="col-span-2">
           <span className="font-mono text-sm font-bold tracking-widest text-foreground">
             NODALAL<span className="text-accent">TALKS</span>
           </span>
           <p className="mt-1.5 text-[11px] font-semibold uppercase tracking-wide text-accent">
-            Zero Spam Calls. Zero Brokerage. Research First.
+            No Spam Calls. No Phone Number Required. Research First.
           </p>
           <p className="mt-2 max-w-[22rem] text-xs leading-relaxed text-muted">
-            Verified project intelligence, transaction insights, builder research and locality analytics — so you can
-            research a property before anyone tries to sell you one.
+            Research a property before anyone tries to sell you one. Verified project, transaction and market data —
+            no phone number required to explore it.
           </p>
 
-          {/* Real company social accounts not created yet — icons are placeholders, not fabricated links. The
-              email icon is real (mailto:). Swap in real hrefs (and remove SocialIcon's disabled styling) once
-              the LinkedIn/X/Instagram/YouTube accounts exist. */}
           <div className="mt-4 flex items-center gap-2">
             <SocialIcon label="LinkedIn">
               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M4.98 3.5a2.5 2.5 0 11-.02 5 2.5 2.5 0 01.02-5zM3 9h4v12H3zM9 9h3.8v1.7h.05c.53-.98 1.83-2 3.77-2 4.03 0 4.78 2.5 4.78 5.76V21h-4v-5.6c0-1.34-.03-3.06-1.9-3.06-1.9 0-2.2 1.44-2.2 2.96V21H9z" />
-              </svg>
-            </SocialIcon>
-            <SocialIcon label="X (Twitter)">
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M18.9 3H21l-6.7 7.66L22 21h-6.4l-5-6.6L4.7 21H2.6l7.16-8.18L2 3h6.5l4.53 6.03L18.9 3zm-1.12 16.2h1.17L7.3 4.73H6.05L17.78 19.2z" />
               </svg>
             </SocialIcon>
             <SocialIcon label="Instagram">
@@ -239,13 +180,8 @@ export default async function Footer() {
                 <circle cx="17.2" cy="6.8" r="0.6" fill="currentColor" stroke="none" />
               </svg>
             </SocialIcon>
-            <SocialIcon label="YouTube">
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M22 12s0-3.2-.4-4.6a2.9 2.9 0 00-2-2C17.9 5 12 5 12 5s-5.9 0-7.6.4a2.9 2.9 0 00-2 2C2 8.8 2 12 2 12s0 3.2.4 4.6a2.9 2.9 0 002 2C6.1 19 12 19 12 19s5.9 0 7.6-.4a2.9 2.9 0 002-2C22 15.2 22 12 22 12zM10 15.2V8.8L15.6 12z" />
-              </svg>
-            </SocialIcon>
             <a
-              href="mailto:nodalaltalks02@gmail.com"
+              href="mailto:Nodalaltalks02@gmail.com"
               title="Email us"
               className="flex h-7 w-7 items-center justify-center rounded-sm border border-border text-muted transition-colors hover:border-accent hover:text-accent"
             >
@@ -258,8 +194,7 @@ export default async function Footer() {
           <div className="mt-6 max-w-[22rem]">
             <h3 className="text-[11px] font-semibold uppercase tracking-wide text-foreground">Stay Ahead of the Market</h3>
             <p className="mt-2 text-xs leading-relaxed text-muted">
-              Receive our weekly research covering new launches, market trends, transaction insights and buyer
-              intelligence.
+              Weekly research on new launches, market trends and transaction insights.
             </p>
             <NewsletterForm />
           </div>
@@ -300,7 +235,7 @@ export default async function Footer() {
           <div className="flex flex-col items-start justify-between gap-2 border-t border-border pt-3 sm:flex-row sm:items-center">
             <div>
               <p>&copy; {new Date().getFullYear()} NoDalalTalks. All Rights Reserved.</p>
-              <p className="mt-0.5">No brokerage. No spam calls. Just better property decisions.</p>
+              <p className="mt-0.5">No phone number required. No spam calls. Just better property decisions.</p>
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] uppercase tracking-wide">
               <span>v{APP_VERSION}</span>
