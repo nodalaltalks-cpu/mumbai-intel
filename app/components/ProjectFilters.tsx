@@ -69,6 +69,14 @@ export default function ProjectFilters({ localities, builders }: { localities: F
   const isLuxury = searchParams.get("luxury") === "1";
   const isAffordable = searchParams.get("affordable") === "1";
 
+  // Search/Locality/Status/Price/Sort cover the large majority of real searches and stay
+  // permanently visible; Builder/Category/Configuration/Possession/RERA move behind "More
+  // Filters" so the bar reads as "fast to search" rather than a wall of dropdowns -- still
+  // fully there, one click away, and the toggle shows how many of them are active.
+  const moreFilterKeys = ["builder", "category", "bedrooms", "possession", "rera"] as const;
+  const activeMoreFiltersCount = moreFilterKeys.filter((key) => searchParams.get(key)).length;
+  const [showMoreFilters, setShowMoreFilters] = useState(activeMoreFiltersCount > 0);
+
   const chips: ActiveFilterChip[] = [];
   if (searchParams.get("q")) chips.push({ keys: ["q"], label: `Search: "${searchParams.get("q")}"` });
   const localityName = localities.find((l) => l.id === searchParams.get("locality"))?.name;
@@ -112,35 +120,11 @@ export default function ProjectFilters({ localities, builders }: { localities: F
             </option>
           ))}
         </select>
-        <select value={searchParams.get("builder") ?? ""} onChange={(e) => updateParam("builder", e.target.value)} className={selectClass} style={selectStyle}>
-          <option value="">All builders</option>
-          {builders.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </select>
         <select value={currentStatus} onChange={(e) => updateParam("status", e.target.value)} className={selectClass} style={selectStyle}>
           <option value="">All statuses</option>
           {PROJECT_STATUSES.map((s) => (
             <option key={s} value={s}>
               {STATUS_LABEL[s]}
-            </option>
-          ))}
-        </select>
-        <select value={searchParams.get("category") ?? ""} onChange={(e) => updateParam("category", e.target.value)} className={selectClass} style={selectStyle}>
-          <option value="">All categories</option>
-          {PROPERTY_CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {CATEGORY_LABEL[c]}
-            </option>
-          ))}
-        </select>
-        <select value={searchParams.get("bedrooms") ?? ""} onChange={(e) => updateParam("bedrooms", e.target.value)} className={selectClass} style={selectStyle}>
-          <option value="">Any configuration</option>
-          {CONFIGURATION_FILTER_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
             </option>
           ))}
         </select>
@@ -160,19 +144,6 @@ export default function ProjectFilters({ localities, builders }: { localities: F
           placeholder="Max ₹"
           className="w-20 rounded-sm border border-border bg-surface px-2.5 py-2 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
         />
-        <select value={searchParams.get("possession") ?? ""} onChange={(e) => updateParam("possession", e.target.value)} className={selectClass} style={selectStyle}>
-          <option value="">Any possession</option>
-          {POSSESSION_FILTER_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-        <select value={searchParams.get("rera") ?? ""} onChange={(e) => updateParam("rera", e.target.value)} className={selectClass} style={selectStyle}>
-          <option value="">RERA: any</option>
-          <option value="1">Has RERA</option>
-          <option value="0">No RERA</option>
-        </select>
         <select value={searchParams.get("sort") ?? "updated_desc"} onChange={(e) => updateParam("sort", e.target.value)} className={selectClass} style={selectStyle}>
           {PROJECT_SORT_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -180,7 +151,56 @@ export default function ProjectFilters({ localities, builders }: { localities: F
             </option>
           ))}
         </select>
+        <button
+          type="button"
+          onClick={() => setShowMoreFilters((v) => !v)}
+          className={chipClass(showMoreFilters || activeMoreFiltersCount > 0)}
+        >
+          More Filters{activeMoreFiltersCount > 0 ? ` (${activeMoreFiltersCount})` : ""}
+        </button>
       </div>
+
+      {showMoreFilters ? (
+        <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-border pt-3">
+          <select value={searchParams.get("builder") ?? ""} onChange={(e) => updateParam("builder", e.target.value)} className={selectClass} style={selectStyle}>
+            <option value="">All builders</option>
+            {builders.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+          <select value={searchParams.get("category") ?? ""} onChange={(e) => updateParam("category", e.target.value)} className={selectClass} style={selectStyle}>
+            <option value="">All categories</option>
+            {PROPERTY_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {CATEGORY_LABEL[c]}
+              </option>
+            ))}
+          </select>
+          <select value={searchParams.get("bedrooms") ?? ""} onChange={(e) => updateParam("bedrooms", e.target.value)} className={selectClass} style={selectStyle}>
+            <option value="">Any configuration</option>
+            {CONFIGURATION_FILTER_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <select value={searchParams.get("possession") ?? ""} onChange={(e) => updateParam("possession", e.target.value)} className={selectClass} style={selectStyle}>
+            <option value="">Any possession</option>
+            {POSSESSION_FILTER_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <select value={searchParams.get("rera") ?? ""} onChange={(e) => updateParam("rera", e.target.value)} className={selectClass} style={selectStyle}>
+            <option value="">RERA: any</option>
+            <option value="1">Has RERA</option>
+            <option value="0">No RERA</option>
+          </select>
+        </div>
+      ) : null}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {QUICK_STATUS_CHIPS.map((chip) => (
