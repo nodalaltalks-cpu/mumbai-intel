@@ -66,16 +66,17 @@ export default async function AdminDashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-9">
+      {/* Builders/Localities/Images counts dropped from this live grid to match Project+Transaction
+          as the two primary dashboard destinations -- the underlying database records are
+          completely untouched, and the pages themselves stay reachable via ⌘K search
+          (Builders/Localities) and the sidebar's Media section (Images). */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatTile label="Projects" value={stats.projectCount} href="/admin/projects" />
         <StatTile label="Published" value={stats.publishedCount} href="/admin/projects?published=1" />
         <StatTile label="Drafts" value={stats.draftCount} href="/admin/projects?published=0" />
         <StatTile label="Under Review" value={stats.reviewCount} href="/admin/projects?published=review" />
         <StatTile label="Archived" value={stats.archivedCount} href="/admin/projects?archived=1" />
-        <StatTile label="Builders" value={stats.builderCount} href="/admin/builders" />
-        <StatTile label="Localities" value={stats.localityCount} href="/admin/localities" />
         <StatTile label="Transactions" value={stats.transactionCount} href="/admin/transactions" />
-        <StatTile label="Images" value={stats.imageCount} href="/admin/images" />
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
