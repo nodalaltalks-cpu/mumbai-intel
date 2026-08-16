@@ -1,10 +1,12 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   autosaveProjectAction,
   createProjectAction,
   submitForReviewAction,
+  togglePublishAction,
   updateProjectAction,
   withdrawFromReviewAction,
   type ProjectFormState,
@@ -45,6 +47,8 @@ import type { ProjectDocumentRow } from "./DocumentsManager";
 import ProgressIndicator from "./ProgressIndicator";
 import CoverImageUploader from "./CoverImageUploader";
 import type { ProjectImageItem } from "./ImageUploader";
+import PriceAmountField from "./PriceAmountField";
+import { rupeesToAmountUnit, amountUnitToRupees, type PriceUnit } from "@/lib/price-units";
 
 export interface ProjectFormData {
   id: string;
@@ -169,74 +173,6 @@ function parseLatLngFromGoogleMapsUrl(url: string): { lat: number; lng: number }
   return null;
 }
 
-type PriceUnit = "cr" | "lakh" | "exact";
-
-/** Splits a stored rupee amount back into the natural unit an Indian admin would type it in — "1.35" + Cr, not "13500000" + exact — so editing an existing project never shows the raw zero-padded number. */
-function rupeesToAmountUnit(rupees: number | null | undefined): { amount: string; unit: PriceUnit } {
-  if (!rupees) return { amount: "", unit: "cr" };
-  const round2 = (n: number) => Math.round(n * 100) / 100;
-  if (rupees >= 1e7) return { amount: String(round2(rupees / 1e7)), unit: "cr" };
-  if (rupees >= 1e5) return { amount: String(round2(rupees / 1e5)), unit: "lakh" };
-  return { amount: String(rupees), unit: "exact" };
-}
-
-/** Amount + unit → the plain rupee number the server action still expects under name="priceMinRupees"/"priceMaxRupees" — no schema or backend change needed, the Cr/Lakh convenience is purely a form-input affordance. */
-function amountUnitToRupees(amount: string, unit: PriceUnit): string {
-  const n = Number(amount);
-  if (!amount.trim() || Number.isNaN(n)) return "";
-  const multiplier = unit === "cr" ? 1e7 : unit === "lakh" ? 1e5 : 1;
-  return String(Math.round(n * multiplier));
-}
-
-function PriceAmountField({
-  label,
-  name,
-  amount,
-  unit,
-  onAmountChange,
-  onUnitChange,
-  rupees,
-  important,
-}: {
-  label: string;
-  name: string;
-  amount: string;
-  unit: PriceUnit;
-  onAmountChange: (v: string) => void;
-  onUnitChange: (v: PriceUnit) => void;
-  rupees: string;
-  important?: boolean;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-[11px] uppercase tracking-wide text-muted">
-        {label} {important ? <span className="text-negative">*</span> : null}
-      </span>
-      <div className="flex gap-2">
-        <input
-          type="number"
-          step="any"
-          min={0}
-          value={amount}
-          onChange={(e) => onAmountChange(e.target.value)}
-          placeholder="e.g. 1.5"
-          className="min-w-0 flex-1 rounded-sm border border-border bg-surface px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
-        />
-        <select
-          value={unit}
-          onChange={(e) => onUnitChange(e.target.value as PriceUnit)}
-          className="rounded-sm border border-border bg-surface px-2 py-2 font-mono text-sm text-foreground focus:border-accent focus:outline-none"
-        >
-          <option value="cr">Cr</option>
-          <option value="lakh">Lakh</option>
-          <option value="exact">₹ exact</option>
-        </select>
-      </div>
-      <span className="text-[10px] text-muted">{rupees ? `= ₹${Number(rupees).toLocaleString("en-IN")}` : "No zeros needed — e.g. 1.5 Cr, or 78 Lakh"}</span>
-      <input type="hidden" name={name} value={rupees} />
-    </div>
-  );
-}
 
 export default function ProjectForm({
   project,
@@ -245,6 +181,7 @@ export default function ProjectForm({
   amenities,
   images = [],
   imageCount,
+  isAdmin,
 }: {
   project?: ProjectFormData;
   localities: LocalityOption[];
@@ -253,6 +190,10 @@ export default function ProjectForm({
   /** Images live in a separate table, not this form's own fields — passed in so CoverImageUploader/ImageUploader and the Media section's completion count work correctly. Always empty for a not-yet-created project. */
   images?: ProjectImageItem[];
   imageCount?: number;
+  /** Only meaningful (and only ever passed) on the edit page — gates the Publish button below,
+   * since togglePublishAction is admin-only, same as the identical Publish/Unpublish control on
+   * the Projects list. */
+  isAdmin?: boolean;
 }) {
   const resolvedImageCount = imageCount ?? images.length;
   const action = project ? updateProjectAction.bind(null, project.id) : createProjectAction;
@@ -261,6 +202,8 @@ export default function ProjectForm({
   const [progress, setProgress] = useState(project?.completionPercent ?? 0);
   const [underReview, setUnderReview] = useState(Boolean(project?.submittedForReviewAt));
   const [isReviewPending, startReviewTransition] = useTransition();
+  const [isPublishing, startPublishTransition] = useTransition();
+  const router = useRouter();
   const [lat, setLat] = useState<number | null>(project?.latitude ?? null);
   const [lng, setLng] = useState<number | null>(project?.longitude ?? null);
   const [googleMapsUrl, setGoogleMapsUrl] = useState(project?.googleMapsUrl ?? "");
@@ -296,6 +239,11 @@ export default function ProjectForm({
         ? String(new Date(project.promisedPossession).getFullYear())
         : ""
   );
+  // Native <input type="date"> pickers make jumping back to an old year painful (repeated
+  // stepper clicks / month-by-month calendar navigation) -- this companion Year select lets
+  // the admin land on e.g. 2005 in one click, updating the same underlying date value.
+  const [launchDate, setLaunchDate] = useState(toDateInputValue(project?.launchDate ?? null));
+  const launchDateYearOptions = Array.from({ length: new Date().getFullYear() + 2 - 2000 + 1 }, (_, i) => 2000 + i).reverse();
   const [paymentPlanType, setPaymentPlanType] = useState(project?.paymentPlanType ?? "");
   const [paymentPlanDescription, setPaymentPlanDescription] = useState(project?.paymentPlanDescription ?? "");
   const initialPriceMin = rupeesToAmountUnit(project?.priceMinPaise !== null && project?.priceMinPaise !== undefined ? Number(project.priceMinPaise) / 100 : null);
@@ -525,6 +473,21 @@ export default function ProjectForm({
               >
                 {isReviewPending ? "…" : underReview ? "Withdraw from review" : "Submit for review"}
               </button>
+              {isAdmin && progress === 100 ? (
+                <button
+                  type="button"
+                  disabled={isPublishing}
+                  onClick={() =>
+                    startPublishTransition(async () => {
+                      await togglePublishAction(project.id, true);
+                      router.refresh();
+                    })
+                  }
+                  className="rounded-sm bg-positive px-3 py-1.5 text-[10px] font-mono font-semibold uppercase tracking-wide text-white hover:bg-positive/90 disabled:opacity-60"
+                >
+                  {isPublishing ? "Publishing…" : "Publish to website"}
+                </button>
+              ) : null}
             </>
           ) : null}
         </div>
@@ -758,7 +721,36 @@ export default function ProjectForm({
 
       <div className={activeTab === "construction" ? "flex flex-col gap-4" : "hidden"}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Field label="Launch date" name="launchDate" type="date" important defaultValue={toDateInputValue(project?.launchDate ?? null)} />
+          <div className="flex flex-col gap-1.5">
+            <Field
+              label="Launch date"
+              name="launchDate"
+              type="date"
+              important
+              value={launchDate}
+              onChange={(e) => setLaunchDate(e.target.value)}
+            />
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] uppercase tracking-wide text-muted">Jump to year</span>
+              <select
+                value={launchDate ? launchDate.slice(0, 4) : ""}
+                onChange={(e) => {
+                  const year = e.target.value;
+                  if (!year) return;
+                  const [, month, day] = (launchDate || "-01-01").split("-");
+                  setLaunchDate(`${year}-${month || "01"}-${day || "01"}`);
+                }}
+                className="rounded-sm border border-border bg-surface px-2 py-1 text-xs text-foreground focus:border-accent focus:outline-none"
+              >
+                <option value="">Select year…</option>
+                {launchDateYearOptions.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <Field label="Actual possession" name="actualPossession" type="date" defaultValue={toDateInputValue(project?.actualPossession ?? null)} />
         </div>
         <div>
@@ -815,6 +807,8 @@ export default function ProjectForm({
         <AmenitiesPicker
           amenities={amenities}
           defaultSelectedIds={project?.amenityIds ?? []}
+          isProjectContext
+          projectId={project?.id}
           onSelectionChange={() => {
             dirtyRef.current = true;
             recomputeProgress();
