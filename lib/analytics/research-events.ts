@@ -5,7 +5,7 @@ import { peekAnonSessionId } from "./session-id";
 import type { ResearchEventType } from "@prisma/client";
 
 export interface ResearchEventInput {
-  entityType?: "Project" | "Builder" | "Locality" | "PublicUser";
+  entityType?: "Project" | "Builder" | "Locality" | "Transaction" | "PublicUser";
   entityId?: string;
   /** Small, non-PII context — a search query string, a list of active filter keys. Never raw contact details. */
   metadata?: Record<string, unknown>;

@@ -33,6 +33,7 @@ import RelatedSection from "@/app/components/reports/RelatedSection";
 import PremiumGate from "@/app/components/premium/PremiumGate";
 import { getPublicSession } from "@/lib/public-auth/session";
 import { gated, maskPaise, maskPricePerSqft, maskProjectBrochure, maskScore } from "@/lib/premium/mask";
+import { recordResearchEvent } from "@/lib/analytics/research-events";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +63,7 @@ export default async function ProjectReportPage({ params }: { params: Promise<{ 
   const { slug } = await params;
   const project = await getPublicProjectBySlug(slug);
   if (!project) notFound();
+  await recordResearchEvent("REPORT_VIEWED", { entityType: "Project", entityId: project.id, metadata: { reportType: "project" } });
 
   const filters = { projectId: project.id };
   const [priceHistory, txStats, monthlyTrend, configDistribution, related, nearbyBuilders, nearbyLocalities, baseline, session] = await Promise.all([

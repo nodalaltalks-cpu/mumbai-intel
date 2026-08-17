@@ -32,6 +32,7 @@ import RelatedSection from "@/app/components/reports/RelatedSection";
 import PremiumGate from "@/app/components/premium/PremiumGate";
 import { getPublicSession } from "@/lib/public-auth/session";
 import { gated, maskPaise, maskPercent, maskPricePerSqft, maskProjectBrochure, maskScore } from "@/lib/premium/mask";
+import { recordResearchEvent } from "@/lib/analytics/research-events";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +62,7 @@ export default async function AreaReportPage({ params }: { params: Promise<{ slu
   const { slug } = await params;
   const locality = await getPublicLocalityBySlug(slug);
   if (!locality) notFound();
+  await recordResearchEvent("REPORT_VIEWED", { entityType: "Locality", entityId: locality.id, metadata: { reportType: "area" } });
 
   const filters = { localityId: locality.id };
   const [stats, monthlyTrend, propertyTypes, configurations, intelligence, priceTrend, topBuilders, nearbyLocalities, baseline, session] = await Promise.all([

@@ -21,6 +21,7 @@ import TransactionTable from "@/app/components/TransactionTable";
 import { Fact } from "@/app/components/ui/StatCard";
 import Breadcrumbs from "@/app/components/Breadcrumbs";
 import { recordRecentViewAction } from "@/lib/actions/recent-views";
+import { recordResearchEvent } from "@/lib/analytics/research-events";
 import PremiumGate from "@/app/components/premium/PremiumGate";
 import { getPublicSession } from "@/lib/public-auth/session";
 import { gated, maskPaise, maskPricePerSqft } from "@/lib/premium/mask";
@@ -48,6 +49,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
   if (!tx) notFound();
 
   await recordRecentViewAction("Transaction", tx.id);
+  await recordResearchEvent("TRANSACTION_VIEWED", { entityType: "Transaction", entityId: tx.id });
 
   const [{ history, similar }, session] = await Promise.all([getRelatedTransactions(tx), getPublicSession()]);
   const locked = session === null;

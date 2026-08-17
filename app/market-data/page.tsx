@@ -10,6 +10,7 @@ import PremiumGate from "@/app/components/premium/PremiumGate";
 import { getPublicSession } from "@/lib/public-auth/session";
 import { gated, maskPercent, maskPricePerSqft, maskScore } from "@/lib/premium/mask";
 import GAPageEvent from "@/app/components/analytics/GAPageEvent";
+import { recordResearchEvent } from "@/lib/analytics/research-events";
 
 export const metadata: Metadata = {
   title: "Market Data — NoDalalTalks",
@@ -24,6 +25,7 @@ export default async function MarketDataPage() {
     getPublicBuilderTrustLeaderboard(10),
     getPublicSession(),
   ]);
+  await recordResearchEvent("MARKET_DATA_VIEWED");
   const locked = session === null;
   const next = "/market-data";
 

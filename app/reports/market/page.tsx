@@ -25,6 +25,7 @@ import MarketSummaryCard from "@/app/components/reports/MarketSummaryCard";
 import HistoricalTable from "@/app/components/reports/HistoricalTable";
 import RelatedSection from "@/app/components/reports/RelatedSection";
 import { recordRecentViewAction } from "@/lib/actions/recent-views";
+import { recordResearchEvent } from "@/lib/analytics/research-events";
 import { MARKET_REPORT_ENTITY_ID } from "@/lib/queries/dashboard";
 import PremiumGate from "@/app/components/premium/PremiumGate";
 import { getPublicSession } from "@/lib/public-auth/session";
@@ -48,6 +49,7 @@ const NAV_SECTIONS = [
 
 export default async function MarketReportPage() {
   await recordRecentViewAction("MarketReport", MARKET_REPORT_ENTITY_ID);
+  await recordResearchEvent("REPORT_VIEWED", { metadata: { reportType: "market" } });
 
   const [snapshot, priceTrend, monthlyTrend, propertyTypes, topLocalities, featuredProjects, topDevelopers, session] = await Promise.all([
     getMarketSnapshot(),

@@ -3,6 +3,7 @@ import { getTopLocalitiesByActivity } from "@/lib/queries";
 import { formatPricePerSqft } from "@/lib/format";
 import { getPublicSession } from "@/lib/public-auth/session";
 import { gated, maskPricePerSqft } from "@/lib/premium/mask";
+import { recordResearchEvent } from "@/lib/analytics/research-events";
 import { SOURCE_LABEL } from "@/lib/project-meta";
 import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
@@ -40,6 +41,7 @@ const PROVENANCE_NOTES = [
 
 export default async function InsightsPage() {
   const [session, topLocalities] = await Promise.all([getPublicSession(), getTopLocalitiesByActivity(10)]);
+  await recordResearchEvent("INSIGHTS_VIEWED");
   const locked = session === null;
 
   return (

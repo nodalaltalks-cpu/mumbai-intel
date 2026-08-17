@@ -30,6 +30,7 @@ import RelatedSection from "@/app/components/reports/RelatedSection";
 import PremiumGate from "@/app/components/premium/PremiumGate";
 import { getPublicSession } from "@/lib/public-auth/session";
 import { gated, maskPaise, maskPricePerSqft, maskProjectBrochure } from "@/lib/premium/mask";
+import { recordResearchEvent } from "@/lib/analytics/research-events";
 
 export const metadata: Metadata = {
   title: "Transaction Report — NoDalalTalks",
@@ -49,6 +50,7 @@ const NAV_SECTIONS = [
 ];
 
 export default async function TransactionReportPage() {
+  await recordResearchEvent("REPORT_VIEWED", { metadata: { reportType: "transactions" } });
   const [snapshot, stats, monthlyTrend, configDistribution, propertyTypes, topProjects, activeDevelopers, localities, session] = await Promise.all([
     getMarketSnapshot(),
     getTransactionStats({}),

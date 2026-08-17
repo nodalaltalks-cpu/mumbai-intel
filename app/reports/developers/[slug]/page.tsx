@@ -29,6 +29,7 @@ import RelatedSection from "@/app/components/reports/RelatedSection";
 import PremiumGate from "@/app/components/premium/PremiumGate";
 import { getPublicSession } from "@/lib/public-auth/session";
 import { gated, maskPaise, maskPercent, maskPricePerSqft, maskProjectBrochure, maskScore } from "@/lib/premium/mask";
+import { recordResearchEvent } from "@/lib/analytics/research-events";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +59,7 @@ export default async function DeveloperReportPage({ params }: { params: Promise<
   const { slug } = await params;
   const builder = await getPublicBuilderBySlug(slug);
   if (!builder) notFound();
+  await recordResearchEvent("REPORT_VIEWED", { entityType: "Builder", entityId: builder.id, metadata: { reportType: "developer" } });
 
   const filters = { builderId: builder.id };
   const [txStats, monthlyTrend, relatedLocalities, peerDevelopers, baseline, session] = await Promise.all([

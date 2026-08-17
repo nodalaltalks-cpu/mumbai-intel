@@ -1331,6 +1331,14 @@ enum ResearchEventType {
   LOCKED_FEATURE_CLICKED
   SIGNUP_COMPLETED
   LOGIN_COMPLETED
+  /// Added so Transactions/Market Data/Insights/Reports carry the same first-party
+  /// view-tracking that Project/Builder/Locality already had -- previously only
+  /// visible in Google Analytics (GAPageEvent), not in this table, so they never
+  /// counted toward DAU/WAU/MAU or showed up in the admin's own Research Intent page.
+  TRANSACTION_VIEWED
+  MARKET_DATA_VIEWED
+  INSIGHTS_VIEWED
+  REPORT_VIEWED
 }
 
 /// Site-wide "research intent" log — a deliberately generic single table
@@ -1343,7 +1351,7 @@ enum ResearchEventType {
 model ResearchEvent {
   id           String            @id @default(cuid())
   eventType    ResearchEventType
-  /// "Project" | "Builder" | "Locality" | null for non-entity events (search, profile, newsletter).
+  /// "Project" | "Builder" | "Locality" | "Transaction" | null for non-entity events (search, profile, newsletter, market data, insights).
   entityType   String?
   entityId     String?
   publicUserId String?
