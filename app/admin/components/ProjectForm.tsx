@@ -25,7 +25,8 @@ import {
   STATUS_LABEL,
   type PaymentPlanType,
 } from "@/lib/project-meta";
-import { formatPaise } from "@/lib/format";
+import { formatBytes, formatPaise } from "@/lib/format";
+import { compressPdfFile } from "@/lib/pdf-compress";
 import { CheckboxField, Field, FieldGroup, FormError, SelectField, TextareaField } from "./FormField";
 import RichTextEditor from "./RichTextEditor";
 import SubmitButton from "./SubmitButton";
@@ -253,7 +254,32 @@ export default function ProjectForm({
   const [priceMaxAmount, setPriceMaxAmount] = useState(initialPriceMax.amount);
   const [priceMaxUnit, setPriceMaxUnit] = useState<PriceUnit>(initialPriceMax.unit);
   const [brochureFileName, setBrochureFileName] = useState<string | null>(null);
+  const [brochureCompressing, setBrochureCompressing] = useState(false);
+  const [brochureCompressionNote, setBrochureCompressionNote] = useState<string | null>(null);
   const brochureFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Same client-side compression as BrochureUploader.tsx's own PDF field (see
+  // lib/pdf-compress.ts) -- this is the "attach a brochure while creating the project" shortcut
+  // on the General tab, so it needs the same treatment as the edit page's Media tab uploader.
+  async function handleBrochureFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const selected = e.target.files?.[0];
+    if (!selected) {
+      setBrochureFileName(null);
+      setBrochureCompressionNote(null);
+      return;
+    }
+    setBrochureFileName(selected.name);
+    setBrochureCompressing(true);
+    setBrochureCompressionNote(null);
+    const result = await compressPdfFile(selected);
+    if (result.compressed && brochureFileInputRef.current) {
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(result.file);
+      brochureFileInputRef.current.files = dataTransfer.files;
+      setBrochureCompressionNote(`Compressed ${formatBytes(result.originalBytes)} → ${formatBytes(result.compressedBytes)}`);
+    }
+    setBrochureCompressing(false);
+  }
   const [coverImageFileName, setCoverImageFileName] = useState<string | null>(null);
   const [coverImagePreviewUrl, setCoverImagePreviewUrl] = useState<string | null>(null);
   const coverImageFileInputRef = useRef<HTMLInputElement>(null);
@@ -909,17 +935,24 @@ export default function ProjectForm({
                 type="file"
                 name="brochureFile"
                 accept="application/pdf"
-                onChange={(e) => setBrochureFileName(e.target.files?.[0]?.name ?? null)}
-                className="rounded-sm border border-border bg-surface px-3 py-2 text-xs text-foreground file:mr-3 file:rounded-sm file:border-0 file:bg-accent file:px-2.5 file:py-1 file:text-xs file:font-mono file:font-semibold file:uppercase file:text-white"
+                disabled={brochureCompressing}
+                onChange={handleBrochureFileChange}
+                className="rounded-sm border border-border bg-surface px-3 py-2 text-xs text-foreground file:mr-3 file:rounded-sm file:border-0 file:bg-accent file:px-2.5 file:py-1 file:text-xs file:font-mono file:font-semibold file:uppercase file:text-white disabled:opacity-60"
               />
-              {brochureFileName ? (
+              {brochureCompressing ? (
+                <span className="text-[10px] text-muted">Compressing PDF for a smaller upload…</span>
+              ) : brochureFileName ? (
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-muted">{brochureFileName} will upload once you save.</span>
+                  <span className="text-[10px] text-muted">
+                    {brochureFileName} will upload once you save.
+                    {brochureCompressionNote ? ` ${brochureCompressionNote}.` : ""}
+                  </span>
                   <button
                     type="button"
                     onClick={() => {
                       if (brochureFileInputRef.current) brochureFileInputRef.current.value = "";
                       setBrochureFileName(null);
+                      setBrochureCompressionNote(null);
                     }}
                     className="rounded-sm border border-negative/40 px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wide text-negative hover:bg-negative/10"
                   >
