@@ -203,9 +203,17 @@ export async function getUserGrowthStats(): Promise<UserGrowthStats> {
     const since24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const since7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const since30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const since14d = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
 
-    const [totalUsers, newLast7d, newLast30d, emailVerifiedCount, dauGroups, wauGroups, mauGroups, recentActiveEvents] = await Promise.all([
+    // Last 14 days, oldest -> newest, as UTC day boundaries.
+    const dayKeys: { start: Date; end: Date; label: string }[] = [];
+    for (let i = 13; i >= 0; i--) {
+      const start = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+      start.setUTCHours(0, 0, 0, 0);
+      const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+      dayKeys.push({ start, end, label: start.toLocaleDateString("en-IN", { day: "2-digit", month: "short", timeZone: "UTC" }) });
+    }
+
+    const [totalUsers, newLast7d, newLast30d, emailVerifiedCount, dauGroups, wauGroups, mauGroups, dailyGroups] = await Promise.all([
       prisma.publicUser.count(),
       prisma.publicUser.count({ where: { createdAt: { gte: since7d } } }),
       prisma.publicUser.count({ where: { createdAt: { gte: since30d } } }),
@@ -213,30 +221,23 @@ export async function getUserGrowthStats(): Promise<UserGrowthStats> {
       prisma.researchEvent.groupBy({ by: ["publicUserId"], where: { publicUserId: { not: null }, createdAt: { gte: since24h } } }),
       prisma.researchEvent.groupBy({ by: ["publicUserId"], where: { publicUserId: { not: null }, createdAt: { gte: since7d } } }),
       prisma.researchEvent.groupBy({ by: ["publicUserId"], where: { publicUserId: { not: null }, createdAt: { gte: since30d } } }),
-      prisma.researchEvent.findMany({
-        where: { publicUserId: { not: null }, createdAt: { gte: since14d } },
-        select: { publicUserId: true, createdAt: true },
-      }),
+      // One groupBy per day rather than one findMany over the full 14-day window: each call
+      // returns only that day's distinct publicUserId rows (its DAU), not every raw event row --
+      // stays cheap as event volume grows, where fetching 14 days of raw events into memory to
+      // dedupe in JS would not. Still 14 round trips, but they run in parallel via Promise.all.
+      Promise.all(
+        dayKeys.map((d) =>
+          prisma.researchEvent.groupBy({
+            by: ["publicUserId"],
+            where: { publicUserId: { not: null }, createdAt: { gte: d.start, lt: d.end } },
+          })
+        )
+      ),
     ]);
 
     const emailVerifiedPercent = totalUsers > 0 ? Math.round((emailVerifiedCount / totalUsers) * 100) : 0;
 
-    // Last 14 days, oldest -> newest, bucketed by calendar day (JS-side -- Prisma's groupBy
-    // can't date-trunc, and a raw SQL query isn't worth it for what's still a small early-stage
-    // event volume; same manual-bucketing approach getDashboardCharts already uses above).
-    const dayKeys: { key: string; label: string }[] = [];
-    for (let i = 13; i >= 0; i--) {
-      const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-      dayKeys.push({ key: d.toISOString().slice(0, 10), label: d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) });
-    }
-
-    const activeSets = new Map(dayKeys.map((d) => [d.key, new Set<string>()]));
-    for (const e of recentActiveEvents) {
-      if (!e.publicUserId) continue;
-      const key = e.createdAt.toISOString().slice(0, 10);
-      activeSets.get(key)?.add(e.publicUserId);
-    }
-    const activeTrend: ChartBucket[] = dayKeys.map((d) => ({ label: d.label, count: activeSets.get(d.key)?.size ?? 0 }));
+    const activeTrend: ChartBucket[] = dayKeys.map((d, i) => ({ label: d.label, count: dailyGroups[i].length }));
 
     return {
       totalUsers,

@@ -1355,6 +1355,12 @@ model ResearchEvent {
   @@index([eventType, createdAt])
   @@index([entityType, entityId])
   @@index([publicUserId])
+  /// Supports the founder dashboard's DAU/WAU/MAU + 14-day active-users trend
+  /// (lib/admin-queries.ts getUserGrowthStats) -- those all filter by a
+  /// createdAt range and group by publicUserId; an index-only scan here
+  /// keeps that cheap as the event log grows past the small early-stage
+  /// volume it's at today.
+  @@index([createdAt, publicUserId])
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
