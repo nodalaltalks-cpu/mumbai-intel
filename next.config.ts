@@ -21,6 +21,12 @@ const CONTENT_SECURITY_POLICY = [
   "img-src 'self' data: https://res.cloudinary.com https://*.tile.openstreetmap.org https://lh3.googleusercontent.com",
   "font-src 'self' data:",
   "connect-src 'self'",
+  // Without an explicit frame-src, browsers fall back to default-src 'self' for iframes too --
+  // silently blocking BrochureUploader's PDF preview (res.cloudinary.com) and MapEmbed's
+  // location preview (openstreetmap.org) with Chrome's generic "This content is blocked"
+  // message and no console error, which is what made this look like a Cloudinary/upload bug
+  // rather than a CSP one.
+  "frame-src 'self' https://res.cloudinary.com https://www.openstreetmap.org",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
