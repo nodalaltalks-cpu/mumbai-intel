@@ -125,7 +125,7 @@ export default async function AdminDashboardPage() {
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatTile label="Registered Users" value={growth.totalUsers} />
+          <StatTile label="Registered Users" value={growth.totalUsers} href="/admin/analytics/registered-users" />
           <StatTile label="Daily Active" value={growth.dau} hint="Last 24h" />
           <StatTile label="Weekly Active" value={growth.wau} hint="Last 7d" />
           <StatTile label="Monthly Active" value={growth.mau} hint="Last 30d" />

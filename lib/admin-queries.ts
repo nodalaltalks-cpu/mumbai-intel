@@ -253,6 +253,65 @@ export async function getUserGrowthStats(): Promise<UserGrowthStats> {
   });
 }
 
+export interface RegisteredUserRow {
+  id: string;
+  name: string | null;
+  email: string;
+  phone: string | null;
+  createdAt: Date;
+  emailVerifiedAt: Date | null;
+  lastActiveAt: Date | null;
+  activity: "Daily" | "Weekly" | "Monthly" | "Inactive";
+}
+
+const EMPTY_REGISTERED_USERS_PAGE = { items: [] as RegisteredUserRow[], total: 0, page: 1, pageSize: 20, totalPages: 1 };
+
+function activityFromLastActive(lastActiveAt: Date | null): RegisteredUserRow["activity"] {
+  if (!lastActiveAt) return "Inactive";
+  const days = (Date.now() - lastActiveAt.getTime()) / (24 * 60 * 60 * 1000);
+  if (days <= 1) return "Daily";
+  if (days <= 7) return "Weekly";
+  if (days <= 30) return "Monthly";
+  return "Inactive";
+}
+
+/**
+ * Drill-down behind the dashboard's "Registered Users" tile (getUserGrowthStats
+ * gives the aggregate count only). `lastActiveAt` is scoped to just this page's
+ * user IDs via `publicUserId: { in }`, not a full ResearchEvent scan, so this
+ * stays cheap as both the user base and the event log grow.
+ */
+export async function getRegisteredUsersPage(page = 1, pageSize = 20) {
+  return safeQuery("getRegisteredUsersPage", EMPTY_REGISTERED_USERS_PAGE, async () => {
+    const safePage = Math.max(1, page);
+    const safePageSize = Math.min(100, Math.max(1, pageSize));
+
+    const [users, total] = await Promise.all([
+      prisma.publicUser.findMany({
+        orderBy: { createdAt: "desc" },
+        skip: (safePage - 1) * safePageSize,
+        take: safePageSize,
+        select: { id: true, name: true, email: true, phone: true, createdAt: true, emailVerifiedAt: true },
+      }),
+      prisma.publicUser.count(),
+    ]);
+
+    const lastActiveGroups = await prisma.researchEvent.groupBy({
+      by: ["publicUserId"],
+      where: { publicUserId: { in: users.map((u) => u.id) } },
+      _max: { createdAt: true },
+    });
+    const lastActiveById = new Map(lastActiveGroups.map((g) => [g.publicUserId as string, g._max.createdAt]));
+
+    const items: RegisteredUserRow[] = users.map((u) => {
+      const lastActiveAt = lastActiveById.get(u.id) ?? null;
+      return { ...u, lastActiveAt, activity: activityFromLastActive(lastActiveAt) };
+    });
+
+    return { items, total, page: safePage, pageSize: safePageSize, totalPages: Math.max(1, Math.ceil(total / safePageSize)) };
+  });
+}
+
 export async function getActivityFeed(limit = 15) {
   return safeQuery("getActivityFeed", [], () =>
     prisma.auditLog.findMany({
