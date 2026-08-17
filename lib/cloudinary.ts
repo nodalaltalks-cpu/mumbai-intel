@@ -86,7 +86,14 @@ export async function uploadDocumentFile(
 
   const result = await new Promise<UploadApiResponse>((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
-      { folder, resource_type: "raw" },
+      // Without `format`, a raw upload gets a public_id with no extension (e.g.
+      // ".../brochure-v2/xz93ovoxblbznop1tusj") -- Cloudinary then has no way to know it's a
+      // PDF, so it serves it as Content-Type: application/octet-stream with
+      // Content-Disposition: attachment, silently forcing a download instead of the inline
+      // preview BrochureUploader's iframe expects. `format: "pdf"` gives the delivery URL a
+      // real .pdf extension, which is what Cloudinary actually keys Content-Type/Disposition
+      // off for raw resources.
+      { folder, resource_type: "raw", format: "pdf" },
       (error, uploadResult) => {
         if (error || !uploadResult) {
           reject(error ?? new Error("Cloudinary upload failed"));
