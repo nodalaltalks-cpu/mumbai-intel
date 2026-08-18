@@ -9,6 +9,7 @@ import {
   getTopViewedProjects,
   type TopViewedEntity,
 } from "@/lib/analytics/research-queries";
+import { getResearchFunnel } from "@/lib/analytics/research-funnel-queries";
 import BarChart from "@/app/admin/components/charts/BarChart";
 
 export const metadata: Metadata = { title: "Research Intent Analytics — NoDalalTalks Admin" };
@@ -63,16 +64,18 @@ function TopViewedList({ title, items }: { title: string; items: TopViewedEntity
 }
 
 export default async function ResearchAnalyticsPage() {
-  const [summary, trend, eventCounts, topProjects, topBuilders, topLocalities] = await Promise.all([
+  const [summary, trend, eventCounts, topProjects, topBuilders, topLocalities, funnel] = await Promise.all([
     getResearchActivitySummary(),
     getEventTrend(30),
     getEventTypeCounts(),
     getTopViewedProjects(10),
     getTopViewedBuilders(10),
     getTopViewedLocalities(10),
+    getResearchFunnel(),
   ]);
 
   const maxEventCount = Math.max(...eventCounts.map((e) => e.count), 1);
+  const funnelStart = funnel.stages[0]?.userCount ?? 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -103,6 +106,37 @@ export default async function ResearchAnalyticsPage() {
           </div>
         ))}
       </div>
+
+      <section className="rounded-sm border border-border bg-surface p-4">
+        <h2 className="font-mono text-sm font-semibold text-foreground">Research funnel — signed-in users, last {funnel.windowDays} days</h2>
+        <p className="mb-3 text-[11px] text-muted">
+          Distinct signed-in users reaching each stage independently (not strict path order) — anonymous/guest
+          research isn&apos;t included here since it can&apos;t be attributed to one identity across stages.
+        </p>
+        {funnelStart === 0 ? (
+          <p className="text-xs text-muted">No signed-in research activity recorded in this window yet.</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {funnel.stages.map((stage, i) => {
+              const prev = i > 0 ? funnel.stages[i - 1].userCount : null;
+              const ofStart = funnelStart > 0 ? Math.round((stage.userCount / funnelStart) * 100) : 0;
+              const ofPrev = prev !== null && prev > 0 ? Math.round((stage.userCount / prev) * 100) : null;
+              return (
+                <li key={stage.key} className="flex items-center gap-2">
+                  <span className="w-56 shrink-0 truncate text-xs text-foreground">{stage.label}</span>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-background">
+                    <div className="h-full rounded-full bg-accent" style={{ width: `${ofStart}%` }} />
+                  </div>
+                  <span className="w-10 shrink-0 text-right font-mono text-xs text-muted">{stage.userCount}</span>
+                  <span className="w-24 shrink-0 text-right font-mono text-[10px] text-muted">
+                    {ofStart}% of start{ofPrev !== null ? ` · ${ofPrev}% of prev` : ""}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
 
       <section className="rounded-sm border border-border bg-surface p-4">
         <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Event volume — last 30 days</h2>
