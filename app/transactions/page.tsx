@@ -17,6 +17,7 @@ import Pagination from "@/app/admin/components/Pagination";
 import EmptyState from "@/app/components/ui/EmptyState";
 import PremiumGate from "@/app/components/premium/PremiumGate";
 import { getPublicSession } from "@/lib/public-auth/session";
+import { recordResearchEvent } from "@/lib/analytics/research-events";
 
 export const metadata: Metadata = {
   title: "Transactions — NoDalalTalks",
@@ -78,6 +79,16 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
   ]);
   const locked = session === null;
   const next = `/transactions${params.page || params.q ? `?${new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]).toString()}` : ""}`;
+
+  if (params.q) {
+    await recordResearchEvent("TRANSACTION_SEARCHED", { metadata: { query: params.q }, resultCount: total });
+  }
+  const activeFilterKeys = (
+    ["locality", "builder", "project", "category", "bedrooms", "priceMin", "priceMax", "areaMin", "areaMax", "dateFrom", "dateTo", "type", "readiness"] as const
+  ).filter((key) => Boolean(params[key]));
+  if (activeFilterKeys.length > 0) {
+    await recordResearchEvent("TRANSACTION_FILTER_APPLIED", { metadata: { filters: activeFilterKeys } });
+  }
 
   function buildHref(targetPage: number) {
     const qs = new URLSearchParams();

@@ -1339,6 +1339,12 @@ enum ResearchEventType {
   MARKET_DATA_VIEWED
   INSIGHTS_VIEWED
   REPORT_VIEWED
+  /// /transactions (the list page) fired nothing at all despite already having
+  /// a full search/filter UI mirroring /projects' -- these three close that
+  /// gap the same way SEARCH_PERFORMED/FILTERS_USED already cover /projects.
+  TRANSACTION_LIST_VIEWED
+  TRANSACTION_SEARCHED
+  TRANSACTION_FILTER_APPLIED
 }
 
 /// Site-wide "research intent" log — a deliberately generic single table
@@ -1358,6 +1364,10 @@ model ResearchEvent {
   publicUser   PublicUser?       @relation(fields: [publicUserId], references: [id], onDelete: SetNull)
   sessionId    String?
   metadata     Json?
+  /// Set on SEARCH_PERFORMED/TRANSACTION_SEARCHED only -- how many rows the
+  /// search actually matched, so a zero-result search (a real product signal:
+  /// "users want X, we don't have X") is queryable without parsing metadata.
+  resultCount  Int?
   createdAt    DateTime          @default(now())
 
   @@index([eventType, createdAt])

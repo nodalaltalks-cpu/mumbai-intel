@@ -66,7 +66,7 @@ export default async function ProjectsPage({
   const locked = session === null;
 
   if (params.q) {
-    await recordResearchEvent("SEARCH_PERFORMED", { metadata: { query: params.q } });
+    await recordResearchEvent("SEARCH_PERFORMED", { metadata: { query: params.q }, resultCount: total });
   }
   const activeFilterKeys = (["locality", "builder", "status", "category", "bedrooms", "priceMin", "priceMax", "possession", "rera", "luxury", "affordable"] as const).filter(
     (key) => Boolean(params[key])

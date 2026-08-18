@@ -9,6 +9,8 @@ export interface ResearchEventInput {
   entityId?: string;
   /** Small, non-PII context — a search query string, a list of active filter keys. Never raw contact details. */
   metadata?: Record<string, unknown>;
+  /** SEARCH_PERFORMED/TRANSACTION_SEARCHED only — how many rows the search actually matched, so zero-result searches are queryable. */
+  resultCount?: number;
   /**
    * Only set by app/api/analytics/research/route.ts, which can write the
    * anon-session cookie (getOrCreateAnonSessionId) unlike a Server Component
@@ -36,6 +38,7 @@ export async function recordResearchEvent(eventType: ResearchEventType, input: R
         publicUserId: session?.userId ?? null,
         sessionId: input.sessionId !== undefined ? input.sessionId : peekedSessionId,
         metadata: input.metadata ? (input.metadata as object) : undefined,
+        resultCount: input.resultCount,
       },
     });
   } catch (error) {

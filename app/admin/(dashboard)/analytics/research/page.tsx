@@ -32,6 +32,9 @@ const EVENT_TYPE_LABEL: Record<string, string> = {
   MARKET_DATA_VIEWED: "Market Data Viewed",
   INSIGHTS_VIEWED: "Insights Viewed",
   REPORT_VIEWED: "Report Viewed",
+  TRANSACTION_LIST_VIEWED: "Transaction List Viewed",
+  TRANSACTION_SEARCHED: "Transaction Searched",
+  TRANSACTION_FILTER_APPLIED: "Transaction Filter Applied",
 };
 
 function TopViewedList({ title, items }: { title: string; items: TopViewedEntity[] }) {
