@@ -118,11 +118,30 @@ export default function AmenitiesPicker({
       ) : (
         <p className="text-[10px] uppercase tracking-wide text-muted">Shared catalogue — check to add, uncheck to remove from this project</p>
       )}
-      {byCategory.map((group) => (
+      {byCategory.map((group) => {
+        const groupIds = group.items.map((a) => a.id);
+        const allChecked = groupIds.length > 0 && groupIds.every((id) => checkedIds.has(id));
+        return (
         <div key={group.category}>
-          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted/70">
-            {AMENITY_CATEGORY_LABEL[group.category as AmenityCategoryValue] ?? group.category}
-          </p>
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted/70">
+              {AMENITY_CATEGORY_LABEL[group.category as AmenityCategoryValue] ?? group.category}
+            </p>
+            <button
+              type="button"
+              onClick={() =>
+                setCheckedIds((prev) => {
+                  const next = new Set(prev);
+                  if (allChecked) groupIds.forEach((id) => next.delete(id));
+                  else groupIds.forEach((id) => next.add(id));
+                  return next;
+                })
+              }
+              className="text-[10px] font-mono uppercase tracking-wide text-accent hover:underline"
+            >
+              {allChecked ? "Deselect all" : "Select all"}
+            </button>
+          </div>
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
             {group.items.map((amenity) => (
               <label
@@ -149,7 +168,8 @@ export default function AmenitiesPicker({
             ))}
           </div>
         </div>
-      ))}
+        );
+      })}
 
       <div>
         {isProjectContext && !projectId ? (

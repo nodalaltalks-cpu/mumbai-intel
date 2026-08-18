@@ -12,6 +12,7 @@ import ImageUploader from "@/app/admin/components/ImageUploader";
 import ProjectForm from "@/app/admin/components/ProjectForm";
 import BackButton from "@/app/admin/components/BackButton";
 import ConfigurationsManager from "@/app/admin/components/ConfigurationsManager";
+import PaymentPlansManager from "@/app/admin/components/PaymentPlansManager";
 import SpecificationsManager from "@/app/admin/components/SpecificationsManager";
 import NearbyPlacesManager from "@/app/admin/components/NearbyPlacesManager";
 import ProjectSectionsManager from "@/app/admin/components/ProjectSectionsManager";
@@ -77,6 +78,7 @@ export default async function EditProjectPage({
       </div>
 
       <ConfigurationsManager projectId={project.id} configurations={project.configurations} />
+      <PaymentPlansManager projectId={project.id} milestones={project.paymentMilestones} />
       <SpecificationsManager projectId={project.id} specifications={project.specifications} />
       <NearbyPlacesManager projectId={project.id} links={project.infraLinks} infraOptions={infraOptions} />
       <ProjectSectionsManager projectId={project.id} sections={project.sections} />

@@ -478,6 +478,7 @@ export async function getProjectForEdit(id: string) {
       include: {
         images: { orderBy: { sortOrder: "asc" } },
         configurations: { orderBy: { sortOrder: "asc" } },
+        paymentMilestones: { orderBy: { sortOrder: "asc" } },
         amenities: { include: { amenity: true } },
         specifications: { orderBy: { sortOrder: "asc" } },
         documents: { orderBy: { sortOrder: "asc" } },
@@ -502,6 +503,10 @@ export async function getProjectForEdit(id: string) {
         bedrooms: Number(c.bedrooms),
         carpetSqft: c.carpetSqft !== null ? Number(c.carpetSqft) : null,
         builtUpSqft: c.builtUpSqft !== null ? Number(c.builtUpSqft) : null,
+      })),
+      paymentMilestones: project.paymentMilestones.map((m) => ({
+        ...m,
+        percentage: m.percentage !== null ? Number(m.percentage) : null,
       })),
       amenityIds: project.amenities.map((a) => a.amenityId),
     };

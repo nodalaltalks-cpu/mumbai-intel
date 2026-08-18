@@ -59,6 +59,40 @@ export async function addInvestmentNoteAction(
   return {};
 }
 
+export async function updateInvestmentNoteAction(
+  noteId: string,
+  projectId: string,
+  _prevState: InvestmentNoteActionState,
+  formData: FormData
+): Promise<InvestmentNoteActionState> {
+  await requireMutateSession();
+
+  const parsed = noteSchema.safeParse({
+    kind: formData.get("kind"),
+    body: formData.get("body"),
+    dataSource: formData.get("dataSource"),
+    confidence: formData.get("confidence"),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+
+  try {
+    await prisma.investmentNote.update({
+      where: { id: noteId },
+      data: {
+        kind: parsed.data.kind,
+        body: parsed.data.body,
+        dataSource: parsed.data.dataSource,
+        confidence: parsed.data.confidence,
+      },
+    });
+  } catch (error) {
+    return { error: friendlyPrismaError(error) };
+  }
+
+  revalidatePath(`/admin/projects/${projectId}/edit`);
+  return {};
+}
+
 export async function deleteInvestmentNoteAction(noteId: string): Promise<{ error?: string }> {
   await requireMutateSession();
   const note = await prisma.investmentNote.delete({ where: { id: noteId } });

@@ -261,19 +261,24 @@ export async function autosaveProjectAction(projectId: string, formData: FormDat
 }
 
 /** Publish/unpublish, archive, delete, restore and every bulk action are ADMIN-only — create/edit/duplicate stay open to EDITOR. */
-export async function togglePublishAction(projectId: string, nextValue: boolean): Promise<void> {
-  const session = await requireAdminSession();
-  // Publishing resolves any pending review request — there's nothing left to review once it's live.
-  const updated = await prisma.project.update({
-    where: { id: projectId },
-    data: { isPublished: nextValue, submittedForReviewAt: nextValue ? null : undefined },
-    select: { slug: true },
-  });
-  if (nextValue) {
-    await emit("ProjectPublished", { projectId, slug: updated.slug, actorId: session.userId });
-  } else {
-    await logAudit(session.userId, "project.unpublish", "Project", projectId);
-    revalidateProject({ id: projectId, slug: updated.slug });
+export async function togglePublishAction(projectId: string, nextValue: boolean): Promise<{ success?: string; error?: string }> {
+  try {
+    const session = await requireAdminSession();
+    // Publishing resolves any pending review request — there's nothing left to review once it's live.
+    const updated = await prisma.project.update({
+      where: { id: projectId },
+      data: { isPublished: nextValue, submittedForReviewAt: nextValue ? null : undefined },
+      select: { slug: true },
+    });
+    if (nextValue) {
+      await emit("ProjectPublished", { projectId, slug: updated.slug, actorId: session.userId });
+    } else {
+      await logAudit(session.userId, "project.unpublish", "Project", projectId);
+      revalidateProject({ id: projectId, slug: updated.slug });
+    }
+    return { success: nextValue ? "Project published successfully." : "Project moved back to draft." };
+  } catch (error) {
+    return { error: friendlyPrismaError(error) };
   }
 }
 
@@ -362,6 +367,7 @@ export async function duplicateProjectAction(projectId: string): Promise<{ error
         status: source.status,
         category: source.category,
         address: source.address,
+        famousLandmark: source.famousLandmark,
         latitude: source.latitude,
         longitude: source.longitude,
         googleMapsUrl: source.googleMapsUrl,

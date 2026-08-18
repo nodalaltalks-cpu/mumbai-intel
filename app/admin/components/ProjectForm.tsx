@@ -39,6 +39,7 @@ import { createBuilderInlineAction } from "@/lib/actions/builders";
 import { createLocalityInlineAction } from "@/lib/actions/localities";
 import { createMicroMarketInlineAction } from "@/lib/actions/micromarkets";
 import type { ConfigurationRow } from "./ConfigurationsManager";
+import type { PaymentMilestoneRow } from "./PaymentPlansManager";
 import type { SpecificationRow } from "./SpecificationsManager";
 import type { NearbyLinkRow } from "./NearbyPlacesManager";
 import type { ProjectTimelineRow } from "./ProjectTimelineManager";
@@ -65,6 +66,7 @@ export interface ProjectFormData {
   status: string;
   category: string;
   address: string | null;
+  famousLandmark: string | null;
   latitude: number | null;
   longitude: number | null;
   googleMapsUrl: string | null;
@@ -101,6 +103,7 @@ export interface ProjectFormData {
   completionPercent: number;
   amenityIds: string[];
   configurations: ConfigurationRow[];
+  paymentMilestones: PaymentMilestoneRow[];
   specifications: SpecificationRow[];
   documents: ProjectDocumentRow[];
   timelineEvents: ProjectTimelineRow[];
@@ -204,6 +207,7 @@ export default function ProjectForm({
   const [underReview, setUnderReview] = useState(Boolean(project?.submittedForReviewAt));
   const [isReviewPending, startReviewTransition] = useTransition();
   const [isPublishing, startPublishTransition] = useTransition();
+  const [publishResult, setPublishResult] = useState<{ success?: string; error?: string } | null>(null);
   const router = useRouter();
   const [lat, setLat] = useState<number | null>(project?.latitude ?? null);
   const [lng, setLng] = useState<number | null>(project?.longitude ?? null);
@@ -244,6 +248,7 @@ export default function ProjectForm({
   // stepper clicks / month-by-month calendar navigation) -- this companion Year select lets
   // the admin land on e.g. 2005 in one click, updating the same underlying date value.
   const [launchDate, setLaunchDate] = useState(toDateInputValue(project?.launchDate ?? null));
+  const [actualPossession, setActualPossession] = useState(toDateInputValue(project?.actualPossession ?? null));
   const launchDateYearOptions = Array.from({ length: new Date().getFullYear() + 2 - 2000 + 1 }, (_, i) => 2000 + i).reverse();
   const [paymentPlanType, setPaymentPlanType] = useState(project?.paymentPlanType ?? "");
   const [paymentPlanDescription, setPaymentPlanDescription] = useState(project?.paymentPlanDescription ?? "");
@@ -332,6 +337,7 @@ export default function ProjectForm({
           { label: "Locality", value: localityName, important: true },
           { label: "Micro market", value: microMarketName },
           { label: "Address", value: g("address"), important: true },
+          { label: "Famous Landmark", value: g("famousLandmark") },
           { label: "Google Maps Link", value: g("googleMapsUrl") ? "Provided" : "" },
         ],
       },
@@ -347,6 +353,8 @@ export default function ProjectForm({
             label: "Payment plan",
             value: g("paymentPlanType") ? label(PAYMENT_PLAN_TYPE_LABEL, g("paymentPlanType")) : "",
           },
+          { label: "Unit configurations", value: project?.configurations.length ? `${project.configurations.length} saved` : "" },
+          { label: "Payment milestones", value: project?.paymentMilestones.length ? `${project.paymentMilestones.length} saved` : "" },
         ],
       },
       {
@@ -505,7 +513,8 @@ export default function ProjectForm({
                   disabled={isPublishing}
                   onClick={() =>
                     startPublishTransition(async () => {
-                      await togglePublishAction(project.id, true);
+                      const result = await togglePublishAction(project.id, true);
+                      setPublishResult(result);
                       router.refresh();
                     })
                   }
@@ -517,6 +526,12 @@ export default function ProjectForm({
             </>
           ) : null}
         </div>
+        {publishResult?.success ? (
+          <p className="mt-2 rounded-sm border border-positive/40 bg-positive/10 px-3 py-2 text-xs text-positive">{publishResult.success}</p>
+        ) : null}
+        {publishResult?.error ? (
+          <p className="mt-2 rounded-sm border border-negative/40 bg-negative/10 px-3 py-2 text-xs text-negative">{publishResult.error}</p>
+        ) : null}
       </div>
 
       <FormTabs tabs={TABS} active={activeTab} onChange={setActiveTab} />
@@ -662,6 +677,13 @@ export default function ProjectForm({
         </FieldGroup>
         <Field label="Address" name="address" important defaultValue={project?.address ?? ""} />
         <Field
+          label="Famous Landmark"
+          name="famousLandmark"
+          defaultValue={project?.famousLandmark ?? ""}
+          placeholder="e.g. Near R City Mall, 5 minutes from BKC, Opposite Phoenix Marketcity"
+          hint="Optional — helps a buyer instantly place the project without parsing the full address."
+        />
+        <Field
           label="Google Maps Link"
           name="googleMapsUrl"
           type="url"
@@ -777,7 +799,35 @@ export default function ProjectForm({
               </select>
             </label>
           </div>
-          <Field label="Actual possession" name="actualPossession" type="date" defaultValue={toDateInputValue(project?.actualPossession ?? null)} />
+          <div className="flex flex-col gap-1.5">
+            <Field
+              label="Actual possession"
+              name="actualPossession"
+              type="date"
+              value={actualPossession}
+              onChange={(e) => setActualPossession(e.target.value)}
+            />
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] uppercase tracking-wide text-muted">Jump to year</span>
+              <select
+                value={actualPossession ? actualPossession.slice(0, 4) : ""}
+                onChange={(e) => {
+                  const year = e.target.value;
+                  if (!year) return;
+                  const [, month, day] = (actualPossession || "-01-01").split("-");
+                  setActualPossession(`${year}-${month || "01"}-${day || "01"}`);
+                }}
+                className="rounded-sm border border-border bg-surface px-2 py-1 text-xs text-foreground focus:border-accent focus:outline-none"
+              >
+                <option value="">Select year…</option>
+                {launchDateYearOptions.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </div>
         <div>
           <span className="text-[11px] uppercase tracking-wide text-muted">Possession</span>

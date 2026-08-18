@@ -13,17 +13,10 @@ const configurationSchema = z.object({
   bedrooms: z.coerce.number().min(0).max(20),
   carpetSqft: z.preprocess(emptyToUndefined, z.coerce.number().min(0).optional()),
   builtUpSqft: z.preprocess(emptyToUndefined, z.coerce.number().min(0).optional()),
-  priceMinRupees: z.preprocess(emptyToUndefined, z.coerce.number().min(0).optional()),
-  priceMaxRupees: z.preprocess(emptyToUndefined, z.coerce.number().min(0).optional()),
 });
 
 export interface ConfigurationActionState {
   error?: string;
-}
-
-function toPaise(rupees: number | undefined): bigint | null {
-  if (rupees === undefined) return null;
-  return BigInt(Math.round(rupees * 100));
 }
 
 export async function addConfigurationAction(
@@ -38,8 +31,6 @@ export async function addConfigurationAction(
     bedrooms: formData.get("bedrooms"),
     carpetSqft: formData.get("carpetSqft"),
     builtUpSqft: formData.get("builtUpSqft"),
-    priceMinRupees: formData.get("priceMinRupees"),
-    priceMaxRupees: formData.get("priceMaxRupees"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const data = parsed.data;
@@ -57,9 +48,42 @@ export async function addConfigurationAction(
         bedrooms: data.bedrooms,
         carpetSqft: data.carpetSqft ?? null,
         builtUpSqft: data.builtUpSqft ?? null,
-        priceMinPaise: toPaise(data.priceMinRupees),
-        priceMaxPaise: toPaise(data.priceMaxRupees),
         sortOrder: (maxSort._max.sortOrder ?? -1) + 1,
+      },
+    });
+  } catch (error) {
+    return { error: friendlyPrismaError(error) };
+  }
+
+  revalidatePath(`/admin/projects/${projectId}/edit`);
+  return {};
+}
+
+export async function updateConfigurationAction(
+  configurationId: string,
+  projectId: string,
+  _prevState: ConfigurationActionState,
+  formData: FormData
+): Promise<ConfigurationActionState> {
+  await requireMutateSession();
+
+  const parsed = configurationSchema.safeParse({
+    label: formData.get("label"),
+    bedrooms: formData.get("bedrooms"),
+    carpetSqft: formData.get("carpetSqft"),
+    builtUpSqft: formData.get("builtUpSqft"),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const data = parsed.data;
+
+  try {
+    await prisma.configuration.update({
+      where: { id: configurationId },
+      data: {
+        label: data.label,
+        bedrooms: data.bedrooms,
+        carpetSqft: data.carpetSqft ?? null,
+        builtUpSqft: data.builtUpSqft ?? null,
       },
     });
   } catch (error) {
