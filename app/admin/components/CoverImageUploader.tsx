@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { addProjectImageAction, deleteProjectImageAction, type ImageActionState } from "@/lib/actions/images";
+import { optimizedImageUrl } from "@/lib/project-meta";
 import type { ProjectImageItem } from "./ImageUploader";
 import ConfirmButton from "./ConfirmButton";
 import SubmitButton from "./SubmitButton";
@@ -47,7 +48,7 @@ export default function CoverImageUploader({ projectId, images }: { projectId: s
           {coverImages.map((image) => (
             <div key={image.id} className="overflow-hidden rounded-sm border border-border bg-background">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={image.url} alt={image.alt ?? ""} className="h-32 w-48 object-cover" />
+              <img src={optimizedImageUrl(image.url, { width: 384, height: 256 })} alt={image.alt ?? ""} className="h-32 w-48 object-cover" />
               <div className="flex items-center justify-between gap-2 p-1.5">
                 <a href={image.url} target="_blank" rel="noreferrer" className="text-[10px] text-accent hover:underline">
                   Preview

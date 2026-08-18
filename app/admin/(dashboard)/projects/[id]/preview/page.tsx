@@ -5,6 +5,7 @@ import { getProjectForEdit } from "@/lib/admin-queries";
 import { formatPossessionMonthYear, formatPriceBand } from "@/lib/format";
 import {
   CATEGORY_LABEL,
+  optimizedImageUrl,
   PAYMENT_PLAN_TYPE_LABEL,
   SOURCE_CLASS,
   SOURCE_LABEL,
@@ -51,7 +52,7 @@ export default async function ProjectPreviewPage({ params }: { params: Promise<{
       <div className="relative h-64 w-full overflow-hidden rounded-sm border border-border bg-surface">
         {hero ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={hero.url} alt={project.name} className="h-full w-full object-cover" />
+          <img src={optimizedImageUrl(hero.url, { width: 1200, height: 640 })} alt={project.name} className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full items-center justify-center text-xs text-muted">No hero image uploaded</div>
         )}

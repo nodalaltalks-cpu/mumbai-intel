@@ -3,22 +3,17 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  computeProjectInvestmentScore,
   getNearbyLocalities,
-  getProjectPriceHistory,
   getPublicProjectBySlug,
   getPublicTransactionsPaged,
   getRelatedProjects,
   getTopBuildersForLocality,
-  getTransactionConfigurationDistribution,
-  getTransactionMonthlyTrend,
   getTransactionStats,
 } from "@/lib/queries";
-import { formatBytes, formatDate, formatMonth, formatPaise, formatPossessionMonthYear, formatPriceBand, formatPricePerSqft } from "@/lib/format";
+import { formatBytes, formatDate, formatPaise, formatPossessionMonthYear, formatPriceBand } from "@/lib/format";
 import InfoTooltip from "@/app/components/ui/InfoTooltip";
 import BrochureDownloadLink from "@/app/components/BrochureDownloadLink";
-import PremiumGate from "@/app/components/premium/PremiumGate";
-import { gated, maskPaise, maskPricePerSqft, maskProjectBrochure } from "@/lib/premium/mask";
+import { maskProjectBrochure } from "@/lib/premium/mask";
 import { recordBrochureViewed } from "@/lib/analytics/brochure-events";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
 import {
@@ -26,6 +21,7 @@ import {
   CATEGORY_LABEL,
   CONFIDENCE_LABEL,
   INFRA_TYPE_LABEL,
+  optimizedImageUrl,
   PAYMENT_PLAN_TYPE_LABEL,
   SOURCE_CLASS,
   SOURCE_LABEL,
@@ -51,12 +47,7 @@ import MapEmbed from "@/app/admin/components/MapEmbed";
 import Breadcrumbs from "@/app/components/Breadcrumbs";
 import JsonLd from "@/app/components/JsonLd";
 import GAPageEvent from "@/app/components/analytics/GAPageEvent";
-import ProjectMarketSnapshot from "@/app/components/ProjectMarketSnapshot";
-import TransactionTable from "@/app/components/TransactionTable";
-import { ConfigurationDistribution, TransactionLineChart, TransactionVolumeChart } from "@/app/components/charts/TransactionCharts";
-import Pagination from "@/app/admin/components/Pagination";
-import EmptyState from "@/app/components/ui/EmptyState";
-import { Fact, StatCard } from "@/app/components/ui/StatCard";
+import { Fact } from "@/app/components/ui/StatCard";
 import Gallery from "./_components/Gallery";
 import { recordRecentViewAction } from "@/lib/actions/recent-views";
 
@@ -80,36 +71,23 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 const NAV_SECTIONS = [
   { id: "overview", label: "Overview" },
-  { id: "market", label: "Market Snapshot" },
-  { id: "charts", label: "Charts" },
   { id: "configurations", label: "Configurations" },
   { id: "pricing", label: "Pricing" },
+  { id: "transaction-intelligence", label: "Transaction Intelligence" },
   { id: "plans", label: "Floor Plans" },
   { id: "amenities", label: "Amenities" },
   { id: "specifications", label: "Specifications" },
   { id: "builder", label: "Builder" },
   { id: "location", label: "Location" },
   { id: "timeline", label: "Timeline" },
-  { id: "transactions", label: "Transactions" },
   { id: "investment-notes", label: "Investment Snapshot" },
   { id: "related", label: "Related" },
   { id: "downloads", label: "Downloads" },
   { id: "faqs", label: "FAQs" },
 ];
 
-interface ProjectSearchParams {
-  page?: string;
-}
-
-export default async function ProjectDetailPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ slug: string }>;
-  searchParams: Promise<ProjectSearchParams>;
-}) {
+export default async function ProjectDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const sp = await searchParams;
   const project = await getPublicProjectBySlug(slug);
   if (!project) notFound();
 
@@ -119,28 +97,11 @@ export default async function ProjectDetailPage({
     await recordBrochureViewed({ id: project.id, builderId: project.builderId, localityId: project.localityId, microMarketId: project.microMarketId });
   }
 
-  const page = Math.max(1, Number(sp.page ?? 1) || 1);
   const txFilters = { projectId: project.id };
 
-  const [
-    related,
-    priceHistory,
-    txStats,
-    monthlyTrend,
-    configDistribution,
-    { items: transactions, total: totalTransactions, totalPages },
-    { items: latestTx },
-    nearbyBuilders,
-    nearbyLocalities,
-    isSaved,
-    publicSession,
-  ] = await Promise.all([
+  const [related, txStats, { items: latestTx }, nearbyBuilders, nearbyLocalities, isSaved, publicSession] = await Promise.all([
     getRelatedProjects({ id: project.id, localityId: project.localityId, builderId: project.builderId }),
-    getProjectPriceHistory(project.id),
     getTransactionStats(txFilters),
-    getTransactionMonthlyTrend(txFilters, 12),
-    getTransactionConfigurationDistribution(txFilters),
-    getPublicTransactionsPaged({ ...txFilters, page, pageSize: 10 }),
     getPublicTransactionsPaged({ ...txFilters, page: 1, pageSize: 1, sortBy: "date_desc" }),
     getTopBuildersForLocality(project.localityId, 4),
     getNearbyLocalities(project.localityId, 4),
@@ -149,18 +110,11 @@ export default async function ProjectDetailPage({
   ]);
 
   const locked = publicSession === null;
-  const investmentScore = computeProjectInvestmentScore(project.localityInvestmentScore, project.builderOverallScore, txStats.totalTransactions);
   const latestRegistration = latestTx[0]?.registrationDate ?? null;
-  const latestTransactionPricePaise = latestTx[0]?.valuePaise ?? null;
-  const latestTransactionPricePerSqftPaise = latestTx[0]?.pricePerSqftPaise ?? null;
   const otherNearbyBuilders = nearbyBuilders.filter((b) => b.slug !== project.builder?.slug);
   const summaryNotes = project.investmentNotes.filter((n) => n.kind === "summary");
   const proNotes = project.investmentNotes.filter((n) => n.kind === "pro");
   const conNotes = project.investmentNotes.filter((n) => n.kind === "con");
-
-  function buildTxHref(targetPage: number) {
-    return targetPage > 1 ? `/projects/${slug}?page=${targetPage}#transactions` : `/projects/${slug}#transactions`;
-  }
 
   const heroImage = project.images.find((i) => i.kind === "hero") ?? project.images[0] ?? null;
 
@@ -218,7 +172,7 @@ export default async function ProjectDetailPage({
       {/* ── Hero ── */}
       <div className="relative h-[42vh] min-h-[320px] w-full overflow-hidden bg-[linear-gradient(135deg,_var(--surface-raised),_var(--background))]">
         {heroImage ? (
-          <Image src={heroImage.url} alt={project.name} fill priority sizes="100vw" className="object-cover" />
+          <Image src={optimizedImageUrl(heroImage.url)} alt={project.name} fill priority sizes="100vw" className="object-cover" />
         ) : null}
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-6xl px-4 pb-6 sm:px-6">
@@ -364,62 +318,6 @@ export default async function ProjectDetailPage({
           ))}
         </section>
 
-        {/* Market Snapshot */}
-        <section id="market" className="scroll-mt-32">
-          <h2 className="font-mono text-lg font-semibold text-foreground">Market Snapshot</h2>
-          <div className="mt-3">
-            <PremiumGate locked={locked} feature="market-analytics" next={`/projects/${project.slug}`}>
-              <ProjectMarketSnapshot
-                stats={txStats}
-                startingPricePaise={project.priceMinPaise !== null ? Number(project.priceMinPaise) : null}
-                pricePerSqftPaise={project.configPricePerSqftPaise}
-                rentalYieldPercent={project.localityRentalYieldPercent}
-                investmentScore={investmentScore}
-                locked={locked}
-              />
-            </PremiumGate>
-          </div>
-        </section>
-
-        {/* Charts */}
-        <section id="charts" className="scroll-mt-32">
-          <h2 className="font-mono text-lg font-semibold text-foreground">Charts</h2>
-          <PremiumGate locked={locked} feature="market-analytics" next={`/projects/${project.slug}`} className="mt-3">
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <div className="rounded-sm border border-border bg-surface p-4">
-                <p className="font-mono text-xs uppercase tracking-wide text-muted">Price Trend</p>
-                <div className="mt-3">
-                  <TransactionLineChart
-                    points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.avgPricePerSqftPaise }))}
-                    ariaLabel="Average price per square foot trend"
-                  />
-                </div>
-              </div>
-              <div className="rounded-sm border border-border bg-surface p-4">
-                <p className="font-mono text-xs uppercase tracking-wide text-muted">Transaction Trend</p>
-                <div className="mt-3">
-                  <TransactionVolumeChart points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), count: p.count }))} />
-                </div>
-              </div>
-              <div className="rounded-sm border border-border bg-surface p-4">
-                <p className="font-mono text-xs uppercase tracking-wide text-muted">Sales Volume</p>
-                <div className="mt-3">
-                  <TransactionLineChart
-                    points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.totalValuePaise }))}
-                    ariaLabel="Monthly sales volume"
-                  />
-                </div>
-              </div>
-              <div className="rounded-sm border border-border bg-surface p-4">
-                <p className="font-mono text-xs uppercase tracking-wide text-muted">Configuration Distribution</p>
-                <div className="mt-3">
-                  <ConfigurationDistribution buckets={locked ? [] : configDistribution} />
-                </div>
-              </div>
-            </div>
-          </PremiumGate>
-        </section>
-
         {/* Configurations */}
         <section id="configurations" className="scroll-mt-32">
           <h2 className="font-mono text-lg font-semibold text-foreground">Configurations</h2>
@@ -474,6 +372,32 @@ export default async function ProjectDetailPage({
               </p>
             </div>
           </div>
+        </section>
+
+        {/* Transaction Intelligence — a separate data domain (actual registered transactions)
+            from everything above (the project's own details), so it's a teaser + link to
+            /reports/projects/[slug] rather than embedded charts/tables in this scroll. */}
+        <section id="transaction-intelligence" className="scroll-mt-32">
+          <h2 className="font-mono text-lg font-semibold text-foreground">Transaction Intelligence</h2>
+          <p className="mt-1 text-xs text-muted">Actual registered transaction data and market trends — a different data domain from the project details above.</p>
+          {txStats.totalTransactions > 0 ? (
+            <Link
+              href={`/reports/projects/${project.slug}`}
+              className="mt-3 flex flex-wrap items-center justify-between gap-4 rounded-sm border border-accent/30 bg-accent/5 p-4 transition-colors hover:bg-accent/10"
+            >
+              <div>
+                <p className="font-mono text-sm font-semibold text-foreground">
+                  {txStats.totalTransactions} registered transaction{txStats.totalTransactions === 1 ? "" : "s"}
+                </p>
+                {latestRegistration ? <p className="mt-0.5 text-xs text-muted">Latest registered {formatDate(latestRegistration)}</p> : null}
+              </div>
+              <span className="shrink-0 text-xs font-semibold text-accent">View Transaction Intelligence →</span>
+            </Link>
+          ) : (
+            <div className="mt-3 rounded-sm border border-dashed border-border bg-surface p-4">
+              <p className="text-xs text-muted">Transaction data coming soon.</p>
+            </div>
+          )}
         </section>
 
         {/* Floor Plans + Master Plan */}
@@ -599,6 +523,9 @@ export default async function ProjectDetailPage({
           <h2 className="font-mono text-lg font-semibold text-foreground">Location</h2>
           <div className="mt-1 flex flex-wrap items-center gap-3">
             <p className="text-sm text-muted">{project.address ?? `${project.locality.name}, ${project.locality.city.name}`}</p>
+            {project.famousLandmark ? (
+              <span className="rounded-sm border border-accent/30 bg-accent/5 px-2 py-0.5 text-xs text-accent">{project.famousLandmark}</span>
+            ) : null}
             {project.googleMapsUrl ? (
               <a
                 href={project.googleMapsUrl}
@@ -654,73 +581,6 @@ export default async function ProjectDetailPage({
             </ol>
           ) : (
             <p className="mt-3 text-sm text-muted">No timeline published yet.</p>
-          )}
-        </section>
-
-        {/* Curated Price History */}
-        <div className="scroll-mt-32">
-          <h2 className="font-mono text-lg font-semibold text-foreground">Curated Price History</h2>
-          <p className="mt-1 text-xs text-muted">Analyst-verified monthly average, independent of registered transactions</p>
-          {priceHistory.length > 0 ? (
-            <div className="mt-3">
-              <PremiumGate locked={locked} feature="transaction-history" next={`/projects/${project.slug}`}>
-                <div className="overflow-x-auto rounded-sm border border-border">
-                  <table className="w-full min-w-[400px] border-collapse text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-border bg-surface text-[10px] uppercase tracking-wide text-muted">
-                        <th className="px-3 py-2 font-medium">Month</th>
-                        <th className="px-3 py-2 font-medium text-right">Avg ₹/sqft</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {priceHistory.map((point, i) => (
-                        <tr key={i} className="border-b border-border last:border-b-0">
-                          <td className="px-3 py-2 font-mono text-foreground">{gated(locked, formatMonth(point.month), "──")}</td>
-                          <td className="px-3 py-2 text-right font-mono text-muted">{gated(locked, formatPricePerSqft(point.avgPricePerSqftPaise), maskPricePerSqft())}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </PremiumGate>
-            </div>
-          ) : (
-            <p className="mt-3 text-sm text-muted">No price history recorded yet.</p>
-          )}
-        </div>
-
-        {/* Transaction Intelligence */}
-        <section id="transactions" className="scroll-mt-32">
-          <div className="flex items-center justify-between">
-            <h2 className="font-mono text-lg font-semibold text-foreground">Transaction Intelligence</h2>
-            {totalTransactions > 0 ? (
-              <Link href={`/transactions?project=${project.id}`} className="text-xs text-muted hover:text-accent">
-                Open in Transactions →
-              </Link>
-            ) : null}
-          </div>
-
-          <PremiumGate locked={locked} feature="transaction-history" next={`/projects/${project.slug}`} className="mt-3">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-              <StatCard label="Latest transaction price" value={gated(locked, formatPaise(latestTransactionPricePaise), maskPaise())} accent size="md" />
-              <StatCard label="Latest price / sqft" value={gated(locked, formatPricePerSqft(latestTransactionPricePerSqftPaise), maskPricePerSqft())} accent size="md" />
-              <StatCard label="Latest registration" value={latestRegistration ? formatDate(latestRegistration) : "--"} size="md" />
-              <StatCard label="Highest sale" value={gated(locked, formatPaise(txStats.highestPricePaise), maskPaise())} size="md" />
-              <StatCard label="Lowest sale" value={gated(locked, formatPaise(txStats.lowestPricePaise), maskPaise())} size="md" />
-              <StatCard label="Total transactions" value={String(totalTransactions)} size="md" />
-            </div>
-          </PremiumGate>
-
-          <h3 className="mt-6 font-mono text-sm font-semibold text-foreground">Transaction History</h3>
-          {transactions.length > 0 ? (
-            <div className="mt-3 flex flex-col gap-4">
-              <PremiumGate locked={locked} feature="transaction-history" next={`/projects/${project.slug}`}>
-                <TransactionTable transactions={transactions} locked={locked} />
-              </PremiumGate>
-              <Pagination page={page} totalPages={totalPages} total={totalTransactions} buildHref={buildTxHref} />
-            </div>
-          ) : (
-            <EmptyState className="mt-3" title="No transactions recorded yet" message="Registered transactions for this project will appear here." />
           )}
         </section>
 
@@ -908,7 +768,7 @@ export default async function ProjectDetailPage({
           <Link href="/projects" className="text-xs text-muted hover:text-accent">
             ← Back to all projects
           </Link>
-          <ReportIssueButton entityType="Project" entityName={project.name} loggedIn={publicSession !== null} />
+          <ReportIssueButton entityType="Project" entityId={project.id} entityName={project.name} loggedIn={publicSession !== null} />
         </div>
       </main>
 

@@ -107,7 +107,26 @@ export type ImageKind = (typeof IMAGE_KINDS)[number];
  * mirroring the project detail page's own `find(hero) ?? images[0]` logic.
  */
 export function pickCardImageUrl(images: { kind: string; url: string }[]): string | null {
-  return (images.find((i) => i.kind === "hero") ?? images[0])?.url ?? null;
+  const url = (images.find((i) => i.kind === "hero") ?? images[0])?.url ?? null;
+  return url ? optimizedImageUrl(url, { width: 640, height: 480 }) : null;
+}
+
+/**
+ * Non-destructive Cloudinary delivery-URL transform — inserts `f_auto,q_auto`
+ * (best-format + perceptual-quality auto-optimization, not a fixed harsh
+ * compression) plus an optional fill-crop, right into the existing secure_url
+ * string. No re-upload, no stored-value change, works retroactively on every
+ * already-uploaded image. A plain string transform (not Cloudinary-SDK-
+ * dependent), so it's safe to call from both server queries and client code.
+ */
+export function optimizedImageUrl(url: string, opts: { width?: number; height?: number } = {}): string {
+  if (!url.includes("/upload/")) return url;
+  const { width, height } = opts;
+  const transforms = ["f_auto", "q_auto:good"];
+  if (width) transforms.push(`w_${width}`);
+  if (height) transforms.push(`h_${height}`);
+  if (width && height) transforms.push("c_fill", "g_auto");
+  return url.replace("/upload/", `/upload/${transforms.join(",")}/`);
 }
 
 export const AMENITY_CATEGORIES = ["RECREATION", "SAFETY", "CONVENIENCE", "WELLNESS", "UTILITIES", "OUTDOOR"] as const;
