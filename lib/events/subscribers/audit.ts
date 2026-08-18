@@ -51,3 +51,7 @@ on("MediaUploaded", async (p) => {
 on("MediaDeleted", async (p) => {
   await logAudit(p.actorId, "media.delete", p.entityType, p.entityId, { before: { url: p.url } });
 });
+
+on("ReportStatusChanged", async (p) => {
+  await logAudit(p.actorId, `report.${p.status.toLowerCase()}`, "Report", p.reportId);
+});

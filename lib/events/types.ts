@@ -58,6 +58,15 @@ export interface EventPayloadMap {
     url: string;
     actorId: string | null;
   };
+
+  /** A founder-admin reviewing a visitor-submitted "Report Inaccurate Information" changed its status. */
+  ReportStatusChanged: {
+    reportId: string;
+    status: string;
+    entityType: string;
+    entityId: string | null;
+    actorId: string | null;
+  };
 }
 
 export type EventName = keyof EventPayloadMap;

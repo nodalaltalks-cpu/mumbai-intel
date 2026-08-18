@@ -556,7 +556,7 @@ export default async function LocalityDetailPage({
           <Link href="/localities" className="text-xs text-muted hover:text-accent">
             ← Back to all localities
           </Link>
-          <ReportIssueButton entityType="Locality" entityName={locality.name} loggedIn={publicSession !== null} />
+          <ReportIssueButton entityType="Locality" entityId={locality.id} entityName={locality.name} loggedIn={publicSession !== null} />
         </div>
       </main>
 

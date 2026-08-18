@@ -488,7 +488,7 @@ export default async function BuilderDetailPage({ params }: { params: Promise<{ 
           <Link href="/builders" className="text-xs text-muted hover:text-accent">
             ← Back to all developers
           </Link>
-          <ReportIssueButton entityType="Builder" entityName={builder.name} loggedIn={publicSession !== null} />
+          <ReportIssueButton entityType="Builder" entityId={builder.id} entityName={builder.name} loggedIn={publicSession !== null} />
         </div>
       </main>
 
