@@ -409,6 +409,9 @@ model Project {
   category PropertyCategory @default(RESIDENTIAL)
 
   address       String?
+  /// A recognizable nearby landmark ("Near R City Mall", "5 minutes from BKC")
+  /// so a buyer can immediately place the project without parsing the address.
+  famousLandmark String?
   latitude      Float?
   longitude     Float?
   /// Direct link to the project's actual Google Maps location — what the admin
@@ -519,8 +522,9 @@ model Project {
   ogImageUrl      String?
 
   // ── Relations ──
-  images          ProjectImage[]
-  configurations  Configuration[]
+  images            ProjectImage[]
+  configurations    Configuration[]
+  paymentMilestones ProjectPaymentMilestone[]
   amenities       ProjectAmenity[]
   customAmenities Amenity[]
   transactions    Transaction[]
@@ -733,6 +737,29 @@ model Configuration {
   sortOrder     Int        @default(0)
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
+
+  @@index([projectId, sortOrder])
+}
+
+/// A single payment milestone in a project's payment schedule ("Booking",
+/// "Agreement", "10% on Slab Completion", or a fully custom entry). Layered
+/// on top of Project.paymentPlanType/paymentPlanDescription (the overall plan
+/// *category* + free-text summary, unchanged) rather than replacing them —
+/// this is the granular, individually addable/editable/deletable schedule
+/// developers actually vary milestone-by-milestone.
+model ProjectPaymentMilestone {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  label       String // "Booking" | "Agreement" | "Plinth" | "Slab Completion" | "Possession" | custom text
+  percentage  Decimal? @db.Decimal(5, 2)
+  amountPaise BigInt?
+  /// false only when `label` exactly matches one of the five preset
+  /// milestone names — computed server-side on save, never trusted from the client.
+  isCustom    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([projectId, sortOrder])
 }
@@ -1005,6 +1032,44 @@ model AuditLog {
 
   @@index([entityType, entityId])
   @@index([at])
+}
+
+enum ReportStatus {
+  NEW
+  UNDER_REVIEW
+  ACCEPTED
+  REJECTED
+  RESOLVED
+}
+
+/// A visitor-submitted "this looks wrong" report — extends the existing
+/// Report-an-issue flow (lib/actions/report-issue.ts, which already emails
+/// the founder) with real persistence, so it becomes a founder-admin queue
+/// instead of only an inbox message. No `fieldKey`-to-Prisma-column mapping:
+/// "current value" is always read live from the entity at admin-review time,
+/// never duplicated/stored here, and correcting a value happens through the
+/// entity's own existing edit form (the one validated write path), not a
+/// generic auto-writer — this row is a signal, not a second source of truth.
+model Report {
+  id               String       @id @default(cuid())
+  entityType       String // "Project" | "Builder" | "Locality" — same convention as AuditLog/Wishlist
+  entityId         String?
+  /// Display snapshot — survives the entity being renamed or deleted later.
+  entityName       String
+  entityUrl        String
+  category         String? // "PROJECT_DETAILS" | "PRICING" | "CONFIGURATION" | "LOCATION" | "CONSTRUCTION" | "AMENITIES" | "BUILDER" | "TRANSACTION" | "OTHER"
+  issue            String // "what's wrong"
+  suggestedValue   String? // "what it should be"
+  reporterUserId   String?
+  reporterEmail    String?
+  status           ReportStatus @default(NEW)
+  reviewedByUserId String?
+  reviewedAt       DateTime?
+  resolutionNote   String?
+  createdAt        DateTime     @default(now())
+
+  @@index([entityType, entityId])
+  @@index([status, createdAt])
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
