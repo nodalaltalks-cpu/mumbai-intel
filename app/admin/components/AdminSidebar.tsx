@@ -35,6 +35,10 @@ const NAV_SECTIONS: { label: string; links: { label: string; href: string }[] }[
     links: [{ label: "Report Inaccurate", href: "/admin/reports" }],
   },
   {
+    label: "Email",
+    links: [{ label: "Campaigns", href: "/admin/email" }],
+  },
+  {
     label: "Data Sync",
     links: [
       { label: "Sync Dashboard", href: "/admin/data-sync" },

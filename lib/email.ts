@@ -17,10 +17,11 @@ export function isEmailDeliveryConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
 }
 
-async function sendEmail(params: { to: string; subject: string; html: string; replyTo?: string }): Promise<void> {
+/** Returns whether the send succeeded (or was validly simulated in the no-API-key dev fallback) — every existing internal caller ignores this, so adding it is purely additive; the in-house email campaign sender (lib/actions/email-campaigns.ts) needs to know per-recipient success/failure, which this codebase had no way to report before. */
+async function sendEmail(params: { to: string; subject: string; html: string; replyTo?: string }): Promise<boolean> {
   if (!isEmailDeliveryConfigured()) {
     console.log(`[email] Would send "${params.subject}" to ${params.to}:\n${params.html}`);
-    return;
+    return true;
   }
 
   const response = await fetch(RESEND_API_URL, {
@@ -41,7 +42,14 @@ async function sendEmail(params: { to: string; subject: string; html: string; re
   if (!response.ok) {
     const body = await response.text().catch(() => "");
     console.error(`[email] Resend send failed (${response.status}): ${body}`);
+    return false;
   }
+  return true;
+}
+
+/** Exported for the in-house email campaign sender only — every other email in this file goes through a specific named template function instead. */
+export async function sendCampaignEmail(to: string, subject: string, html: string): Promise<boolean> {
+  return sendEmail({ to, subject, html });
 }
 
 function escapeHtml(value: string): string {

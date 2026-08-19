@@ -110,12 +110,15 @@ export default function RichTextEditor({
   defaultValue?: string | null;
   hint?: string;
   important?: boolean;
-  /** Fires after every edit — React's controlled `value` update on the hidden
-   * input below doesn't dispatch a native `input`/`change` event, so a parent
-   * form relying on `<form onChange>` (e.g. ProjectForm's live completion %)
-   * would otherwise never see typing in this field until some other input
-   * happens to fire a change first. */
-  onChange?: () => void;
+  /** Fires after every edit with the current HTML — React's controlled `value`
+   * update on the hidden input below doesn't dispatch a native `input`/`change`
+   * event, so a parent form relying on `<form onChange>` (e.g. ProjectForm's
+   * live completion %) would otherwise never see typing in this field until
+   * some other input happens to fire a change first. The html argument is
+   * additive (existing callers that ignore it are unaffected) — added for
+   * callers that need the live value outside form submission (e.g. a preview
+   * pane), not just a "something changed" ping. */
+  onChange?: (html: string) => void;
 }) {
   const [html, setHtml] = useState(defaultValue ?? "");
 
@@ -129,8 +132,9 @@ export default function RichTextEditor({
       },
     },
     onUpdate: ({ editor: updatedEditor }) => {
-      setHtml(updatedEditor.getHTML());
-      onChange?.();
+      const nextHtml = updatedEditor.getHTML();
+      setHtml(nextHtml);
+      onChange?.(nextHtml);
     },
   });
 
