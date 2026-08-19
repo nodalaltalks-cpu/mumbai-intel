@@ -2,14 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  getNearbyLocalities,
-  getPublicProjectBySlug,
-  getPublicTransactionsPaged,
-  getRelatedProjects,
-  getTopBuildersForLocality,
-  getTransactionStats,
-} from "@/lib/queries";
+import { getNearbyLocalities, getPublicProjectBySlug, getRelatedProjects, getTopBuildersForLocality } from "@/lib/queries";
 import { formatBytes, formatDate, formatPaise, formatPossessionMonthYear, formatPriceBand } from "@/lib/format";
 import InfoTooltip from "@/app/components/ui/InfoTooltip";
 import BrochureDownloadLink from "@/app/components/BrochureDownloadLink";
@@ -43,7 +36,6 @@ import ContactDeveloperButton from "@/app/components/ContactDeveloperButton";
 import ReportIssueButton from "@/app/components/ReportIssueButton";
 import { isProjectSaved } from "@/lib/actions/saved-projects";
 import { getPublicSession } from "@/lib/public-auth/session";
-import MapEmbed from "@/app/admin/components/MapEmbed";
 import Breadcrumbs from "@/app/components/Breadcrumbs";
 import JsonLd from "@/app/components/JsonLd";
 import GAPageEvent from "@/app/components/analytics/GAPageEvent";
@@ -73,7 +65,6 @@ const NAV_SECTIONS = [
   { id: "overview", label: "Overview" },
   { id: "configurations", label: "Configurations" },
   { id: "pricing", label: "Pricing" },
-  { id: "transaction-intelligence", label: "Transaction Intelligence" },
   { id: "plans", label: "Floor Plans" },
   { id: "amenities", label: "Amenities" },
   { id: "specifications", label: "Specifications" },
@@ -97,12 +88,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     await recordBrochureViewed({ id: project.id, builderId: project.builderId, localityId: project.localityId, microMarketId: project.microMarketId });
   }
 
-  const txFilters = { projectId: project.id };
-
-  const [related, txStats, { items: latestTx }, nearbyBuilders, nearbyLocalities, isSaved, publicSession] = await Promise.all([
+  const [related, nearbyBuilders, nearbyLocalities, isSaved, publicSession] = await Promise.all([
     getRelatedProjects({ id: project.id, localityId: project.localityId, builderId: project.builderId }),
-    getTransactionStats(txFilters),
-    getPublicTransactionsPaged({ ...txFilters, page: 1, pageSize: 1, sortBy: "date_desc" }),
     getTopBuildersForLocality(project.localityId, 4),
     getNearbyLocalities(project.localityId, 4),
     isProjectSaved(project.id),
@@ -110,7 +97,6 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   ]);
 
   const locked = publicSession === null;
-  const latestRegistration = latestTx[0]?.registrationDate ?? null;
   const otherNearbyBuilders = nearbyBuilders.filter((b) => b.slug !== project.builder?.slug);
   const summaryNotes = project.investmentNotes.filter((n) => n.kind === "summary");
   const proNotes = project.investmentNotes.filter((n) => n.kind === "pro");
@@ -155,7 +141,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   }, {});
 
   return (
-    <div className="flex min-h-screen flex-1 flex-col bg-background">
+    <div className="flex min-h-screen flex-1 flex-col overflow-x-hidden bg-background">
       <JsonLd data={productSchema} />
       <GAPageEvent event="project_viewed" params={{ project_id: project.id, project_name: project.name }} />
       <Navbar />
@@ -169,85 +155,98 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         ]}
       />
 
-      {/* ── Hero ── */}
-      <div className="relative h-[42vh] min-h-[320px] w-full overflow-hidden bg-[linear-gradient(135deg,_var(--surface-raised),_var(--background))]">
+      {/* ── Hero image band — a fixed-aspect visual only; all text/actions live below it in
+          normal document flow so nothing can ever get clipped on a short mobile viewport
+          (the old overlay-on-fixed-height pattern could crop the badge/action row on small
+          phones once the title + tagline pushed the block taller than the image). ── */}
+      <div className="relative h-[28vh] max-h-[320px] min-h-[160px] w-full overflow-hidden bg-[linear-gradient(135deg,_var(--surface-raised),_var(--background))]">
         {heroImage ? (
           <Image src={optimizedImageUrl(heroImage.url)} alt={project.name} fill priority sizes="100vw" className="object-cover" />
         ) : null}
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-6xl px-4 pb-6 sm:px-6">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`rounded-sm border px-2 py-1 text-[10px] font-mono uppercase tracking-wide ${STATUS_CLASS[project.status as ProjectStatus]}`}>
-              {STATUS_LABEL[project.status as ProjectStatus]}
-            </span>
-            <span className={`rounded-sm border px-2 py-1 text-[10px] font-mono uppercase tracking-wide ${SOURCE_CLASS[project.dataSource]}`}>
-              {SOURCE_LABEL[project.dataSource]}
-            </span>
-            {project.isFeatured ? (
-              <span className="rounded-sm border border-accent/40 bg-accent/10 px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-accent">Featured</span>
-            ) : null}
-            <SaveProjectButton projectId={project.id} initialSaved={isSaved} />
-            <CompareToggleButton slug={project.slug} />
-            <ShareButton title={project.name} text={`Check out ${project.name} on NoDalalTalks`} />
-            <ContactDeveloperButton
-              projectName={project.name}
-              defaultName={publicSession?.name}
-              defaultEmail={publicSession?.email}
-            />
-            {project.brochureUrl ? (
-              <BrochureDownloadLink
-                slug={project.slug}
-                brochureUrl={locked ? null : project.brochureUrl}
-                brochureFileName={locked ? null : project.brochureFileName}
-                className="flex items-center gap-1.5 rounded-sm border border-accent/40 bg-accent/10 px-2.5 py-1.5 text-[11px] font-mono uppercase tracking-wide text-accent transition-colors hover:bg-accent/20"
-              >
-                📄 Download Brochure
-              </BrochureDownloadLink>
-            ) : null}
+        <div className="absolute inset-0 bg-gradient-to-t from-background/70 via-transparent to-transparent" />
+      </div>
+
+      <div className="mx-auto w-full max-w-6xl px-4 py-4 sm:px-6 sm:py-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`rounded-sm border px-2 py-1 text-[10px] font-mono uppercase tracking-wide ${STATUS_CLASS[project.status as ProjectStatus]}`}>
+            {STATUS_LABEL[project.status as ProjectStatus]}
+          </span>
+          <span className={`rounded-sm border px-2 py-1 text-[10px] font-mono uppercase tracking-wide ${SOURCE_CLASS[project.dataSource]}`}>
+            {SOURCE_LABEL[project.dataSource]}
+          </span>
+          {project.isFeatured ? (
+            <span className="rounded-sm border border-accent/40 bg-accent/10 px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-accent">Featured</span>
+          ) : null}
+        </div>
+
+        <h1 className="mt-2 font-mono text-2xl font-bold text-foreground sm:text-3xl">{project.name}</h1>
+        <p className="mt-1 text-sm text-muted">
+          {project.locality.name}
+          {project.microMarket ? ` · ${project.microMarket.name}` : ""}
+          {project.locality.zone ? ` · ${project.locality.zone.name}` : ""}
+        </p>
+        {project.tagline ? <p className="mt-1 text-sm text-foreground">{project.tagline}</p> : null}
+
+        {/* Key facts — a real grid (not flex-wrap) so mobile stacking is predictable, all
+            five given equal visual weight per the "don't make these weak" requirement. */}
+        <div className="mt-4 grid grid-cols-2 gap-4 rounded-sm border border-border bg-surface p-4 sm:grid-cols-3 lg:grid-cols-5">
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-muted">Price</p>
+            <p className="font-mono text-lg font-semibold text-accent sm:text-xl">{formatPriceBand(project.priceMinPaise, project.priceMaxPaise)}</p>
           </div>
-          <h1 className="mt-2 font-mono text-2xl font-bold text-foreground sm:text-3xl">{project.name}</h1>
-          <p className="mt-1 text-sm text-muted">
-            {project.locality.name}
-            {project.microMarket ? ` · ${project.microMarket.name}` : ""}
-            {project.locality.zone ? ` · ${project.locality.zone.name}` : ""}
-          </p>
-          {project.tagline ? <p className="mt-1 text-sm text-foreground">{project.tagline}</p> : null}
-          <div className="mt-3 flex flex-wrap items-end gap-6">
+          {project.constructionPercent !== null ? (
             <div>
-              <p className="text-[10px] uppercase tracking-wide text-muted">Price band</p>
-              <p className="font-mono text-xl text-accent">{formatPriceBand(project.priceMinPaise, project.priceMaxPaise)}</p>
+              <p className="text-[10px] uppercase tracking-wide text-muted">Construction</p>
+              <p className="font-mono text-lg font-semibold text-foreground sm:text-xl">{project.constructionPercent}%</p>
             </div>
-            {project.constructionPercent !== null ? (
-              <div>
-                <p className="text-[10px] uppercase tracking-wide text-muted">Construction</p>
-                <p className="font-mono text-xl text-foreground">{project.constructionPercent}%</p>
-              </div>
-            ) : null}
-            {project.launchDate ? (
-              <div>
-                <p className="text-[10px] uppercase tracking-wide text-muted">Launch year</p>
-                <p className="font-mono text-xl text-foreground">{new Date(project.launchDate).getFullYear()}</p>
-              </div>
-            ) : null}
+          ) : null}
+          {project.launchDate ? (
             <div>
-              <p className="text-[10px] uppercase tracking-wide text-muted">Possession</p>
-              <p className="font-mono text-sm text-foreground">
-                {formatPossessionMonthYear(project.possessionMonth, project.possessionYear, project.status, project.promisedPossession)}
-              </p>
+              <p className="text-[10px] uppercase tracking-wide text-muted">Launch year</p>
+              <p className="font-mono text-lg font-semibold text-foreground sm:text-xl">{new Date(project.launchDate).getFullYear()}</p>
             </div>
-            {project.builder ? (
-              <div>
-                <p className="text-[10px] uppercase tracking-wide text-muted">Builder</p>
-                <p className="font-mono text-sm text-foreground">{project.builder.name}</p>
-              </div>
-            ) : null}
+          ) : null}
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-muted">Possession</p>
+            <p className="font-mono text-lg font-semibold text-foreground sm:text-xl">
+              {formatPossessionMonthYear(project.possessionMonth, project.possessionYear, project.status, project.promisedPossession)}
+            </p>
           </div>
+          {project.builder ? (
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-muted">Builder</p>
+              <p className="font-mono text-lg font-semibold text-foreground sm:text-xl">{project.builder.name}</p>
+            </div>
+          ) : null}
+        </div>
+
+        {/* Actions — full-width, comfortably tappable row on mobile; wraps naturally on desktop. */}
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <SaveProjectButton projectId={project.id} initialSaved={isSaved} />
+          <CompareToggleButton slug={project.slug} />
+          <ShareButton title={project.name} text={`Check out ${project.name} on NoDalalTalks`} />
+          <ContactDeveloperButton
+            projectName={project.name}
+            defaultName={publicSession?.name}
+            defaultEmail={publicSession?.email}
+          />
+          {project.brochureUrl ? (
+            <BrochureDownloadLink
+              slug={project.slug}
+              brochureUrl={locked ? null : project.brochureUrl}
+              brochureFileName={locked ? null : project.brochureFileName}
+              className="flex items-center gap-1.5 rounded-sm border border-accent/40 bg-accent/10 px-2.5 py-1.5 text-[11px] font-mono uppercase tracking-wide text-accent transition-colors hover:bg-accent/20"
+            >
+              📄 Download Brochure
+            </BrochureDownloadLink>
+          ) : null}
         </div>
       </div>
 
-      {/* ── Sticky in-page nav ── */}
+      {/* ── Sticky in-page nav — the only element allowed to scroll horizontally on its own;
+          the page itself never does (root wrapper below has overflow-x-hidden). ── */}
       <nav className="sticky top-[57px] z-40 overflow-x-auto border-b border-border bg-background/95 px-4 backdrop-blur sm:px-6">
-        <div className="mx-auto flex w-full max-w-6xl gap-4 py-2.5">
+        <div className="flex w-max min-w-full gap-4 py-2.5 sm:mx-auto sm:max-w-6xl">
           {NAV_SECTIONS.map((s) => (
             <a key={s.id} href={`#${s.id}`} className="shrink-0 text-xs uppercase tracking-wide text-muted hover:text-accent">
               {s.label}
@@ -372,32 +371,15 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               </p>
             </div>
           </div>
-        </section>
-
-        {/* Transaction Intelligence — a separate data domain (actual registered transactions)
-            from everything above (the project's own details), so it's a teaser + link to
-            /reports/projects/[slug] rather than embedded charts/tables in this scroll. */}
-        <section id="transaction-intelligence" className="scroll-mt-32">
-          <h2 className="font-mono text-lg font-semibold text-foreground">Transaction Intelligence</h2>
-          <p className="mt-1 text-xs text-muted">Actual registered transaction data and market trends — a different data domain from the project details above.</p>
-          {txStats.totalTransactions > 0 ? (
-            <Link
-              href={`/reports/projects/${project.slug}`}
-              className="mt-3 flex flex-wrap items-center justify-between gap-4 rounded-sm border border-accent/30 bg-accent/5 p-4 transition-colors hover:bg-accent/10"
-            >
-              <div>
-                <p className="font-mono text-sm font-semibold text-foreground">
-                  {txStats.totalTransactions} registered transaction{txStats.totalTransactions === 1 ? "" : "s"}
-                </p>
-                {latestRegistration ? <p className="mt-0.5 text-xs text-muted">Latest registered {formatDate(latestRegistration)}</p> : null}
-              </div>
-              <span className="shrink-0 text-xs font-semibold text-accent">View Transaction Intelligence →</span>
-            </Link>
-          ) : (
-            <div className="mt-3 rounded-sm border border-dashed border-border bg-surface p-4">
-              <p className="text-xs text-muted">Transaction data coming soon.</p>
-            </div>
-          )}
+          {/* Transaction data is a different domain (actual registered transactions, not this
+              project's asking price) and lives entirely on its own page — this is a pointer,
+              not a duplicate of that data here. */}
+          <p className="mt-3 text-xs text-muted">
+            <Link href={`/reports/projects/${project.slug}`} className="font-semibold text-accent hover:underline">
+              View Transaction Intelligence →
+            </Link>{" "}
+            for actual registered transaction data and market trends.
+          </p>
         </section>
 
         {/* Floor Plans + Master Plan */}
@@ -518,27 +500,24 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           </Link>
         </section>
 
-        {/* Location + Nearby */}
+        {/* Location + Nearby — no map/coordinates here: this account never asks for or shows
+            latitude/longitude on the public page, only the address and the Google Maps link
+            the admin actually pastes in. */}
         <section id="location" className="scroll-mt-32">
           <h2 className="font-mono text-lg font-semibold text-foreground">Location</h2>
-          <div className="mt-1 flex flex-wrap items-center gap-3">
-            <p className="text-sm text-muted">{project.address ?? `${project.locality.name}, ${project.locality.city.name}`}</p>
-            {project.famousLandmark ? (
-              <span className="rounded-sm border border-accent/30 bg-accent/5 px-2 py-0.5 text-xs text-accent">{project.famousLandmark}</span>
-            ) : null}
+          <div className="mt-3 rounded-sm border border-border bg-surface p-4">
+            <p className="text-sm text-foreground">{project.address ?? `${project.locality.name}, ${project.locality.city.name}`}</p>
+            {project.famousLandmark ? <p className="mt-1.5 text-xs text-accent">{project.famousLandmark}</p> : null}
             {project.googleMapsUrl ? (
               <a
                 href={project.googleMapsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs font-semibold text-accent hover:underline"
+                className="mt-3 inline-flex items-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-xs font-mono font-semibold uppercase tracking-wide text-white hover:bg-accent-dim"
               >
                 View on Google Maps →
               </a>
             ) : null}
-          </div>
-          <div className="mt-3">
-            <MapEmbed latitude={project.latitude} longitude={project.longitude} />
           </div>
 
           <h3 className="mt-6 font-mono text-sm font-semibold text-foreground">Nearby places</h3>
