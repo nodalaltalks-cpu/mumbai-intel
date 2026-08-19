@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { requireSession } from "@/lib/auth/guard";
-import { getReportAggregates, getReportsQueue, getReportStatusCounts } from "@/lib/analytics/report-queries";
+import { getReportAggregates, getReportResolutionStats, getReportsQueue, getReportStatusCounts } from "@/lib/analytics/report-queries";
 import ReportQueueList from "@/app/admin/components/ReportQueueList";
 import { formatDate } from "@/lib/format";
 import type { ReportStatus } from "@prisma/client";
@@ -22,10 +22,11 @@ export default async function AdminReportsPage({ searchParams }: { searchParams:
   const params = await searchParams;
   const activeStatus = (STATUS_TABS.find((t) => t.key === params.status)?.key ?? "ALL") as ReportStatus | "ALL";
 
-  const [reports, counts, aggregates] = await Promise.all([
+  const [reports, counts, aggregates, resolutionStats] = await Promise.all([
     getReportsQueue(activeStatus === "ALL" ? undefined : activeStatus),
     getReportStatusCounts(),
     getReportAggregates(),
+    getReportResolutionStats(),
   ]);
 
   return (
@@ -35,6 +36,20 @@ export default async function AdminReportsPage({ searchParams }: { searchParams:
         <p className="text-xs text-muted">
           Visitor-submitted &quot;this looks wrong&quot; reports — a real data-quality signal, not just an inbox message.
         </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {[
+          ["Total Reports", resolutionStats.total],
+          ["Open", resolutionStats.openCount],
+          ["Resolution Rate", resolutionStats.resolutionRatePercent !== null ? `${resolutionStats.resolutionRatePercent}%` : "--"],
+          ["Avg. Resolution Time", resolutionStats.avgResolutionHours !== null ? `${resolutionStats.avgResolutionHours}h` : "--"],
+        ].map(([label, value]) => (
+          <div key={label as string} className="rounded-sm border border-border bg-surface p-4">
+            <p className="text-[10px] uppercase tracking-wide text-muted">{label}</p>
+            <p className="mt-1.5 font-mono text-2xl font-semibold text-foreground">{value}</p>
+          </div>
+        ))}
       </div>
 
       <div className="flex flex-wrap gap-1.5">

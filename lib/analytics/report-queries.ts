@@ -61,3 +61,61 @@ export async function getReportAggregates(): Promise<ReportAggregateRow[]> {
     .filter((g) => g.count > 1)
     .sort((a, b) => b.count - a.count);
 }
+
+export interface ReportResolutionStats {
+  total: number;
+  resolvedCount: number;
+  rejectedCount: number;
+  openCount: number;
+  resolutionRatePercent: number | null;
+  rejectionRatePercent: number | null;
+  avgResolutionHours: number | null;
+}
+
+/** Resolution rate / rejection rate / avg time-to-resolution — computed from data that already exists (Report.createdAt + the "report.resolved" AuditLog row each resolution already writes via the existing ReportStatusChanged subscriber), no new column. */
+export async function getReportResolutionStats(): Promise<ReportResolutionStats> {
+  const [total, resolvedCount, rejectedCount, openCount, resolvedReports] = await Promise.all([
+    prisma.report.count(),
+    prisma.report.count({ where: { status: "RESOLVED" } }),
+    prisma.report.count({ where: { status: "REJECTED" } }),
+    prisma.report.count({ where: { status: { in: ["NEW", "UNDER_REVIEW", "ACCEPTED"] } } }),
+    prisma.report.findMany({ where: { status: "RESOLVED" }, select: { id: true, createdAt: true } }),
+  ]);
+
+  let avgResolutionHours: number | null = null;
+  if (resolvedReports.length > 0) {
+    const resolvedIds = resolvedReports.map((r) => r.id);
+    const resolvedLogs = await prisma.auditLog.findMany({
+      where: { entityType: "Report", entityId: { in: resolvedIds }, action: "report.resolved" },
+      select: { entityId: true, at: true },
+      orderBy: { at: "desc" },
+    });
+    // A report can only ever be resolved once in practice (no re-open flow exists), but if it
+    // somehow has more than one "report.resolved" row, the most recent one is authoritative --
+    // orderBy above + this Map keeps only the first (latest) per id.
+    const resolvedAtById = new Map<string, Date>();
+    for (const log of resolvedLogs) {
+      if (!resolvedAtById.has(log.entityId)) resolvedAtById.set(log.entityId, log.at);
+    }
+
+    const hoursList = resolvedReports
+      .map((r) => {
+        const resolvedAt = resolvedAtById.get(r.id);
+        return resolvedAt ? (resolvedAt.getTime() - r.createdAt.getTime()) / (1000 * 60 * 60) : null;
+      })
+      .filter((hours): hours is number => hours !== null);
+    if (hoursList.length > 0) {
+      avgResolutionHours = Math.round((hoursList.reduce((a, b) => a + b, 0) / hoursList.length) * 10) / 10;
+    }
+  }
+
+  return {
+    total,
+    resolvedCount,
+    rejectedCount,
+    openCount,
+    resolutionRatePercent: total > 0 ? Math.round((resolvedCount / total) * 100) : null,
+    rejectionRatePercent: total > 0 ? Math.round((rejectedCount / total) * 100) : null,
+    avgResolutionHours,
+  };
+}
