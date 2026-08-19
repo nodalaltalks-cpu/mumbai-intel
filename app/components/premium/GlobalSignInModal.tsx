@@ -8,6 +8,7 @@ import { trackResearchEvent } from "@/lib/track-research";
 import { useGateRequest } from "@/lib/premium/gate-context";
 import { PREMIUM_BENEFITS, PREMIUM_CARD_SUBTITLE, PREMIUM_CARD_TITLE } from "@/lib/premium/types";
 import { IconClose } from "@/app/components/ui/icons";
+import { useModalBackClose } from "@/lib/use-modal-back-close";
 
 /**
  * The one and only sign-in gate in the app. Mounted once at the root
@@ -31,6 +32,8 @@ export default function GlobalSignInModal() {
       closeGate();
     }
   }, [pathname, closeGate]);
+
+  useModalBackClose(request !== null, closeGate);
 
   if (!request) return null;
 

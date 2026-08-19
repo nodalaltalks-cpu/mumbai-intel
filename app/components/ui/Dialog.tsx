@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import Button from "@/app/components/ui/Button";
 import { IconClose } from "@/app/components/ui/icons";
+import { useModalBackClose } from "@/lib/use-modal-back-close";
 
 /** Small shared overlay dialog — same fixed-overlay/Escape/focus pattern already used by ProjectCard's QuickViewModal, factored out since Contact Developer and Report Incorrect Information both need it. */
 export default function Dialog({
@@ -22,6 +23,7 @@ export default function Dialog({
   maxWidth?: string;
 }) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  useModalBackClose(true, onClose);
 
   useEffect(() => {
     closeButtonRef.current?.focus();

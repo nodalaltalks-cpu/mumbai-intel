@@ -8,6 +8,7 @@ import CompareToggleButton from "@/app/components/CompareToggleButton";
 import BrochureDownloadLink from "@/app/components/BrochureDownloadLink";
 import InfoTooltip from "@/app/components/ui/InfoTooltip";
 import { IconClose } from "@/app/components/ui/icons";
+import { useModalBackClose } from "@/lib/use-modal-back-close";
 import { formatPossessionMonthYear, formatPriceBand, formatPriceFrom, formatPricePerSqft, formatProjectSize } from "@/lib/format";
 import { maskPricePerSqft } from "@/lib/premium/mask";
 import {
@@ -166,10 +167,28 @@ export default function ProjectCard({ project }: { project: ProjectCardData }) {
               ) : null}
             </div>
 
-            <span aria-hidden="true" className="mt-0.5 inline-flex items-center gap-1 text-xs font-semibold text-accent">
-              View Details
-              <span className="transition-transform group-hover:translate-x-0.5">→</span>
-            </span>
+            {/* Compare + Brochure live in the card body, not floating over the image —
+                only these two controls opt back into pointer-events so the rest of the
+                row still falls through to the full-card Link. */}
+            <div className="mt-0.5 flex items-center justify-between gap-2">
+              <span aria-hidden="true" className="inline-flex items-center gap-1 text-xs font-semibold text-accent">
+                View Details
+                <span className="transition-transform group-hover:translate-x-0.5">→</span>
+              </span>
+              <div className="pointer-events-auto flex items-center gap-1.5">
+                <CompareToggleButton slug={project.slug} />
+                {project.brochureAvailable ? (
+                  <BrochureDownloadLink
+                    slug={project.slug}
+                    brochureUrl={project.brochureUrl ?? null}
+                    brochureFileName={project.brochureFileName}
+                    className="rounded-sm border border-border px-2 py-1.5 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+                  >
+                    Brochure
+                  </BrochureDownloadLink>
+                ) : null}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -180,27 +199,10 @@ export default function ProjectCard({ project }: { project: ProjectCardData }) {
             e.stopPropagation();
             setQuickViewOpen(true);
           }}
-          className="absolute right-2 top-2 z-10 rounded-sm border border-border bg-background/80 px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-wide text-muted backdrop-blur transition-opacity md:opacity-0 md:hover:border-accent md:hover:text-accent md:group-hover:opacity-100"
+          className="absolute right-2 top-2 z-10 rounded-sm border border-border bg-background/80 px-3 py-2 text-[10px] font-mono uppercase tracking-wide text-muted backdrop-blur transition-opacity md:opacity-0 md:hover:border-accent md:hover:text-accent md:group-hover:opacity-100"
         >
           Quick view
         </button>
-
-        {/* Below md: always visible (no touch equivalent for hover) — desktop keeps the hover-reveal. */}
-        <CompareToggleButton
-          slug={project.slug}
-          className="absolute bottom-2 right-2 z-10 transition-opacity md:opacity-0 md:group-hover:opacity-100"
-        />
-
-        {project.brochureAvailable ? (
-          <BrochureDownloadLink
-            slug={project.slug}
-            brochureUrl={project.brochureUrl ?? null}
-            brochureFileName={project.brochureFileName}
-            className="absolute bottom-2 left-2 z-10 rounded-sm border border-border bg-background/80 px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-wide text-muted backdrop-blur transition-opacity md:opacity-0 md:hover:border-accent md:hover:text-accent md:group-hover:opacity-100"
-          >
-            Brochure
-          </BrochureDownloadLink>
-        ) : null}
       </div>
 
       {quickViewOpen ? <QuickViewModal project={project} onClose={() => setQuickViewOpen(false)} /> : null}
@@ -210,6 +212,7 @@ export default function ProjectCard({ project }: { project: ProjectCardData }) {
 
 function QuickViewModal({ project, onClose }: { project: ProjectCardData; onClose: () => void }) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  useModalBackClose(true, onClose);
 
   useEffect(() => {
     closeButtonRef.current?.focus();
