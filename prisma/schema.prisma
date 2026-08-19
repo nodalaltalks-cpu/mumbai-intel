@@ -1013,6 +1013,8 @@ model User {
   lastLoginAt  DateTime?
   auditLogs    AuditLog[]
   resetTokens  AdminPasswordResetToken[]
+  notifications Notification[]
+  emailCampaigns EmailCampaign[]
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 }
@@ -1032,6 +1034,17 @@ model AuditLog {
 
   @@index([entityType, entityId])
   @@index([at])
+}
+
+/// Small, generic admin-editable key-value config -- no config-persistence
+/// layer exists anywhere else (site config today is exclusively env vars).
+/// Deliberately generic (not a single-purpose "review links" table) so a
+/// future admin-configurable value is a new row, not a new migration.
+/// Seeded keys: "review_google_url", "review_appstore_url".
+model SiteSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
 }
 
 enum ReportStatus {
@@ -1070,6 +1083,40 @@ model Report {
 
   @@index([entityType, entityId])
   @@index([status, createdAt])
+}
+
+enum NotificationType {
+  REPORT_RECEIVED
+  REPORT_UNDER_REVIEW
+  REPORT_RESOLVED
+  ADMIN_NEW_REPORT
+  ADMIN_REPORT_UNRESOLVED
+}
+
+/// One shared table for both audiences (public researcher + founder admin)
+/// rather than two near-duplicate tables -- same polymorphic-FK convention
+/// already used elsewhere in this schema (e.g. Wishlist.entityType/entityId).
+/// Exactly one of recipientPublicUserId/recipientAdminUserId is set per row.
+/// Real `readAt` column (not a client-side localStorage timestamp, unlike
+/// the admin Activity panel's existing pattern) because this needs to survive
+/// across devices/sessions for an actual user-facing feature.
+model Notification {
+  id                     String            @id @default(cuid())
+  type                   NotificationType
+  title                  String
+  body                   String
+  recipientPublicUserId  String?
+  recipientPublicUser    PublicUser?       @relation(fields: [recipientPublicUserId], references: [id], onDelete: Cascade)
+  recipientAdminUserId   String?
+  recipientAdminUser     User?             @relation(fields: [recipientAdminUserId], references: [id], onDelete: Cascade)
+  /// "Report" today; kept generic so a future notification source is a new value, not a schema change.
+  entityType             String?
+  entityId               String?
+  readAt                 DateTime?
+  createdAt              DateTime          @default(now())
+
+  @@index([recipientPublicUserId, readAt])
+  @@index([recipientAdminUserId, readAt])
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1118,6 +1165,8 @@ model PublicUser {
   notificationPreferences NotificationPreferences?
   newsletterSubscription  NewsletterSubscriber?
   researchEvents          ResearchEvent[]
+  notifications           Notification[]
+  emailCampaignRecipients EmailCampaignRecipient[]
 
   @@index([provider])
 }
@@ -1379,6 +1428,72 @@ model NewsletterSubscriber {
   @@index([subscribedAt])
 }
 
+enum EmailCampaignType {
+  NEWSLETTER
+  RESEARCH_UPDATE
+  MARKET_REPORT
+  PRODUCT_COMMUNICATION
+  REPORT_COMMUNICATION
+}
+
+enum EmailCampaignStatus {
+  DRAFT
+  SENDING
+  SENT
+  FAILED
+}
+
+enum EmailRecipientStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+/// Lightweight in-house campaign send, built on the existing Resend wrapper
+/// (lib/email.ts) -- no new email provider. v1 is send/delivery tracking
+/// only (no open/click pixel or provider webhook), so recipientCount/
+/// successCount/failureCount plus each EmailCampaignRecipient row below is
+/// the full audit trail; the data model stays extensible if open/click
+/// tracking is added later (a nullable openedAt/clickedAt column on the
+/// recipient row, no new table).
+model EmailCampaign {
+  id               String               @id @default(cuid())
+  type             EmailCampaignType
+  subject          String
+  bodyHtml         String
+  status           EmailCampaignStatus  @default(DRAFT)
+  createdByUserId  String
+  createdByUser    User                 @relation(fields: [createdByUserId], references: [id])
+  /// Optional linkage when a campaign is sent in the context of a specific report/project -- e.g. Section 15's resolved-report review-request follow-up.
+  relatedReportId  String?
+  relatedProjectId String?
+  recipientCount   Int                  @default(0)
+  successCount     Int                  @default(0)
+  failureCount     Int                  @default(0)
+  sentAt           DateTime?
+  createdAt        DateTime             @default(now())
+
+  recipients EmailCampaignRecipient[]
+
+  @@index([status, createdAt])
+}
+
+/// Per-recipient row, not just a campaign-level count -- Section 18 explicitly
+/// requires an auditable recipient list, not only a final aggregate result.
+model EmailCampaignRecipient {
+  id            String                @id @default(cuid())
+  campaignId    String
+  campaign      EmailCampaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  publicUserId  String?
+  publicUser    PublicUser?           @relation(fields: [publicUserId], references: [id], onDelete: SetNull)
+  email         String
+  status        EmailRecipientStatus  @default(PENDING)
+  sentAt        DateTime?
+  failureReason String?
+
+  @@index([campaignId, status])
+}
+
 enum ResearchEventType {
   PROJECT_VIEWED
   BUILDER_VIEWED
@@ -1410,6 +1525,13 @@ enum ResearchEventType {
   TRANSACTION_LIST_VIEWED
   TRANSACTION_SEARCHED
   TRANSACTION_FILTER_APPLIED
+  /// Homepage visit, distinct from any specific entity view.
+  LANDING_PAGE_VIEWED
+  /// A card clicked in a list/grid, distinct from PROJECT_VIEWED (the detail-page landing) --
+  /// lets the funnel show "saw the card" vs. "actually opened it" separately.
+  PROJECT_CARD_CLICKED
+  NOTIFICATION_OPENED
+  EMAIL_SENT
 }
 
 /// Site-wide "research intent" log — a deliberately generic single table
