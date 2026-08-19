@@ -128,3 +128,34 @@ export function documentPublicIdFromUrl(url: string): string | null {
   return match ? match[1] : null;
 }
 
+/**
+ * A signed, authenticated download URL for a `raw` document (brochure, floor
+ * plan sheet…) — hits api.cloudinary.com (signed with our API secret), not
+ * the public res.cloudinary.com CDN. This is deliberate, not cosmetic: this
+ * Cloudinary account has "restricted media types" security enabled, which
+ * denies ALL public delivery of raw/PDF assets outright (verified directly:
+ * even the plain, untransformed secure_url 401s with
+ * "X-Cld-Error: deny or ACL failure") — so the CDN URL stored on
+ * Project.brochureUrl can never be used directly for delivery, transformed
+ * or not. The signed download endpoint is Cloudinary's own documented
+ * mechanism for exactly this case and bypasses the restriction entirely.
+ * Only ever generated for our own cloud's raw/upload assets — refuses
+ * anything else, so this can't be turned into an open relay for arbitrary
+ * URLs. Doesn't take a filename — the caller (app/api/brochure-download)
+ * sets its own Content-Disposition header on the proxied response, so
+ * Cloudinary's own attachment naming here is irrelevant to what the user
+ * actually sees.
+ */
+export function generateDocumentDownloadUrl(secureUrl: string): string | null {
+  ensureConfigured();
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  if (!cloudName || !secureUrl.startsWith(`https://res.cloudinary.com/${cloudName}/raw/upload/`)) return null;
+  const publicId = documentPublicIdFromUrl(secureUrl);
+  if (!publicId) return null;
+  return cloudinary.utils.private_download_url(publicId, "", {
+    resource_type: "raw",
+    type: "upload",
+    attachment: true,
+  });
+}
+

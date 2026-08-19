@@ -1,7 +1,6 @@
 "use client";
 
 import { usePathname, useSearchParams } from "next/navigation";
-import { toDocumentDownloadUrl } from "@/lib/document-url";
 import { trackBrochureEvent } from "@/lib/track-brochure";
 import { trackBrochureClicked } from "@/lib/analytics/ga";
 import { usePremiumGate } from "@/lib/premium/gate-context";
@@ -55,9 +54,12 @@ export default function BrochureDownloadLink({
     );
   }
 
+  const downloadFileName = brochureFileName ?? `${slug}-brochure.pdf`;
+  const downloadHref = `/api/brochure-download?url=${encodeURIComponent(brochureUrl)}&filename=${encodeURIComponent(downloadFileName)}`;
+
   return (
     <a
-      href={toDocumentDownloadUrl(brochureUrl, brochureFileName ?? `${slug}-brochure.pdf`)}
+      href={downloadHref}
       className={className}
       onClick={() => {
         trackBrochureClicked(slug);
