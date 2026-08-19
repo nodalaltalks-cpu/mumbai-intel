@@ -2,10 +2,19 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
-import { markUnderReviewAction, acceptReportAction, rejectReportAction, resolveReportAction } from "@/lib/actions/reports";
+import { useState, useTransition } from "react";
+import {
+  markUnderReviewAction,
+  acceptReportAction,
+  rejectReportAction,
+  resolveReportAction,
+  getReportHistoryAction,
+} from "@/lib/actions/reports";
 import { formatDate } from "@/lib/format";
 import type { ReportRow } from "@/lib/analytics/report-queries";
+import AuditHistory from "./AuditHistory";
+
+type HistoryLog = Awaited<ReturnType<typeof getReportHistoryAction>>[number];
 
 const STATUS_CLASS: Record<string, string> = {
   NEW: "border-negative/40 bg-negative/10 text-negative",
@@ -38,6 +47,9 @@ function editHref(entityType: string, entityId: string | null): string | null {
 export default function ReportQueueList({ reports }: { reports: ReportRow[] }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [openHistoryId, setOpenHistoryId] = useState<string | null>(null);
+  const [historyByReport, setHistoryByReport] = useState<Record<string, HistoryLog[]>>({});
+  const [historyLoading, setHistoryLoading] = useState<string | null>(null);
 
   function run(action: (id: string) => Promise<{ error?: string }>, id: string) {
     startTransition(async () => {
@@ -49,6 +61,20 @@ export default function ReportQueueList({ reports }: { reports: ReportRow[] }) {
       }
       router.refresh();
     });
+  }
+
+  function toggleHistory(reportId: string) {
+    if (openHistoryId === reportId) {
+      setOpenHistoryId(null);
+      return;
+    }
+    setOpenHistoryId(reportId);
+    if (!historyByReport[reportId]) {
+      setHistoryLoading(reportId);
+      getReportHistoryAction(reportId)
+        .then((logs) => setHistoryByReport((prev) => ({ ...prev, [reportId]: logs })))
+        .finally(() => setHistoryLoading(null));
+    }
   }
 
   if (reports.length === 0) {
@@ -138,8 +164,25 @@ export default function ReportQueueList({ reports }: { reports: ReportRow[] }) {
                     Mark resolved
                   </button>
                 ) : null}
+                <button
+                  type="button"
+                  onClick={() => toggleHistory(report.id)}
+                  className="rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+                >
+                  {openHistoryId === report.id ? "Hide history" : "History"}
+                </button>
               </div>
             </div>
+
+            {openHistoryId === report.id ? (
+              <div className="mt-3 border-t border-border pt-3">
+                {historyLoading === report.id ? (
+                  <p className="text-xs text-muted">Loading history…</p>
+                ) : (
+                  <AuditHistory logs={historyByReport[report.id] ?? []} />
+                )}
+              </div>
+            ) : null}
           </div>
         );
       })}

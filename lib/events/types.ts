@@ -63,6 +63,8 @@ export interface EventPayloadMap {
   ReportStatusChanged: {
     reportId: string;
     status: string;
+    previousStatus: string;
+    note?: string;
     entityType: string;
     entityId: string | null;
     actorId: string | null;

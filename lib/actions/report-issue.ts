@@ -6,6 +6,7 @@ import { getClientIp } from "@/lib/request-ip";
 import { sendReportIssueEmail } from "@/lib/email";
 import { getPublicSession } from "@/lib/public-auth/session";
 import { prisma } from "@/lib/prisma";
+import { createNotification, notifyAllAdmins } from "@/lib/notifications";
 
 const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefined ? undefined : v);
 
@@ -57,7 +58,7 @@ export async function submitReportIssueAction(_prevState: ReportIssueFormState, 
     issue: parsed.data.issue,
   });
   try {
-    await prisma.report.create({
+    const report = await prisma.report.create({
       data: {
         entityType: parsed.data.entityType,
         entityId: parsed.data.entityId ?? null,
@@ -69,6 +70,23 @@ export async function submitReportIssueAction(_prevState: ReportIssueFormState, 
         reporterUserId: session?.userId ?? null,
         reporterEmail,
       },
+    });
+    if (session?.userId) {
+      await createNotification({
+        type: "REPORT_RECEIVED",
+        title: "We received your report",
+        body: "Thanks for reporting this — we'll review it shortly.",
+        recipientPublicUserId: session.userId,
+        entityType: "Report",
+        entityId: report.id,
+      });
+    }
+    await notifyAllAdmins({
+      type: "ADMIN_NEW_REPORT",
+      title: "New report submitted",
+      body: `${parsed.data.entityName} — ${parsed.data.issue.slice(0, 140)}`,
+      entityType: "Report",
+      entityId: report.id,
     });
   } catch (error) {
     console.error("[report-issue] failed to persist report:", error);

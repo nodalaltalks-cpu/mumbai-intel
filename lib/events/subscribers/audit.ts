@@ -53,5 +53,8 @@ on("MediaDeleted", async (p) => {
 });
 
 on("ReportStatusChanged", async (p) => {
-  await logAudit(p.actorId, `report.${p.status.toLowerCase()}`, "Report", p.reportId);
+  await logAudit(p.actorId, `report.${p.status.toLowerCase()}`, "Report", p.reportId, {
+    before: { status: p.previousStatus },
+    after: { status: p.status, ...(p.note ? { note: p.note } : {}) },
+  });
 });
