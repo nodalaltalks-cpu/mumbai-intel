@@ -42,7 +42,6 @@ export default function Home() {
 
       <main id="main-content" className="flex-1">
         <HeroSearch />
-        <MarketSnapshot />
         <FeaturedProjects />
         <TrendingLocalities />
         <FeaturedBuilders />
@@ -50,6 +49,9 @@ export default function Home() {
         <NewestDevelopers />
         <RecentlyActiveDevelopers />
         <LatestLaunches />
+        {/* Market Snapshot moved below the project feed — search + projects are the
+            first thing a new visitor sees, not a stats module. */}
+        <MarketSnapshot />
         <PriceTrend />
         <LatestTransactions />
         <MarketInsights />
