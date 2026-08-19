@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { logoutAction } from "@/lib/actions/auth";
+import { markAdminNotificationsReadAction } from "@/lib/actions/notifications";
 import type { SessionPayload } from "@/lib/auth/session";
 import { formatDate } from "@/lib/format";
 
@@ -13,6 +14,16 @@ export interface ActivityItem {
   entityId: string;
   at: Date;
   actor: { name: string | null; email: string } | null;
+}
+
+export interface NotificationItem {
+  id: string;
+  title: string;
+  body: string;
+  entityType: string | null;
+  entityId: string | null;
+  readAt: Date | null;
+  createdAt: Date;
 }
 
 // Builder/Locality dropped from Quick Add, the Catalog sidebar, and the command palette --
@@ -48,15 +59,17 @@ function describeActivity(item: ActivityItem): string {
   return `${actor} — ${entity} ${verb}`;
 }
 
-type MenuKey = "quickadd" | "notifications" | "profile" | null;
+type MenuKey = "quickadd" | "notifications" | "reports" | "profile" | null;
 
 export default function AdminTopbar({
   session,
   activity,
+  notifications,
   onOpenSearch,
 }: {
   session: SessionPayload;
   activity: ActivityItem[];
+  notifications: NotificationItem[];
   onOpenSearch: () => void;
 }) {
   const [openMenu, setOpenMenu] = useState<MenuKey>(null);
@@ -64,6 +77,7 @@ export default function AdminTopbar({
 
   const quickAddRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
+  const reportsRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
 
   // The old design used a "fixed inset-0" click-catcher rendered inside this header to close a
@@ -76,6 +90,7 @@ export default function AdminTopbar({
     const refs: Record<Exclude<MenuKey, null>, React.RefObject<HTMLDivElement | null>> = {
       quickadd: quickAddRef,
       notifications: notificationsRef,
+      reports: reportsRef,
       profile: profileRef,
     };
     function handleClickOutside(event: MouseEvent) {
@@ -102,6 +117,15 @@ export default function AdminTopbar({
   }
 
   const unreadCount = activity.filter((item) => new Date(item.at).getTime() > lastSeenAt).length;
+  const unreadNotificationCount = notifications.filter((n) => !n.readAt).length;
+
+  function openReports() {
+    const wasOpen = openMenu === "reports";
+    setOpenMenu(wasOpen ? null : "reports");
+    if (!wasOpen && unreadNotificationCount > 0) {
+      void markAdminNotificationsReadAction();
+    }
+  }
 
   return (
     <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-border bg-surface/95 px-4 py-2.5 backdrop-blur">
@@ -167,6 +191,49 @@ export default function AdminTopbar({
                     <p className="text-xs text-foreground">{describeActivity(item)}</p>
                     <p className="text-[10px] text-muted">{formatDate(item.at)}</p>
                   </div>
+                ))
+              )}
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="relative" ref={reportsRef}>
+        <button
+          type="button"
+          onClick={openReports}
+          className="relative rounded-sm border border-border px-2.5 py-1.5 text-xs text-muted hover:border-accent/50 hover:text-foreground"
+        >
+          Reports
+          {unreadNotificationCount > 0 ? (
+            <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-accent text-[9px] font-bold text-white">
+              {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+            </span>
+          ) : null}
+        </button>
+        {openMenu === "reports" ? (
+          <div className="absolute right-0 z-40 mt-1.5 w-72 overflow-hidden rounded-sm border border-border bg-surface-raised shadow-xl">
+            <div className="flex items-center justify-between border-b border-border px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">Report notifications</p>
+              <Link href="/admin/reports" onClick={() => setOpenMenu(null)} className="text-[10px] text-accent hover:underline">
+                View all →
+              </Link>
+            </div>
+            <div className="max-h-80 overflow-y-auto">
+              {notifications.length === 0 ? (
+                <p className="px-3 py-4 text-center text-xs text-muted">No report notifications yet.</p>
+              ) : (
+                notifications.map((item) => (
+                  <Link
+                    key={item.id}
+                    href="/admin/reports"
+                    onClick={() => setOpenMenu(null)}
+                    className={`block border-b border-border px-3 py-2 last:border-b-0 hover:bg-accent/5 ${item.readAt ? "" : "bg-accent/5"}`}
+                  >
+                    <p className="text-xs text-foreground">{item.title}</p>
+                    <p className="mt-0.5 line-clamp-2 text-[11px] text-muted">{item.body}</p>
+                    <p className="mt-1 text-[10px] text-muted">{formatDate(item.createdAt)}</p>
+                  </Link>
                 ))
               )}
             </div>

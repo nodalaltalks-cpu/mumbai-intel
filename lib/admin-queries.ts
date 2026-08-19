@@ -1317,6 +1317,17 @@ export async function getAuditHistory(entityType: string, entityId: string, limi
   );
 }
 
+/** Recent notifications for one founder/admin User — real readAt-backed unread state (unlike the Activity panel's localStorage timestamp), so it's correct across devices/sessions. */
+export async function getAdminNotifications(adminUserId: string, limit = 15) {
+  return safeQuery("getAdminNotifications", [], () =>
+    prisma.notification.findMany({
+      where: { recipientAdminUserId: adminUserId },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    })
+  );
+}
+
 export interface BrochureVersionItem {
   id: string;
   version: number;

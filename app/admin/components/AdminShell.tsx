@@ -3,17 +3,19 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { SessionPayload } from "@/lib/auth/session";
 import AdminSidebar from "./AdminSidebar";
-import AdminTopbar, { type ActivityItem } from "./AdminTopbar";
+import AdminTopbar, { type ActivityItem, type NotificationItem } from "./AdminTopbar";
 import CommandPalette from "./CommandPalette";
 import KeyboardShortcutsHelp from "./KeyboardShortcutsHelp";
 
 export default function AdminShell({
   session,
   activity,
+  notifications,
   children,
 }: {
   session: SessionPayload;
   activity: ActivityItem[];
+  notifications: NotificationItem[];
   children: ReactNode;
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -47,7 +49,7 @@ export default function AdminShell({
     <div className="flex min-h-screen flex-col md:flex-row">
       <AdminSidebar session={session} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <AdminTopbar session={session} activity={activity} onOpenSearch={() => setSearchOpen(true)} />
+        <AdminTopbar session={session} activity={activity} notifications={notifications} onOpenSearch={() => setSearchOpen(true)} />
         <main id="main-content" className="flex-1 p-4 md:p-6">{children}</main>
       </div>
       <CommandPalette key={searchOpen ? "search-open" : "search-closed"} open={searchOpen} onClose={() => setSearchOpen(false)} />
