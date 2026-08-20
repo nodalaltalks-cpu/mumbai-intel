@@ -72,38 +72,56 @@ export interface ReportResolutionStats {
   avgResolutionHours: number | null;
 }
 
-/** Resolution rate / rejection rate / avg time-to-resolution — computed from data that already exists (Report.createdAt + the "report.resolved" AuditLog row each resolution already writes via the existing ReportStatusChanged subscriber), no new column. */
+/**
+ * Resolution rate / rejection rate / avg time-to-resolution -- computed from
+ * AuditLog rows the existing ReportStatusChanged subscriber already writes
+ * on every transition, no new column.
+ *
+ * avgResolutionHours specifically measures handling time -- first admin
+ * action (report.accepted, or report.under_review if that step was used
+ * instead) to report.resolved -- NOT Report.createdAt to resolved. A report
+ * can sit unopened for hours before anyone looks at it; counting that wait
+ * as "resolution time" overstates how long the actual work took. Every
+ * report reaching RESOLVED in this workflow passes through ACCEPTED first
+ * (see ReportQueueList's "Mark resolved" gating), so an accepted/under_review
+ * row is expected to exist; reports without one are excluded rather than
+ * guessed at.
+ */
 export async function getReportResolutionStats(): Promise<ReportResolutionStats> {
   const [total, resolvedCount, rejectedCount, openCount, resolvedReports] = await Promise.all([
     prisma.report.count(),
     prisma.report.count({ where: { status: "RESOLVED" } }),
     prisma.report.count({ where: { status: "REJECTED" } }),
     prisma.report.count({ where: { status: { in: ["NEW", "UNDER_REVIEW", "ACCEPTED"] } } }),
-    prisma.report.findMany({ where: { status: "RESOLVED" }, select: { id: true, createdAt: true } }),
+    prisma.report.findMany({ where: { status: "RESOLVED" }, select: { id: true } }),
   ]);
 
   let avgResolutionHours: number | null = null;
   if (resolvedReports.length > 0) {
     const resolvedIds = resolvedReports.map((r) => r.id);
-    const resolvedLogs = await prisma.auditLog.findMany({
-      where: { entityType: "Report", entityId: { in: resolvedIds }, action: "report.resolved" },
-      select: { entityId: true, at: true },
-      orderBy: { at: "desc" },
+    const logs = await prisma.auditLog.findMany({
+      where: { entityType: "Report", entityId: { in: resolvedIds }, action: { in: ["report.accepted", "report.under_review", "report.resolved"] } },
+      select: { entityId: true, action: true, at: true },
+      orderBy: { at: "asc" },
     });
-    // A report can only ever be resolved once in practice (no re-open flow exists), but if it
-    // somehow has more than one "report.resolved" row, the most recent one is authoritative --
-    // orderBy above + this Map keeps only the first (latest) per id.
-    const resolvedAtById = new Map<string, Date>();
-    for (const log of resolvedLogs) {
-      if (!resolvedAtById.has(log.entityId)) resolvedAtById.set(log.entityId, log.at);
+
+    const startById = new Map<string, Date>(); // earliest accepted/under_review per report
+    const resolvedAtById = new Map<string, Date>(); // latest resolved per report
+    for (const log of logs) {
+      if (log.action === "report.resolved") {
+        resolvedAtById.set(log.entityId, log.at);
+      } else if (!startById.has(log.entityId)) {
+        startById.set(log.entityId, log.at);
+      }
     }
 
-    const hoursList = resolvedReports
-      .map((r) => {
-        const resolvedAt = resolvedAtById.get(r.id);
-        return resolvedAt ? (resolvedAt.getTime() - r.createdAt.getTime()) / (1000 * 60 * 60) : null;
+    const hoursList = resolvedIds
+      .map((id) => {
+        const start = startById.get(id);
+        const resolvedAt = resolvedAtById.get(id);
+        return start && resolvedAt ? (resolvedAt.getTime() - start.getTime()) / (1000 * 60 * 60) : null;
       })
-      .filter((hours): hours is number => hours !== null);
+      .filter((hours): hours is number => hours !== null && hours >= 0);
     if (hoursList.length > 0) {
       avgResolutionHours = Math.round((hoursList.reduce((a, b) => a + b, 0) / hoursList.length) * 10) / 10;
     }

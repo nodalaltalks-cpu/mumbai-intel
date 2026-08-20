@@ -18,7 +18,7 @@ const STATUS_TABS: { key: ReportStatus | "ALL"; label: string }[] = [
 ];
 
 export default async function AdminReportsPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
-  await requireSession();
+  const session = await requireSession();
   const params = await searchParams;
   const activeStatus = (STATUS_TABS.find((t) => t.key === params.status)?.key ?? "ALL") as ReportStatus | "ALL";
 
@@ -43,7 +43,7 @@ export default async function AdminReportsPage({ searchParams }: { searchParams:
           ["Total Reports", resolutionStats.total],
           ["Open", resolutionStats.openCount],
           ["Resolution Rate", resolutionStats.resolutionRatePercent !== null ? `${resolutionStats.resolutionRatePercent}%` : "--"],
-          ["Avg. Resolution Time", resolutionStats.avgResolutionHours !== null ? `${resolutionStats.avgResolutionHours}h` : "--"],
+          ["Avg. Resolution Time (since accepted)", resolutionStats.avgResolutionHours !== null ? `${resolutionStats.avgResolutionHours}h` : "--"],
         ].map(([label, value]) => (
           <div key={label as string} className="rounded-sm border border-border bg-surface p-4">
             <p className="text-[10px] uppercase tracking-wide text-muted">{label}</p>
@@ -85,7 +85,7 @@ export default async function AdminReportsPage({ searchParams }: { searchParams:
         </section>
       ) : null}
 
-      <ReportQueueList reports={reports} />
+      <ReportQueueList reports={reports} canDelete={session.role === "ADMIN"} />
     </div>
   );
 }

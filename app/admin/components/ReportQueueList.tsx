@@ -8,9 +8,10 @@ import {
   acceptReportAction,
   rejectReportAction,
   resolveReportAction,
+  deleteReportAction,
   getReportHistoryAction,
 } from "@/lib/actions/reports";
-import { formatDate } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 import type { ReportRow } from "@/lib/analytics/report-queries";
 import AuditHistory from "./AuditHistory";
 
@@ -44,7 +45,7 @@ function editHref(entityType: string, entityId: string | null): string | null {
   return null;
 }
 
-export default function ReportQueueList({ reports }: { reports: ReportRow[] }) {
+export default function ReportQueueList({ reports, canDelete = false }: { reports: ReportRow[]; canDelete?: boolean }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [openHistoryId, setOpenHistoryId] = useState<string | null>(null);
@@ -61,6 +62,12 @@ export default function ReportQueueList({ reports }: { reports: ReportRow[] }) {
       }
       router.refresh();
     });
+  }
+
+  function runDelete(id: string, entityName: string) {
+    // eslint-disable-next-line no-alert
+    if (!window.confirm(`Delete the report on "${entityName}"?\n\nThis report will be permanently deleted and cannot be recovered. Continue?`)) return;
+    run(deleteReportAction, id);
   }
 
   function toggleHistory(reportId: string) {
@@ -97,7 +104,7 @@ export default function ReportQueueList({ reports }: { reports: ReportRow[] }) {
                     {report.entityType}
                     {report.category ? ` · ${CATEGORY_LABEL[report.category] ?? report.category}` : ""}
                   </span>
-                  <span className="text-[10px] text-muted">{formatDate(report.createdAt)}</span>
+                  <span className="text-[10px] text-muted">{formatDateTime(report.createdAt)}</span>
                 </div>
                 {href ? (
                   <Link href={href} className="mt-1 block font-mono text-sm font-semibold text-foreground hover:text-accent">
@@ -171,6 +178,16 @@ export default function ReportQueueList({ reports }: { reports: ReportRow[] }) {
                 >
                   {openHistoryId === report.id ? "Hide history" : "History"}
                 </button>
+                {canDelete ? (
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => runDelete(report.id, report.entityName)}
+                    className="rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-negative hover:text-negative disabled:opacity-60"
+                  >
+                    Delete
+                  </button>
+                ) : null}
               </div>
             </div>
 

@@ -71,6 +71,22 @@ export function formatDate(date: Date | string | null | undefined): string {
   return DATE_FORMATTER.format(new Date(date));
 }
 
+const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("en-IN", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+  timeZone: "Asia/Kolkata",
+});
+
+/** "19 Aug 2026 · 14:35 IST" — used wherever an exact moment matters (report/communication history), not just the day. */
+export function formatDateTime(date: Date | string | null | undefined): string {
+  if (!date) return "--";
+  return `${DATE_TIME_FORMATTER.format(new Date(date))} IST`;
+}
+
 const MONTH_FORMATTER = new Intl.DateTimeFormat("en-IN", {
   month: "short",
   year: "2-digit",

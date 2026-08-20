@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { formatDate } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 
 type AuditLogRow = {
   id: string;
@@ -51,7 +51,7 @@ export default function AuditHistory({ logs }: { logs: AuditLogRow[] }) {
                   {log.action}
                 </span>
                 <span className="text-[11px] text-muted">
-                  {log.actor?.name ?? log.actor?.email ?? "System"} · {formatDate(log.at)}
+                  {log.actor?.name ?? log.actor?.email ?? "System"} · {formatDateTime(log.at)}
                 </span>
               </div>
               {changes.length > 0 ? (
