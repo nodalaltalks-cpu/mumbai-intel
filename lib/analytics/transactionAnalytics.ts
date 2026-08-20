@@ -22,6 +22,7 @@ export interface TransactionStatsRow extends TransactionPriceRow {
 export interface TransactionMonthlyRow extends TransactionPriceRow {
   registrationDate: Date;
   pricePerSqftPaise: bigint | null;
+  carpetSqft: Prisma.Decimal | number | null;
 }
 
 export interface TransactionStats {
@@ -106,8 +107,38 @@ export const TransactionAnalyticsService = {
     return Number(sumOf(rows.map((r) => r.valuePaise)));
   },
 
-  calculateAveragePricePerSqft(rows: { pricePerSqftPaise: bigint | null }[]): number | null {
-    return averageOfNumbers(rows.map((r) => r.pricePerSqftPaise).filter((v): v is bigint => v !== null).map(Number));
+  /**
+   * AVG. PRICE PER SQ.FT — audited methodology (do not change without updating this comment):
+   *
+   *   Σ(valuePaise) / Σ(carpetSqft)  — i.e. total transaction value ÷ total transacted area,
+   *   NOT the arithmetic mean of each row's own pre-derived pricePerSqftPaise.
+   *
+   * Why: a simple average of per-transaction ₹/sqft rates weights a ₹50L, 300sqft
+   * transaction the same as a ₹5Cr, 3000sqft one. A value/area ratio instead weights
+   * every SQUARE FOOT equally, which is what "market average price per sqft" is
+   * actually supposed to mean, and matches how this figure would be sanity-checked
+   * by hand against a handful of known transactions.
+   *
+   * A row is excluded from both sums (never silently coerced to 0) when:
+   *   - carpetSqft is null or <= 0 (no reliable area to divide by), or
+   *   - valuePaise is null or <= 0 (shouldn't happen given the schema, guarded anyway).
+   * Area basis is carpetSqft specifically, not builtUpSqft — carpetSqft is the field
+   * every other area filter/sort in this codebase already treats as canonical
+   * (see PublicTransactionFilters.areaMinSqft/areaMaxSqft). Mixing carpet and
+   * built-up area in one sum would itself distort the ratio, so a row missing
+   * carpetSqft is excluded rather than falling back to builtUpSqft.
+   */
+  calculateAveragePricePerSqft(rows: { valuePaise: bigint; carpetSqft: Prisma.Decimal | number | null }[]): number | null {
+    let totalValuePaise = BigInt(0);
+    let totalCarpetSqft = 0;
+    for (const row of rows) {
+      const carpetSqft = row.carpetSqft !== null ? Number(row.carpetSqft) : null;
+      if (carpetSqft === null || carpetSqft <= 0) continue;
+      if (row.valuePaise <= BigInt(0)) continue;
+      totalValuePaise += row.valuePaise;
+      totalCarpetSqft += carpetSqft;
+    }
+    return totalCarpetSqft > 0 ? Number(totalValuePaise) / totalCarpetSqft : null;
   },
 
   calculateAverageUnitSize(rows: { carpetSqft: Prisma.Decimal | number | null }[]): number | null {

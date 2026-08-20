@@ -203,7 +203,7 @@ export async function getTransactionMonthlyTrend(filters: PublicTransactionFilte
 
   const rows = await prisma.transaction.findMany({
     where,
-    select: { registrationDate: true, valuePaise: true, pricePerSqftPaise: true },
+    select: { registrationDate: true, valuePaise: true, pricePerSqftPaise: true, carpetSqft: true },
     orderBy: { registrationDate: "asc" },
   });
   return TransactionAnalyticsService.calculateMonthlyTrend(rows);

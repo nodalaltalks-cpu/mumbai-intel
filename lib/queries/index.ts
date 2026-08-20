@@ -8,6 +8,7 @@ import {
   LocalityAnalyticsService,
   MarketAnalyticsService,
   ProjectAnalyticsService,
+  TransactionAnalyticsService,
   DELIVERED_STATUSES as BUILDER_DELIVERED_STATUSES,
   UNDER_CONSTRUCTION_STATUSES as BUILDER_UNDER_CONSTRUCTION_STATUSES,
   UPCOMING_STATUSES as BUILDER_UPCOMING_STATUSES,
@@ -56,56 +57,90 @@ export async function getLocalities() {
   });
 }
 
+export interface GeographyOption {
+  citySlug: string;
+  cityName: string;
+  stateCode: string;
+  stateName: string;
+}
+
+/** Feeds the Market Data page's City/State filter — only isLive cities, since those are the only ones with any published data to show a snapshot for. */
+export async function getGeographyOptions(): Promise<GeographyOption[]> {
+  const cities = await prisma.city.findMany({
+    where: { isLive: true },
+    select: { slug: true, name: true, state: { select: { code: true, name: true } } },
+    orderBy: { name: "asc" },
+  });
+  return cities.map((c) => ({ citySlug: c.slug, cityName: c.name, stateCode: c.state.code, stateName: c.state.name }));
+}
+
 export interface MarketSnapshot {
   liveProjectsCount: number;
   localitiesCount: number;
-  transactionsCount: number;
-  transactions90dCount: number;
   avgPricePerSqftPaise: number | null;
   buildersCount: number;
 }
 
-export async function getMarketSnapshot(): Promise<MarketSnapshot> {
-  const ninetyDaysAgo = new Date();
-  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+export interface MarketSnapshotFilters {
+  /** Defaults to PRIMARY_CITY_SLUG ("mumbai") when neither citySlug nor stateCode is given. */
+  citySlug?: string;
+  /** Ignored if citySlug is also given (city is the more specific scope). */
+  stateCode?: string;
+}
 
-  const [
-    liveProjectsCount,
-    localitiesCount,
-    transactionsCount,
-    transactions90dCount,
-    avgPricePerSqft,
-    buildersCount,
-  ] = await Promise.all([
+/**
+ * Every metric here is scoped to the SAME geography where clause — adding a
+ * new metric that forgets to reuse `cityWhere` would silently break "all
+ * Market Snapshot metrics respond to the selected geography."
+ *
+ * Deliberately excludes any transaction *count* ("Transactions Recorded") --
+ * that belongs to the Transaction Intelligence domain (lib/queries/transactions.ts
+ * getTransactionStats), not here, so this function never reads
+ * prisma.transaction.count() at all. avgPricePerSqftPaise is the one
+ * transaction-DERIVED figure this panel is allowed to show (per the product
+ * spec), computed via the same audited Σvalue/Σarea methodology as the
+ * Transaction Intelligence domain (see calculateAveragePricePerSqft) rather
+ * than a second, divergent implementation.
+ */
+export async function getMarketSnapshot(filters: MarketSnapshotFilters = {}): Promise<MarketSnapshot> {
+  const cityWhere = filters.citySlug
+    ? { slug: filters.citySlug }
+    : filters.stateCode
+      ? { state: { code: filters.stateCode } }
+      : { slug: PRIMARY_CITY_SLUG };
+
+  const [liveProjectsCount, localitiesCount, transactionRows, buildersCount] = await Promise.all([
     prisma.project.count({
-      where: { city: { slug: PRIMARY_CITY_SLUG }, isPublished: true },
+      where: { city: cityWhere, isPublished: true, isArchived: false },
     }),
-    prisma.locality.count({ where: { city: { slug: PRIMARY_CITY_SLUG } } }),
-    prisma.transaction.count({
-      where: { locality: { city: { slug: PRIMARY_CITY_SLUG } }, deletedAt: null },
+    // isPublished/isArchived/deletedAt match every other public locality
+    // query's convention (see getLocalities() above) -- the old version had
+    // none of these, so it counted unpublished and soft-deleted rows too.
+    // `distinct` on name is a safety net against duplicate-name data entry,
+    // not the primary fix (the primary fix is these three filters).
+    prisma.locality
+      .findMany({
+        where: { city: cityWhere, isPublished: true, isArchived: false, deletedAt: null },
+        select: { name: true },
+        distinct: ["name"],
+      })
+      .then((rows) => rows.length),
+    prisma.transaction.findMany({
+      where: { locality: { city: cityWhere }, deletedAt: null },
+      select: { valuePaise: true, carpetSqft: true },
     }),
-    prisma.transaction.count({
-      where: {
-        locality: { city: { slug: PRIMARY_CITY_SLUG } },
-        registrationDate: { gte: ninetyDaysAgo },
-        deletedAt: null,
-      },
+    // Distinct builders with at least one live, published project in this
+    // geography -- the old prisma.builder.count() had no filters at all
+    // (every builder in the entire database, any city, any publish state).
+    prisma.builder.count({
+      where: { projects: { some: { city: cityWhere, isPublished: true, isArchived: false } } },
     }),
-    prisma.transaction.aggregate({
-      where: { locality: { city: { slug: PRIMARY_CITY_SLUG } }, deletedAt: null },
-      _avg: { pricePerSqftPaise: true },
-    }),
-    prisma.builder.count(),
   ]);
 
   return {
     liveProjectsCount,
     localitiesCount,
-    transactionsCount,
-    transactions90dCount,
-    avgPricePerSqftPaise: avgPricePerSqft._avg.pricePerSqftPaise
-      ? Number(avgPricePerSqft._avg.pricePerSqftPaise)
-      : null,
+    avgPricePerSqftPaise: TransactionAnalyticsService.calculateAveragePricePerSqft(transactionRows),
     buildersCount,
   };
 }
@@ -1372,17 +1407,34 @@ export async function getTopLocalitiesByActivity(limit = 3): Promise<LocalityIns
     by: ["localityId"],
     where: { locality: { city: { slug: PRIMARY_CITY_SLUG } }, deletedAt: null },
     _count: { _all: true },
-    _avg: { pricePerSqftPaise: true },
     orderBy: { _count: { localityId: "desc" } },
     take: limit,
   });
 
   if (grouped.length === 0) return [];
 
-  const localities = await prisma.locality.findMany({
-    where: { id: { in: grouped.map((g) => g.localityId) }, isPublished: true, isArchived: false },
-  });
+  const localityIds = grouped.map((g) => g.localityId);
+  // avgPricePerSqftPaise here must use the same Σvalue/Σarea methodology as
+  // everywhere else (see calculateAveragePricePerSqft's doc comment) --
+  // Prisma's groupBy _avg can only average one column directly, which would
+  // silently reintroduce the "average of averages" distortion this pass
+  // fixed everywhere else, so the raw rows are fetched and reduced in JS instead.
+  const [localities, rows] = await Promise.all([
+    prisma.locality.findMany({
+      where: { id: { in: localityIds }, isPublished: true, isArchived: false },
+    }),
+    prisma.transaction.findMany({
+      where: { localityId: { in: localityIds }, deletedAt: null },
+      select: { localityId: true, valuePaise: true, carpetSqft: true },
+    }),
+  ]);
   const nameById = new Map(localities.map((l) => [l.id, l.name]));
+  const rowsByLocality = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const bucket = rowsByLocality.get(row.localityId) ?? [];
+    bucket.push(row);
+    rowsByLocality.set(row.localityId, bucket);
+  }
 
   // An unpublished/archived locality has no entry in nameById — drop it
   // rather than surface it under a placeholder "Unknown" name.
@@ -1392,7 +1444,7 @@ export async function getTopLocalitiesByActivity(limit = 3): Promise<LocalityIns
       localityId: g.localityId,
       localityName: nameById.get(g.localityId) as string,
       transactionCount: g._count._all,
-      avgPricePerSqftPaise: g._avg.pricePerSqftPaise ? Number(g._avg.pricePerSqftPaise) : null,
+      avgPricePerSqftPaise: TransactionAnalyticsService.calculateAveragePricePerSqft(rowsByLocality.get(g.localityId) ?? []),
     }));
 }
 

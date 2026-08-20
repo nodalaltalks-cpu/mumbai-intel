@@ -8,6 +8,7 @@ import {
   getTopLocalitiesByActivity,
   getTransactionMonthlyTrend,
   getTransactionPropertyTypeDistribution,
+  getTransactionStats,
 } from "@/lib/queries";
 import { AnalyticsService } from "@/lib/analytics";
 import { formatCompactCount, formatMonth, formatPricePerSqft } from "@/lib/format";
@@ -51,16 +52,24 @@ export default async function MarketReportPage() {
   await recordRecentViewAction("MarketReport", MARKET_REPORT_ENTITY_ID);
   await recordResearchEvent("REPORT_VIEWED", { metadata: { reportType: "market" } });
 
-  const [snapshot, priceTrend, monthlyTrend, propertyTypes, topLocalities, featuredProjects, topDevelopers, session] = await Promise.all([
-    getMarketSnapshot(),
-    getCityPriceTrend(12),
-    getTransactionMonthlyTrend({}, 12),
-    getTransactionPropertyTypeDistribution({}),
-    getTopLocalitiesByActivity(6),
-    getFeaturedProjects(6),
-    getTopDevelopers(4),
-    getPublicSession(),
-  ]);
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+  const [snapshot, txStats, txStats90d, priceTrend, monthlyTrend, propertyTypes, topLocalities, featuredProjects, topDevelopers, session] =
+    await Promise.all([
+      getMarketSnapshot(),
+      // Transaction counts are the Transaction Intelligence domain's own data
+      // (getTransactionStats), not getMarketSnapshot's -- see that function's
+      // doc comment for why it no longer computes them at all.
+      getTransactionStats({}),
+      getTransactionStats({ dateFrom: ninetyDaysAgo.toISOString().slice(0, 10) }),
+      getCityPriceTrend(12),
+      getTransactionMonthlyTrend({}, 12),
+      getTransactionPropertyTypeDistribution({}),
+      getTopLocalitiesByActivity(6),
+      getFeaturedProjects(6),
+      getTopDevelopers(4),
+      getPublicSession(),
+    ]);
   const locked = session === null;
   const next = "/reports/market";
 
@@ -72,8 +81,8 @@ export default async function MarketReportPage() {
     liveProjectsCount: snapshot.liveProjectsCount,
     localitiesCount: snapshot.localitiesCount,
     buildersCount: snapshot.buildersCount,
-    transactionsCount: snapshot.transactionsCount,
-    transactions90dCount: snapshot.transactions90dCount,
+    transactionsCount: txStats.totalTransactions,
+    transactions90dCount: txStats90d.totalTransactions,
     growthPercentYoy,
   });
 
@@ -90,7 +99,7 @@ export default async function MarketReportPage() {
         meta={[
           { label: "Avg price/sqft", value: gated(locked, formatPricePerSqft(snapshot.avgPricePerSqftPaise), maskPricePerSqft()) },
           { label: "Live projects", value: formatCompactCount(snapshot.liveProjectsCount) },
-          { label: "Transactions (90d)", value: formatCompactCount(snapshot.transactions90dCount) },
+          { label: "Transactions (90d)", value: formatCompactCount(txStats90d.totalTransactions) },
         ]}
       />
 
@@ -113,8 +122,8 @@ export default async function MarketReportPage() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <StatCard label="Live projects" value={formatCompactCount(snapshot.liveProjectsCount)} accent />
             <StatCard label="Localities covered" value={formatCompactCount(snapshot.localitiesCount)} />
-            <StatCard label="Transactions recorded" value={formatCompactCount(snapshot.transactionsCount)} />
-            <StatCard label="Transactions (90d)" value={formatCompactCount(snapshot.transactions90dCount)} />
+            <StatCard label="Transactions recorded" value={formatCompactCount(txStats.totalTransactions)} />
+            <StatCard label="Transactions (90d)" value={formatCompactCount(txStats90d.totalTransactions)} />
             <StatCard label="Builders tracked" value={formatCompactCount(snapshot.buildersCount)} />
             <StatCard label="Avg price/sqft" value={gated(locked, formatPricePerSqft(snapshot.avgPricePerSqftPaise), maskPricePerSqft())} />
           </div>

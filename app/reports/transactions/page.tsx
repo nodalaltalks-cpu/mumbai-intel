@@ -51,17 +51,24 @@ const NAV_SECTIONS = [
 
 export default async function TransactionReportPage() {
   await recordResearchEvent("REPORT_VIEWED", { metadata: { reportType: "transactions" } });
-  const [snapshot, stats, monthlyTrend, configDistribution, propertyTypes, topProjects, activeDevelopers, localities, session] = await Promise.all([
-    getMarketSnapshot(),
-    getTransactionStats({}),
-    getTransactionMonthlyTrend({}, 12),
-    getTransactionConfigurationDistribution({}),
-    getTransactionPropertyTypeDistribution({}),
-    getTopProjectsByActivity(6),
-    getRecentlyActiveDevelopers(4),
-    getPublicLocalitiesPaged({ pageSize: 4, sortBy: "projects_desc" }),
-    getPublicSession(),
-  ]);
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+  const [snapshot, stats, stats90d, monthlyTrend, configDistribution, propertyTypes, topProjects, activeDevelopers, localities, session] =
+    await Promise.all([
+      getMarketSnapshot(),
+      getTransactionStats({}),
+      // Transaction counts are the Transaction Intelligence domain's own data
+      // (getTransactionStats), not getMarketSnapshot's -- see that function's
+      // doc comment for why it no longer computes them at all.
+      getTransactionStats({ dateFrom: ninetyDaysAgo.toISOString().slice(0, 10) }),
+      getTransactionMonthlyTrend({}, 12),
+      getTransactionConfigurationDistribution({}),
+      getTransactionPropertyTypeDistribution({}),
+      getTopProjectsByActivity(6),
+      getRecentlyActiveDevelopers(4),
+      getPublicLocalitiesPaged({ pageSize: 4, sortBy: "projects_desc" }),
+      getPublicSession(),
+    ]);
   const locked = session === null;
   const next = "/reports/transactions";
 
@@ -70,8 +77,8 @@ export default async function TransactionReportPage() {
     liveProjectsCount: snapshot.liveProjectsCount,
     localitiesCount: snapshot.localitiesCount,
     buildersCount: snapshot.buildersCount,
-    transactionsCount: snapshot.transactionsCount,
-    transactions90dCount: snapshot.transactions90dCount,
+    transactionsCount: stats.totalTransactions,
+    transactions90dCount: stats90d.totalTransactions,
     growthPercentYoy: null,
   });
 

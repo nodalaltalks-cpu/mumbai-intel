@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getCityPriceTrend, getPublicBuilderTrustLeaderboard, getPublicLocalityMarketSnapshot } from "@/lib/queries";
+import { Suspense } from "react";
+import { getCityPriceTrend, getGeographyOptions, getPublicBuilderTrustLeaderboard, getPublicLocalityMarketSnapshot } from "@/lib/queries";
 import { formatMonth, formatPricePerSqft, formatSignedPercent } from "@/lib/format";
 import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
@@ -11,6 +12,9 @@ import { getPublicSession } from "@/lib/public-auth/session";
 import { gated, maskPercent, maskPricePerSqft, maskScore } from "@/lib/premium/mask";
 import GAPageEvent from "@/app/components/analytics/GAPageEvent";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
+import MarketSnapshot from "@/app/components/MarketSnapshot";
+import MarketDataFilters from "@/app/components/MarketDataFilters";
+import { SkeletonStatRow } from "@/app/components/ui/Skeleton";
 
 export const metadata: Metadata = {
   title: "Market Data — NoDalalTalks",
@@ -18,12 +22,35 @@ export const metadata: Metadata = {
 };
 export const dynamic = "force-dynamic";
 
-export default async function MarketDataPage() {
-  const [priceTrend, localitySnapshot, builderLeaderboard, session] = await Promise.all([
+type MarketDataSearchParams = { city?: string; state?: string };
+
+/**
+ * The City/State filter only affects the Market Snapshot section, fetched
+ * here as its own nested Suspense boundary -- Price Trend/Locality
+ * Benchmarks/Builder Leaderboard below don't depend on it, so isolating the
+ * fetch keeps a filter change from re-suspending the whole page (same
+ * pattern used for /projects and /transactions after the same class of bug
+ * was found there).
+ */
+async function MarketSnapshotSection({ searchParams, options }: { searchParams: Promise<MarketDataSearchParams>; options: Awaited<ReturnType<typeof getGeographyOptions>> }) {
+  const params = await searchParams;
+  const selected = options.find((o) => (params.city ? o.citySlug === params.city : params.state ? o.stateCode === params.state : false));
+  const geographyLabel = selected ? selected.cityName : params.state ? (options.find((o) => o.stateCode === params.state)?.stateName ?? "Mumbai") : "Mumbai";
+  return (
+    <MarketSnapshot
+      filters={params.city ? { citySlug: params.city } : params.state ? { stateCode: params.state } : undefined}
+      geographyLabel={geographyLabel}
+    />
+  );
+}
+
+export default async function MarketDataPage({ searchParams }: { searchParams: Promise<MarketDataSearchParams> }) {
+  const [priceTrend, localitySnapshot, builderLeaderboard, session, geographyOptions] = await Promise.all([
     getCityPriceTrend(12),
     getPublicLocalityMarketSnapshot(),
     getPublicBuilderTrustLeaderboard(10),
     getPublicSession(),
+    getGeographyOptions(),
   ]);
   await recordResearchEvent("MARKET_DATA_VIEWED");
   const locked = session === null;
@@ -39,6 +66,17 @@ export default async function MarketDataPage() {
           <h1 className="font-mono text-2xl font-bold text-foreground">Market Data</h1>
           <p className="mt-1 text-sm text-muted">City-wide price trends, locality benchmarks and builder trust scores — every figure traceable to its source.</p>
         </div>
+
+        <section className="-mx-4 -mt-4 sm:-mx-6">
+          {geographyOptions.length > 1 ? (
+            <div className="mb-1 flex justify-end px-4 sm:px-6">
+              <MarketDataFilters options={geographyOptions} />
+            </div>
+          ) : null}
+          <Suspense fallback={<SkeletonStatRow count={4} />}>
+            <MarketSnapshotSection searchParams={searchParams} options={geographyOptions} />
+          </Suspense>
+        </section>
 
         <section>
           <SectionHeading title="Mumbai Price Trend" subtitle="Average ₹/sqft across registered transactions, last 12 months" />

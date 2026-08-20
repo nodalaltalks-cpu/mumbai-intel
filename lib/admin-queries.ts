@@ -951,29 +951,29 @@ export interface MonthlyPricePoint {
   avgPricePerSqftPaise: number;
 }
 
+/**
+ * Both trend functions below delegate month-bucketing and the avg-₹/sqft
+ * calculation to AnalyticsService.Transaction.calculateMonthlyTrend --
+ * previously each had its own inline bucket-and-average-of-pricePerSqftPaise
+ * loop (duplicated, and using the same "average of already-derived rates"
+ * methodology now fixed in transactionAnalytics.ts to a size-weighted
+ * Σvalue/Σarea instead). One formula, one place; see the doc comment on
+ * calculateAveragePricePerSqft for the full rationale.
+ */
 export async function getMonthlyPriceTrend(monthsBack = 12) {
   return safeQuery("getMonthlyPriceTrend", [] as MonthlyPricePoint[], async () => {
     const since = new Date();
     since.setMonth(since.getMonth() - monthsBack);
 
     const transactions = await prisma.transaction.findMany({
-      where: { pricePerSqftPaise: { not: null }, registrationDate: { gte: since } },
-      select: { registrationDate: true, pricePerSqftPaise: true },
+      where: { registrationDate: { gte: since } },
+      select: { registrationDate: true, valuePaise: true, pricePerSqftPaise: true, carpetSqft: true },
       orderBy: { registrationDate: "asc" },
     });
 
-    const buckets = new Map<string, { sum: number; count: number }>();
-    for (const tx of transactions) {
-      const key = `${tx.registrationDate.getFullYear()}-${String(tx.registrationDate.getMonth() + 1).padStart(2, "0")}`;
-      const bucket = buckets.get(key) ?? { sum: 0, count: 0 };
-      bucket.sum += Number(tx.pricePerSqftPaise);
-      bucket.count += 1;
-      buckets.set(key, bucket);
-    }
-
-    return Array.from(buckets.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, { sum, count }]) => ({ month: `${month}-01`, avgPricePerSqftPaise: Math.round(sum / count) }));
+    return AnalyticsService.Transaction.calculateMonthlyTrend(transactions)
+      .filter((p) => p.avgPricePerSqftPaise !== null)
+      .map((p) => ({ month: p.month.toISOString().slice(0, 10), avgPricePerSqftPaise: Math.round(p.avgPricePerSqftPaise as number) }));
   });
 }
 
@@ -983,23 +983,14 @@ export async function getLocalityPriceTrend(localityId: string, monthsBack = 12)
     since.setMonth(since.getMonth() - monthsBack);
 
     const transactions = await prisma.transaction.findMany({
-      where: { localityId, pricePerSqftPaise: { not: null }, registrationDate: { gte: since } },
-      select: { registrationDate: true, pricePerSqftPaise: true },
+      where: { localityId, registrationDate: { gte: since } },
+      select: { registrationDate: true, valuePaise: true, pricePerSqftPaise: true, carpetSqft: true },
       orderBy: { registrationDate: "asc" },
     });
 
-    const buckets = new Map<string, { sum: number; count: number }>();
-    for (const tx of transactions) {
-      const key = `${tx.registrationDate.getFullYear()}-${String(tx.registrationDate.getMonth() + 1).padStart(2, "0")}`;
-      const bucket = buckets.get(key) ?? { sum: 0, count: 0 };
-      bucket.sum += Number(tx.pricePerSqftPaise);
-      bucket.count += 1;
-      buckets.set(key, bucket);
-    }
-
-    return Array.from(buckets.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, { sum, count }]) => ({ month: `${month}-01`, avgPricePerSqftPaise: Math.round(sum / count) }));
+    return AnalyticsService.Transaction.calculateMonthlyTrend(transactions)
+      .filter((p) => p.avgPricePerSqftPaise !== null)
+      .map((p) => ({ month: p.month.toISOString().slice(0, 10), avgPricePerSqftPaise: Math.round(p.avgPricePerSqftPaise as number) }));
   });
 }
 
@@ -1037,7 +1028,7 @@ export async function getTransactionVelocityTrend(monthsBack = 12) {
     since.setMonth(since.getMonth() - monthsBack);
     const rows = await prisma.transaction.findMany({
       where: { registrationDate: { gte: since } },
-      select: { valuePaise: true, registrationDate: true, pricePerSqftPaise: true },
+      select: { valuePaise: true, registrationDate: true, pricePerSqftPaise: true, carpetSqft: true },
     });
     return AnalyticsService.Transaction.calculateMonthlyTrend(rows).map((p) => ({
       month: p.month.toISOString(),
