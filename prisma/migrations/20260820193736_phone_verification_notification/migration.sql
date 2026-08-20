@@ -1,0 +1,4 @@
+
+-- AlterEnum
+ALTER TYPE "NotificationType" ADD VALUE 'ADMIN_PHONE_VERIFICATION_REQUESTED';
+
