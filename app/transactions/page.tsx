@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import {
   getPublicTransactionsPaged,
   getTransactionStats,
@@ -18,6 +19,7 @@ import EmptyState from "@/app/components/ui/EmptyState";
 import PremiumGate from "@/app/components/premium/PremiumGate";
 import { getPublicSession } from "@/lib/public-auth/session";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
+import { SkeletonBlock, SkeletonStatRow } from "@/app/components/ui/Skeleton";
 
 export const metadata: Metadata = {
   title: "Transactions — NoDalalTalks",
@@ -45,7 +47,34 @@ interface TransactionSearchParams {
   page?: string;
 }
 
-export default async function TransactionsPage({ searchParams }: { searchParams: Promise<TransactionSearchParams> }) {
+function ResultsFallback() {
+  return (
+    <>
+      <SkeletonStatRow count={7} />
+      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <SkeletonBlock className="h-48 w-full" />
+        <SkeletonBlock className="h-48 w-full" />
+        <SkeletonBlock className="h-48 w-full" />
+      </div>
+      <div className="mt-6">
+        <SkeletonBlock className="h-64 w-full" />
+      </div>
+    </>
+  );
+}
+
+/**
+ * Data-dependent part of the page, in its own nested Suspense boundary —
+ * same fix already proven on /projects: this page is `force-dynamic` with a
+ * loading.tsx, and Next wraps a page's whole body in one automatic Suspense
+ * boundary. Every filter change was therefore suspending the WHOLE page
+ * (Navbar + TransactionFilters included), which unmounts an open Filters
+ * dialog instead of just refreshing the results below it. Navbar/
+ * TransactionFilters now render from the outer function, which only awaits
+ * filter-independent reference data (locality/builder/project select
+ * options), so they stay mounted across searchParams-only navigations.
+ */
+async function TransactionResults({ searchParams }: { searchParams: Promise<TransactionSearchParams> }) {
   const params = await searchParams;
   const page = Math.max(1, Number(params.page ?? 1) || 1);
 
@@ -67,14 +96,11 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
     sortBy: params.sort,
   };
 
-  const [{ items: transactions, total, totalPages }, stats, monthlyTrend, propertyTypes, localities, builders, projects, session] = await Promise.all([
+  const [{ items: transactions, total, totalPages }, stats, monthlyTrend, propertyTypes, session] = await Promise.all([
     getPublicTransactionsPaged({ ...filters, page, pageSize: 20 }),
     getTransactionStats(filters),
     getTransactionMonthlyTrend(filters, 12),
     getTransactionPropertyTypeDistribution(filters),
-    getLocalitiesForSelect(),
-    getBuildersForSelect(),
-    getProjectsForSelect(),
     getPublicSession(),
   ]);
   const locked = session === null;
@@ -102,6 +128,73 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
   }
 
   return (
+    <>
+      <div>
+        <h1 className="font-mono text-lg font-semibold text-foreground">
+          {total} transaction{total === 1 ? "" : "s"}
+        </h1>
+        <p className="text-xs text-muted">Registered sale, resale and lease transactions across Mumbai.</p>
+      </div>
+
+      <PremiumGate locked={locked} feature="transaction-history" next={next}>
+        <TransactionStats stats={stats} locked={locked} />
+      </PremiumGate>
+
+      <PremiumGate locked={locked} feature="market-analytics" next={next}>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="rounded-sm border border-border bg-surface p-4">
+            <p className="font-mono text-xs uppercase tracking-wide text-muted">Monthly Transactions</p>
+            <div className="mt-3">
+              <TransactionVolumeChart points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), count: p.count }))} />
+            </div>
+          </div>
+          <div className="rounded-sm border border-border bg-surface p-4">
+            <p className="font-mono text-xs uppercase tracking-wide text-muted">Average Price Trend</p>
+            <div className="mt-3">
+              <TransactionLineChart
+                points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.avgPricePaise }))}
+                ariaLabel="Average transaction price trend"
+              />
+            </div>
+          </div>
+          <div className="rounded-sm border border-border bg-surface p-4">
+            <p className="font-mono text-xs uppercase tracking-wide text-muted">Property Type Distribution</p>
+            <div className="mt-3">
+              <PropertyTypeDistribution buckets={locked ? [] : propertyTypes} />
+            </div>
+          </div>
+        </div>
+      </PremiumGate>
+
+      <PremiumGate locked={locked} feature="market-analytics" next={next}>
+        <div className="rounded-sm border border-border bg-surface p-4">
+          <p className="font-mono text-xs uppercase tracking-wide text-muted">Median Price Trend</p>
+          <div className="mt-3">
+            <TransactionLineChart
+              points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.medianPricePaise }))}
+              ariaLabel="Median transaction price trend"
+            />
+          </div>
+        </div>
+      </PremiumGate>
+
+      {transactions.length === 0 ? (
+        <EmptyState title="No transactions match these filters" message="Try widening your search or resetting filters." />
+      ) : (
+        <PremiumGate locked={locked} feature="transaction-history" next={next}>
+          <TransactionTable transactions={transactions} locked={locked} />
+        </PremiumGate>
+      )}
+
+      <Pagination page={page} totalPages={totalPages} total={total} buildHref={buildHref} />
+    </>
+  );
+}
+
+export default async function TransactionsPage({ searchParams }: { searchParams: Promise<TransactionSearchParams> }) {
+  const [localities, builders, projects] = await Promise.all([getLocalitiesForSelect(), getBuildersForSelect(), getProjectsForSelect()]);
+
+  return (
     <div className="flex min-h-screen flex-1 flex-col bg-background">
       <Navbar />
       <TransactionFilters
@@ -111,64 +204,9 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
       />
 
       <main id="main-content" className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 py-6 sm:px-6">
-        <div>
-          <h1 className="font-mono text-lg font-semibold text-foreground">
-            {total} transaction{total === 1 ? "" : "s"}
-          </h1>
-          <p className="text-xs text-muted">Registered sale, resale and lease transactions across Mumbai.</p>
-        </div>
-
-        <PremiumGate locked={locked} feature="transaction-history" next={next}>
-          <TransactionStats stats={stats} locked={locked} />
-        </PremiumGate>
-
-        <PremiumGate locked={locked} feature="market-analytics" next={next}>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Monthly Transactions</p>
-              <div className="mt-3">
-                <TransactionVolumeChart points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), count: p.count }))} />
-              </div>
-            </div>
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Average Price Trend</p>
-              <div className="mt-3">
-                <TransactionLineChart
-                  points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.avgPricePaise }))}
-                  ariaLabel="Average transaction price trend"
-                />
-              </div>
-            </div>
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-muted">Property Type Distribution</p>
-              <div className="mt-3">
-                <PropertyTypeDistribution buckets={locked ? [] : propertyTypes} />
-              </div>
-            </div>
-          </div>
-        </PremiumGate>
-
-        <PremiumGate locked={locked} feature="market-analytics" next={next}>
-          <div className="rounded-sm border border-border bg-surface p-4">
-            <p className="font-mono text-xs uppercase tracking-wide text-muted">Median Price Trend</p>
-            <div className="mt-3">
-              <TransactionLineChart
-                points={locked ? [] : monthlyTrend.map((p) => ({ month: p.month.toISOString(), value: p.medianPricePaise }))}
-                ariaLabel="Median transaction price trend"
-              />
-            </div>
-          </div>
-        </PremiumGate>
-
-        {transactions.length === 0 ? (
-          <EmptyState title="No transactions match these filters" message="Try widening your search or resetting filters." />
-        ) : (
-          <PremiumGate locked={locked} feature="transaction-history" next={next}>
-            <TransactionTable transactions={transactions} locked={locked} />
-          </PremiumGate>
-        )}
-
-        <Pagination page={page} totalPages={totalPages} total={total} buildHref={buildHref} />
+        <Suspense fallback={<ResultsFallback />}>
+          <TransactionResults searchParams={searchParams} />
+        </Suspense>
       </main>
 
       <Footer />

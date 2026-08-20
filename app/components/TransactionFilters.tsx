@@ -13,6 +13,8 @@ import {
   type PropertyCategory,
 } from "@/lib/project-meta";
 import ActiveFilters, { type ActiveFilterChip } from "@/app/components/ui/ActiveFilters";
+import Dialog from "@/app/components/ui/Dialog";
+import PriceRangeFilter from "@/app/components/PriceRangeFilter";
 import { chipClass, selectClass, selectStyle } from "@/app/components/ui/formStyles";
 
 export interface FilterOption {
@@ -38,6 +40,23 @@ const SALE_TYPE_CHIPS = [
   { label: "Rental", value: "rental" },
 ] as const;
 
+/** Every param a "Filters" click can set — used only for the button's active-count badge; search (q) is its own always-visible field, not counted here. */
+const FILTER_KEYS = [
+  "locality",
+  "builder",
+  "project",
+  "category",
+  "bedrooms",
+  "priceMin",
+  "priceMax",
+  "areaMin",
+  "areaMax",
+  "dateFrom",
+  "dateTo",
+  "type",
+  "readiness",
+] as const;
+
 export default function TransactionFilters({
   localities,
   builders,
@@ -51,23 +70,43 @@ export default function TransactionFilters({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [q, setQ] = useState(searchParams.get("q") ?? "");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [results, setResults] = useState<PublicSearchResult | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
 
+  // Same fix already proven on ProjectFilters.tsx / /projects: tracks the
+  // last params this component itself asked the router to navigate to,
+  // rather than trusting window.location.search, which can lag a push by
+  // however long that navigation's data fetch takes. Two changes fired close
+  // together (e.g. the price range's From then To field) would otherwise
+  // both build off the same stale pre-navigation URL and the second push
+  // would silently overwrite the first's change instead of merging with it.
+  const pendingParamsRef = useRef<URLSearchParams | null>(null);
+
+  useEffect(() => {
+    pendingParamsRef.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  function currentParams(): URLSearchParams {
+    return new URLSearchParams((pendingParamsRef.current ?? new URLSearchParams(window.location.search)).toString());
+  }
+
   function updateParams(updates: Record<string, string>) {
-    const params = new URLSearchParams(searchParams.toString());
+    const params = currentParams();
     for (const [key, value] of Object.entries(updates)) {
       if (value) params.set(key, value);
       else params.delete(key);
     }
     params.delete("page");
+    pendingParamsRef.current = params;
     router.push(`${pathname}?${params.toString()}`);
     const applied = Object.entries(updates).filter(([, value]) => value);
-    const q = applied.find(([key]) => key === "q");
-    if (q) trackSearchPerformed(q[1]);
+    const qUpdate = applied.find(([key]) => key === "q");
+    if (qUpdate) trackSearchPerformed(qUpdate[1]);
     const otherFilters = applied.filter(([key]) => key !== "q");
     if (otherFilters.length > 0) trackFilterApplied("transactions", Object.fromEntries(otherFilters));
   }
@@ -183,12 +222,11 @@ export default function TransactionFilters({
     bucket.items.push(item);
   }
 
-  const numberClass =
-    "w-20 rounded-sm border border-border bg-surface px-2.5 py-2 text-xs text-foreground placeholder:text-muted transition-colors focus:border-accent focus:outline-none";
   const dateInputClass =
     "rounded-sm border border-border bg-surface px-2.5 py-2 text-xs text-foreground transition-colors focus:border-accent focus:outline-none";
   const currentReadiness = searchParams.get("readiness") ?? "";
   const currentSaleType = searchParams.get("type") ?? "";
+  const activeFilterCount = FILTER_KEYS.filter((key) => searchParams.get(key)).length;
 
   const chips: ActiveFilterChip[] = [];
   if (searchParams.get("q")) chips.push({ keys: ["q"], label: `Search: "${searchParams.get("q")}"` });
@@ -227,7 +265,7 @@ export default function TransactionFilters({
 
   return (
     <div className="sticky top-[98px] z-40 rounded-3xl border border-border bg-surface/95 px-4 py-4 shadow-sm backdrop-blur sm:px-6 md:top-[57px]">
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex items-center gap-3">
         <div ref={boxRef} className="relative min-w-0 flex-1">
           <input
             value={q}
@@ -270,127 +308,146 @@ export default function TransactionFilters({
           ) : null}
         </div>
 
-        <select value={searchParams.get("locality") ?? ""} onChange={(e) => updateParam("locality", e.target.value)} className={selectClass} style={selectStyle}>
-          <option value="">All localities</option>
-          {localities.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.name}
-            </option>
-          ))}
-        </select>
-        <select value={searchParams.get("builder") ?? ""} onChange={(e) => updateParam("builder", e.target.value)} className={selectClass} style={selectStyle}>
-          <option value="">All builders</option>
-          {builders.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </select>
-        <select value={searchParams.get("project") ?? ""} onChange={(e) => updateParam("project", e.target.value)} className={selectClass} style={selectStyle}>
-          <option value="">All projects</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-        <select value={searchParams.get("category") ?? ""} onChange={(e) => updateParam("category", e.target.value)} className={selectClass} style={selectStyle}>
-          <option value="">All property types</option>
-          {PROPERTY_CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {CATEGORY_LABEL[c]}
-            </option>
-          ))}
-        </select>
-        <select value={searchParams.get("bedrooms") ?? ""} onChange={(e) => updateParam("bedrooms", e.target.value)} className={selectClass} style={selectStyle}>
-          <option value="">Any configuration</option>
-          {CONFIGURATION_FILTER_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+        <button type="button" onClick={() => setFiltersOpen(true)} className={chipClass(activeFilterCount > 0)}>
+          Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+        </button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          type="number"
-          min={0}
-          defaultValue={searchParams.get("priceMin") ?? ""}
-          onBlur={(e) => updateParam("priceMin", e.target.value)}
-          placeholder="Min ₹"
-          className={numberClass}
-        />
-        <input
-          type="number"
-          min={0}
-          defaultValue={searchParams.get("priceMax") ?? ""}
-          onBlur={(e) => updateParam("priceMax", e.target.value)}
-          placeholder="Max ₹"
-          className={numberClass}
-        />
-        <input
-          type="number"
-          min={0}
-          defaultValue={searchParams.get("areaMin") ?? ""}
-          onBlur={(e) => updateParam("areaMin", e.target.value)}
-          placeholder="Min sqft"
-          className={numberClass}
-        />
-        <input
-          type="number"
-          min={0}
-          defaultValue={searchParams.get("areaMax") ?? ""}
-          onBlur={(e) => updateParam("areaMax", e.target.value)}
-          placeholder="Max sqft"
-          className={numberClass}
-        />
-        <input
-          type="date"
-          defaultValue={searchParams.get("dateFrom") ?? ""}
-          onChange={(e) => updateParam("dateFrom", e.target.value)}
-          className={dateInputClass}
-        />
-        <input
-          type="date"
-          defaultValue={searchParams.get("dateTo") ?? ""}
-          onChange={(e) => updateParam("dateTo", e.target.value)}
-          className={dateInputClass}
-        />
-        <select value={searchParams.get("sort") ?? "date_desc"} onChange={(e) => updateParam("sort", e.target.value)} className={selectClass} style={selectStyle}>
-          {TRANSACTION_SORT_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      {chips.length > 0 ? <ActiveFilters chips={chips} /> : null}
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        {SALE_TYPE_CHIPS.map((chip) => (
-          <button
-            key={chip.value}
-            type="button"
-            onClick={() => updateParam("type", currentSaleType === chip.value ? "" : chip.value)}
-            className={chipClass(currentSaleType === chip.value)}
-          >
-            {chip.label}
-          </button>
-        ))}
-        <span className="mx-1 h-4 w-px bg-border" />
-        {READINESS_CHIPS.map((chip) => (
-          <button
-            key={chip.value}
-            type="button"
-            onClick={() => updateParam("readiness", currentReadiness === chip.value ? "" : chip.value)}
-            className={chipClass(currentReadiness === chip.value)}
-          >
-            {chip.label}
-          </button>
-        ))}
-      </div>
+      {filtersOpen ? (
+        <Dialog
+          title="Filters"
+          onClose={() => setFiltersOpen(false)}
+          footer={
+            <button
+              type="button"
+              onClick={() => setFiltersOpen(false)}
+              className="w-full rounded-sm bg-accent px-4 py-2 text-xs font-mono font-semibold uppercase tracking-wide text-white hover:bg-accent-dim"
+            >
+              Show results
+            </button>
+          }
+        >
+          <div className="flex flex-col gap-3">
+            {/* Primary filters — Location, Price, Date — first, per the simplified-filter spec. */}
+            <select value={searchParams.get("locality") ?? ""} onChange={(e) => updateParam("locality", e.target.value)} className={selectClass} style={selectStyle}>
+              <option value="">All localities</option>
+              {localities.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
 
-      <ActiveFilters chips={chips} />
+            <PriceRangeFilter
+              minRupees={searchParams.get("priceMin") ? Number(searchParams.get("priceMin")) : null}
+              maxRupees={searchParams.get("priceMax") ? Number(searchParams.get("priceMax")) : null}
+              onCommit={(min, max) => updateParams({ priceMin: min !== null ? String(min) : "", priceMax: max !== null ? String(max) : "" })}
+            />
+
+            <div className="flex gap-3">
+              <input
+                type="date"
+                defaultValue={searchParams.get("dateFrom") ?? ""}
+                onChange={(e) => updateParam("dateFrom", e.target.value)}
+                className={`w-full ${dateInputClass}`}
+                aria-label="From date"
+              />
+              <input
+                type="date"
+                defaultValue={searchParams.get("dateTo") ?? ""}
+                onChange={(e) => updateParam("dateTo", e.target.value)}
+                className={`w-full ${dateInputClass}`}
+                aria-label="To date"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5 border-t border-border pt-3">
+              {SALE_TYPE_CHIPS.map((chip) => (
+                <button
+                  key={chip.value}
+                  type="button"
+                  onClick={() => updateParam("type", currentSaleType === chip.value ? "" : chip.value)}
+                  className={chipClass(currentSaleType === chip.value)}
+                >
+                  {chip.label}
+                </button>
+              ))}
+              <span className="mx-1 h-4 w-px bg-border" />
+              {READINESS_CHIPS.map((chip) => (
+                <button
+                  key={chip.value}
+                  type="button"
+                  onClick={() => updateParam("readiness", currentReadiness === chip.value ? "" : chip.value)}
+                  className={chipClass(currentReadiness === chip.value)}
+                >
+                  {chip.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Secondary filters. */}
+            <select value={searchParams.get("builder") ?? ""} onChange={(e) => updateParam("builder", e.target.value)} className={selectClass} style={selectStyle}>
+              <option value="">All builders</option>
+              {builders.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+            <select value={searchParams.get("project") ?? ""} onChange={(e) => updateParam("project", e.target.value)} className={selectClass} style={selectStyle}>
+              <option value="">All projects</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <select value={searchParams.get("category") ?? ""} onChange={(e) => updateParam("category", e.target.value)} className={selectClass} style={selectStyle}>
+              <option value="">All property types</option>
+              {PROPERTY_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {CATEGORY_LABEL[c]}
+                </option>
+              ))}
+            </select>
+            <select value={searchParams.get("bedrooms") ?? ""} onChange={(e) => updateParam("bedrooms", e.target.value)} className={selectClass} style={selectStyle}>
+              <option value="">Any configuration</option>
+              {CONFIGURATION_FILTER_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <div className="flex gap-3">
+              <input
+                type="number"
+                min={0}
+                defaultValue={searchParams.get("areaMin") ?? ""}
+                onBlur={(e) => updateParam("areaMin", e.target.value)}
+                placeholder="Min sqft"
+                className="w-full rounded-sm border border-border bg-surface px-2.5 py-2 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+              />
+              <input
+                type="number"
+                min={0}
+                defaultValue={searchParams.get("areaMax") ?? ""}
+                onBlur={(e) => updateParam("areaMax", e.target.value)}
+                placeholder="Max sqft"
+                className="w-full rounded-sm border border-border bg-surface px-2.5 py-2 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+              />
+            </div>
+            <select value={searchParams.get("sort") ?? "date_desc"} onChange={(e) => updateParam("sort", e.target.value)} className={selectClass} style={selectStyle}>
+              {TRANSACTION_SORT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </Dialog>
+      ) : null}
     </div>
   );
 }
