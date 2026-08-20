@@ -4,24 +4,42 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/guard";
 import { getPublicSession } from "@/lib/public-auth/session";
 import { prisma } from "@/lib/prisma";
+import { updateManyByRow } from "@/lib/actions/errors";
 
-/** Marks every unread notification for the signed-in admin as read — kept for a "mark all read" affordance, but per-item reads now happen via markNotificationReadAction so unread/read can visibly coexist in the list instead of the whole dropdown flipping to read the instant it's opened. */
+/**
+ * Marks every unread notification for the signed-in admin as read. Per-row
+ * update() via updateManyByRow, NOT updateMany() -- the Neon HTTP adapter
+ * (PrismaNeonHttp) rejects updateMany with "Transactions are not supported
+ * in HTTP mode" (same constraint documented on updateManyByRow itself and
+ * fixed the same way everywhere else in this codebase). All three functions
+ * in this file used updateMany() until now, which meant marking a
+ * notification read has never actually succeeded in any deployed
+ * environment -- the write always threw, previously swallowed silently by a
+ * fire-and-forget caller (making the badge look "stuck"), now caught here
+ * before it can reach a caller that awaits and crashes on the throw.
+ */
 export async function markAdminNotificationsReadAction(): Promise<void> {
   const session = await requireSession();
-  await prisma.notification.updateMany({
+  const unread = await prisma.notification.findMany({
     where: { recipientAdminUserId: session.userId, readAt: null },
-    data: { readAt: new Date() },
+    select: { id: true },
   });
+  await updateManyByRow(
+    unread.map((n) => n.id),
+    (id) => prisma.notification.update({ where: { id }, data: { readAt: new Date() } })
+  );
   revalidatePath("/admin", "layout");
 }
 
 /** Marks one admin notification as read on click. Scoped to the caller's own recipientAdminUserId so one admin can't mark another's notifications read. */
 export async function markNotificationReadAction(notificationId: string): Promise<void> {
   const session = await requireSession();
-  await prisma.notification.updateMany({
+  const notification = await prisma.notification.findFirst({
     where: { id: notificationId, recipientAdminUserId: session.userId, readAt: null },
-    data: { readAt: new Date() },
+    select: { id: true },
   });
+  if (!notification) return;
+  await prisma.notification.update({ where: { id: notification.id }, data: { readAt: new Date() } });
   revalidatePath("/admin", "layout");
 }
 
@@ -29,9 +47,11 @@ export async function markNotificationReadAction(notificationId: string): Promis
 export async function markPublicNotificationReadAction(notificationId: string): Promise<void> {
   const session = await getPublicSession();
   if (!session) return;
-  await prisma.notification.updateMany({
+  const notification = await prisma.notification.findFirst({
     where: { id: notificationId, recipientPublicUserId: session.userId, readAt: null },
-    data: { readAt: new Date() },
+    select: { id: true },
   });
+  if (!notification) return;
+  await prisma.notification.update({ where: { id: notification.id }, data: { readAt: new Date() } });
   revalidatePath("/", "layout");
 }
