@@ -34,8 +34,11 @@ import ClearAllButton from "@/app/components/ClearAllButton";
 import PreferencesForm from "./PreferencesForm";
 import NotificationPreferencesForm from "./NotificationPreferencesForm";
 import ProfileForm from "./ProfileForm";
+import PhoneVerificationCard from "./PhoneVerificationCard";
 import ProfileCompletionBar from "@/app/components/ui/ProfileCompletionBar";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
+import { generateUniqueReferralCode } from "@/lib/referral";
+import ShareReferralCard from "@/app/components/ShareReferralCard";
 
 export const metadata: Metadata = { title: "My Dashboard — NoDalalTalks" };
 export const dynamic = "force-dynamic";
@@ -60,7 +63,8 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
   // Popular Searches, preferences, notification-preferences, and
   // getLocalitiesForSelect() queries that only the Profile tab needs. `user`
   // is the one exception: the header (name/avatar) renders on every tab.
-  const [user, savedProjects, wishlist, recentViews, savedSearches, searchHistory, popularSearches, preferences, notificationPreferences, localities] =
+  // eslint-disable-next-line prefer-const -- `user` is reassigned below by the referralCode lazy-backfill
+  let [user, savedProjects, wishlist, recentViews, savedSearches, searchHistory, popularSearches, preferences, notificationPreferences, localities] =
     await Promise.all([
       prisma.publicUser.findUnique({ where: { id: session.userId } }),
       tab === "profile" ? getSavedProjectsForUser(session.userId) : Promise.resolve([]),
@@ -74,6 +78,14 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
       tab === "profile" ? getLocalitiesForSelect() : Promise.resolve([]),
     ]);
   if (!user) notFound();
+
+  // Lazy backfill: accounts created before the referral feature shipped have
+  // no referralCode. One-time self-heal on next /account view rather than a
+  // bulk migration script -- cheap, and every account gets one exactly once.
+  if (!user.referralCode) {
+    const referralCode = await generateUniqueReferralCode();
+    user = await prisma.publicUser.update({ where: { id: user.id }, data: { referralCode } });
+  }
 
   if (tab === "profile") {
     await recordResearchEvent("PROFILE_VIEWED", { entityType: "PublicUser", entityId: user.id });
@@ -102,6 +114,8 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
             <p className="text-sm text-muted">{user.name ?? user.email}</p>
           </div>
         </div>
+
+        <ShareReferralCard referralCode={user.referralCode as string} />
 
         <div className="flex flex-wrap gap-1 overflow-x-auto border-b border-border pb-px">
           {TABS.map((t) => (
@@ -350,6 +364,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               </div>
               <div className="mt-4 border-t border-border pt-4">
                 <ProfileForm name={user.name} phone={user.phone} />
+                <PhoneVerificationCard verified={user.phoneVerifiedAt !== null} />
               </div>
             </div>
 

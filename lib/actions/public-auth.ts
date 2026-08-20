@@ -1,6 +1,7 @@
 "use server";
 
 import crypto from "crypto";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -13,6 +14,8 @@ import { recalculatePublicUserCompletion } from "@/lib/profile-completion";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/request-ip";
 import { sendPasswordResetEmail, sendWelcomeEmail } from "@/lib/email";
+import { generateUniqueReferralCode, resolveReferral } from "@/lib/referral";
+import { REFERRAL_COOKIE_NAME } from "@/lib/referral-constants";
 
 const RESET_TOKEN_TTL_MINUTES = 30;
 
@@ -54,13 +57,34 @@ export async function signupAction(_prevState: PublicAuthState, formData: FormDa
   const existing = await prisma.publicUser.findUnique({ where: { email } });
   if (existing) return { error: "An account with this email already exists." };
 
+  // Every account gets its own shareable referralCode regardless of signup
+  // path (see the Google callback for the other one) -- and, if this visit
+  // carries a first-touch referral cookie, resolve WHO referred them. Both
+  // best-effort in the sense that a bad/expired code just leaves
+  // referredByUserId null rather than failing the signup.
+  const [referralCode, cookieStore] = await Promise.all([generateUniqueReferralCode(), cookies()]);
+  const referral = await resolveReferral(cookieStore.get(REFERRAL_COOKIE_NAME)?.value);
+
   const passwordHash = await hashPassword(password);
   const user = await prisma.publicUser.create({
-    data: { name, email, passwordHash, provider: "CREDENTIALS", lastLoginAt: new Date() },
+    data: {
+      name,
+      email,
+      passwordHash,
+      provider: "CREDENTIALS",
+      lastLoginAt: new Date(),
+      referralCode,
+      referredByUserId: referral?.referredByUserId ?? null,
+      referralSource: referral?.referralSource ?? null,
+    },
   });
 
   await setPublicSessionCookie({ userId: user.id, email: user.email, name: user.name, image: user.image });
-  await recordResearchEvent("SIGNUP_COMPLETED", { entityType: "PublicUser", entityId: user.id, metadata: { method: "credentials" } });
+  await recordResearchEvent("SIGNUP_COMPLETED", {
+    entityType: "PublicUser",
+    entityId: user.id,
+    metadata: { method: "credentials", referredByUserId: referral?.referredByUserId ?? null },
+  });
   // Every other writer of a scored field recomputes completion (see the
   // Google callback) — credentials signup was the other path that didn't,
   // so a fresh email/password account under-reported 0% the same way a

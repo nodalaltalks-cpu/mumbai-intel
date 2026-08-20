@@ -13,6 +13,7 @@ import PriceTrend from "./components/PriceTrend";
 import RecentlyActiveDevelopers from "./components/RecentlyActiveDevelopers";
 import TopDevelopers from "./components/TopDevelopers";
 import TrendingLocalities from "./components/TrendingLocalities";
+import { recordResearchEvent } from "@/lib/analytics/research-events";
 
 // All sections below read live from Prisma — force dynamic rendering so the
 // homepage never serves a stale build-time snapshot.
@@ -34,7 +35,16 @@ const ORGANIZATION_SCHEMA = {
   url: process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "http://localhost:3000",
 };
 
-export default function Home() {
+export default async function Home({ searchParams }: { searchParams: Promise<{ ref?: string }> }) {
+  // The mi_ref_code cookie (set by proxy.ts) handles WHO gets attribution
+  // credit at signup; this fires the click-log entry itself, independent of
+  // whether that cookie was already set by an earlier visit -- every
+  // referral-link visit is a real signal worth counting, not just the first.
+  const { ref } = await searchParams;
+  if (ref) {
+    await recordResearchEvent("REFERRAL_LINK_CLICKED", { metadata: { referralCode: ref } });
+  }
+
   return (
     <div className="flex min-h-screen flex-1 flex-col bg-background">
       <JsonLd data={ORGANIZATION_SCHEMA} />

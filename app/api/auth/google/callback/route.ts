@@ -8,6 +8,8 @@ import { recalculatePublicUserCompletion } from "@/lib/profile-completion";
 import { sendWelcomeEmail } from "@/lib/email";
 import { GA_GOOGLE_LOGIN_COOKIE } from "@/lib/analytics/ga";
 import { OAUTH_STATE_COOKIE_NAME, sanitizeNextPath } from "../route";
+import { generateUniqueReferralCode, resolveReferral } from "@/lib/referral";
+import { REFERRAL_COOKIE_NAME } from "@/lib/referral-constants";
 
 function failure(origin: string, reason: string) {
   const url = new URL("/login", origin);
@@ -76,6 +78,13 @@ export async function GET(request: NextRequest) {
           },
         });
       } else {
+        // Same referral resolution as the credentials path (lib/actions/public-auth.ts
+        // signupAction) -- both new-account paths must attribute a referral,
+        // not just the more common one.
+        const [referralCode, referral] = await Promise.all([
+          generateUniqueReferralCode(),
+          resolveReferral(request.cookies.get(REFERRAL_COOKIE_NAME)?.value),
+        ]);
         user = await prisma.publicUser.create({
           data: {
             name: profile.name,
@@ -85,6 +94,9 @@ export async function GET(request: NextRequest) {
             provider: "GOOGLE",
             emailVerifiedAt: profile.email_verified ? new Date() : null,
             lastLoginAt: new Date(),
+            referralCode,
+            referredByUserId: referral?.referredByUserId ?? null,
+            referralSource: referral?.referralSource ?? null,
           },
         });
         authEvent = "SIGNUP_COMPLETED";

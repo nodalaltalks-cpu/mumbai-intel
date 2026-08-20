@@ -36,6 +36,9 @@ export default async function AdminAnalyticsPage() {
           <Link href="/admin/analytics/data-quality" className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
             Data Quality →
           </Link>
+          <Link href="/admin/analytics/referrals" className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
+            Referrals →
+          </Link>
         </div>
       </div>
 
