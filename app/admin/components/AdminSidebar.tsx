@@ -49,6 +49,7 @@ const NAV_SECTIONS: { label: string; links: { label: string; href: string }[] }[
   {
     label: "System",
     links: [
+      { label: "System Health", href: "/admin/system-health" },
       { label: "Trash", href: "/admin/trash" },
       { label: "Users", href: "/admin/users" },
       { label: "Settings", href: "/admin/settings" },

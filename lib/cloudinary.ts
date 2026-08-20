@@ -113,6 +113,37 @@ export async function deleteDocumentByPublicId(publicId: string): Promise<void> 
   await cloudinary.uploader.destroy(publicId, { resource_type: "raw" });
 }
 
+export interface CloudinaryUsage {
+  storageBytes: number;
+  objectCount: number;
+  /** Cloudinary's own reported plan credit usage, when the account has a knowable plan limit — null otherwise. Never estimated. */
+  creditsUsedPercent: number | null;
+}
+
+/**
+ * Real provider-reported storage/usage figures for the System Health page —
+ * Cloudinary's Admin API (cloudinary.api.usage()), not used anywhere else in
+ * this codebase (everywhere else only uses the upload/transform/delete APIs
+ * above). Best-effort: a failed usage call must not break the page that
+ * shows it, same convention as every other admin query's safeQuery wrapper.
+ */
+export async function getCloudinaryUsage(): Promise<CloudinaryUsage | null> {
+  ensureConfigured();
+  try {
+    const usage = await cloudinary.api.usage();
+    const creditsUsedPercent =
+      typeof usage.credits?.used_percent === "number" ? Math.round(usage.credits.used_percent * 100) / 100 : null;
+    return {
+      storageBytes: usage.storage?.usage ?? 0,
+      objectCount: usage.objects?.usage ?? 0,
+      creditsUsedPercent,
+    };
+  } catch (error) {
+    console.error("[cloudinary] failed to fetch usage:", error);
+    return null;
+  }
+}
+
 /** Best-effort: derive a Cloudinary public_id from one of our own secure_urls. */
 export function publicIdFromUrl(url: string): string | null {
   const match = url.match(/\/upload\/(?:v\d+\/)?(.+?)\.[a-zA-Z0-9]+$/);

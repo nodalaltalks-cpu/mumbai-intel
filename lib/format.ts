@@ -46,7 +46,10 @@ export function formatBytes(bytes: number | null | undefined): string {
   if (bytes === null || bytes === undefined) return "--";
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  // GB branch added for System Health (database/Cloudinary sizes commonly exceed 1024MB) --
+  // existing KB/MB callers (brochure/image file sizes, always well under 1GB) are unaffected.
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 export function formatCompactCount(n: number): string {
