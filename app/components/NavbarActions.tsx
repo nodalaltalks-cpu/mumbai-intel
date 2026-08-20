@@ -5,10 +5,12 @@ import { useEffect, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import GlobalSearch from "./GlobalSearch";
 import ProfileMenu from "./ProfileMenu";
+import NotificationBell from "./NotificationBell";
 import Button from "@/app/components/ui/Button";
 import { IconSearch } from "@/app/components/ui/icons";
 import { useCompareList } from "@/lib/compare-list";
 import { usePremiumGate } from "@/lib/premium/gate-context";
+import type { PublicNotificationItem } from "@/lib/queries/dashboard";
 
 export interface NavbarPublicUser {
   name: string | null;
@@ -17,7 +19,13 @@ export interface NavbarPublicUser {
 }
 
 /** Owns the Navbar's client-side pieces: global search and the signed-in/signed-out control. Deliberately does NOT know about founder auth — the Admin link never reaches this component at all. */
-export default function NavbarActions({ publicUser }: { publicUser: NavbarPublicUser | null }) {
+export default function NavbarActions({
+  publicUser,
+  notifications,
+}: {
+  publicUser: NavbarPublicUser | null;
+  notifications: PublicNotificationItem[];
+}) {
   const [searchOpen, setSearchOpen] = useState(false);
   const compareList = useCompareList();
   const { openGate } = usePremiumGate();
@@ -54,7 +62,10 @@ export default function NavbarActions({ publicUser }: { publicUser: NavbarPublic
       </Link>
 
       {publicUser ? (
-        <ProfileMenu user={publicUser} />
+        <>
+          <NotificationBell notifications={notifications} />
+          <ProfileMenu user={publicUser} />
+        </>
       ) : (
         <Button
           type="button"

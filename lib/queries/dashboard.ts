@@ -12,6 +12,25 @@ import { TRANSACTION_TYPE_LABEL, type TransactionType } from "@/lib/project-meta
 
 export type DashboardEntityType = "Project" | "Builder" | "Locality" | "Transaction" | "MarketReport";
 
+export interface PublicNotificationItem {
+  id: string;
+  title: string;
+  body: string;
+  entityType: string | null;
+  entityId: string | null;
+  readAt: Date | null;
+  createdAt: Date;
+}
+
+/** In-app notifications for a signed-in visitor (report received/under review/resolved) — mirrors getAdminNotifications, same Notification table, other recipient column. */
+export async function getPublicNotifications(publicUserId: string, limit = 15): Promise<PublicNotificationItem[]> {
+  return prisma.notification.findMany({
+    where: { recipientPublicUserId: publicUserId },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+}
+
 export interface WishlistItem {
   /** The underlying SavedProject/Wishlist row id — pass to the remove action. */
   id: string;

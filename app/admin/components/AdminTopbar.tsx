@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { logoutAction } from "@/lib/actions/auth";
-import { markAdminNotificationsReadAction } from "@/lib/actions/notifications";
+import { markNotificationReadAction } from "@/lib/actions/notifications";
 import type { SessionPayload } from "@/lib/auth/session";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatDateTime } from "@/lib/format";
 
 export interface ActivityItem {
   id: string;
@@ -73,6 +73,7 @@ export default function AdminTopbar({
   onOpenSearch: () => void;
 }) {
   const [openMenu, setOpenMenu] = useState<MenuKey>(null);
+  const [, startMarkRead] = useTransition();
   const lastSeenAt = useSyncExternalStore(subscribeToActivitySeen, getActivityLastSeen, getActivityLastSeenServer);
 
   const quickAddRef = useRef<HTMLDivElement>(null);
@@ -120,11 +121,13 @@ export default function AdminTopbar({
   const unreadNotificationCount = notifications.filter((n) => !n.readAt).length;
 
   function openReports() {
-    const wasOpen = openMenu === "reports";
-    setOpenMenu(wasOpen ? null : "reports");
-    if (!wasOpen && unreadNotificationCount > 0) {
-      void markAdminNotificationsReadAction();
-    }
+    setOpenMenu((current) => (current === "reports" ? null : "reports"));
+  }
+
+  function readNotification(id: string) {
+    startMarkRead(() => {
+      void markNotificationReadAction(id);
+    });
   }
 
   return (
@@ -215,9 +218,20 @@ export default function AdminTopbar({
           <div className="absolute right-0 z-40 mt-1.5 w-72 overflow-hidden rounded-sm border border-border bg-surface-raised shadow-xl">
             <div className="flex items-center justify-between border-b border-border px-3 py-2">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">Report notifications</p>
-              <Link href="/admin/reports" onClick={() => setOpenMenu(null)} className="text-[10px] text-accent hover:underline">
-                View all →
-              </Link>
+              <div className="flex items-center gap-2">
+                {unreadNotificationCount > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => startMarkRead(() => void Promise.all(notifications.filter((n) => !n.readAt).map((n) => markNotificationReadAction(n.id))))}
+                    className="text-[10px] text-muted hover:text-accent hover:underline"
+                  >
+                    Mark all read
+                  </button>
+                ) : null}
+                <Link href="/admin/reports" onClick={() => setOpenMenu(null)} className="text-[10px] text-accent hover:underline">
+                  View all →
+                </Link>
+              </div>
             </div>
             <div className="max-h-80 overflow-y-auto">
               {notifications.length === 0 ? (
@@ -227,12 +241,18 @@ export default function AdminTopbar({
                   <Link
                     key={item.id}
                     href="/admin/reports"
-                    onClick={() => setOpenMenu(null)}
-                    className={`block border-b border-border px-3 py-2 last:border-b-0 hover:bg-accent/5 ${item.readAt ? "" : "bg-accent/5"}`}
+                    onClick={() => {
+                      if (!item.readAt) readNotification(item.id);
+                      setOpenMenu(null);
+                    }}
+                    className={`block border-b border-border px-3 py-2 last:border-b-0 hover:bg-accent/5 ${item.readAt ? "opacity-60" : "bg-accent/5"}`}
                   >
-                    <p className="text-xs text-foreground">{item.title}</p>
+                    <div className="flex items-start gap-1.5">
+                      {!item.readAt ? <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" aria-hidden="true" /> : null}
+                      <p className={`text-xs ${item.readAt ? "text-muted" : "font-semibold text-foreground"}`}>{item.title}</p>
+                    </div>
                     <p className="mt-0.5 line-clamp-2 text-[11px] text-muted">{item.body}</p>
-                    <p className="mt-1 text-[10px] text-muted">{formatDate(item.createdAt)}</p>
+                    <p className="mt-1 text-[10px] text-muted">{formatDateTime(item.createdAt)}</p>
                   </Link>
                 ))
               )}

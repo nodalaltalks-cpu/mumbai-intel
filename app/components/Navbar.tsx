@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getSession } from "@/lib/auth/session";
 import { getPublicSession } from "@/lib/public-auth/session";
+import { getPublicNotifications } from "@/lib/queries/dashboard";
 import NavbarActions from "./NavbarActions";
 import NavbarShell from "./NavbarShell";
 import NavLink from "./NavLink";
@@ -30,6 +31,7 @@ const NAV_LINKS = [
  */
 export default async function Navbar() {
   const [founderSession, publicSession] = await Promise.all([getSession(), getPublicSession()]);
+  const notifications = publicSession ? await getPublicNotifications(publicSession.userId) : [];
 
   return (
     <NavbarShell>
@@ -59,6 +61,7 @@ export default async function Navbar() {
         <div className="flex items-center gap-3">
           <NavbarActions
             publicUser={publicSession ? { name: publicSession.name, email: publicSession.email, image: publicSession.image } : null}
+            notifications={notifications}
           />
           {founderSession ? (
             <Button href="/admin" variant="secondary" size="sm">
