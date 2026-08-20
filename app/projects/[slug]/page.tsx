@@ -32,7 +32,7 @@ import LocalityCard from "@/app/components/LocalityCard";
 import SaveProjectButton from "@/app/components/SaveProjectButton";
 import CompareToggleButton from "@/app/components/CompareToggleButton";
 import ShareButton from "@/app/components/ShareButton";
-import ContactDeveloperButton from "@/app/components/ContactDeveloperButton";
+import WhatsAppShareButton from "@/app/components/WhatsAppShareButton";
 import ReportIssueButton from "@/app/components/ReportIssueButton";
 import { isProjectSaved } from "@/lib/actions/saved-projects";
 import { getPublicSession } from "@/lib/public-auth/session";
@@ -225,11 +225,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           <SaveProjectButton projectId={project.id} initialSaved={isSaved} />
           <CompareToggleButton slug={project.slug} />
           <ShareButton title={project.name} text={`Check out ${project.name} on NoDalalTalks`} />
-          <ContactDeveloperButton
-            projectName={project.name}
-            defaultName={publicSession?.name}
-            defaultEmail={publicSession?.email}
-          />
+          <WhatsAppShareButton projectId={project.id} projectName={project.name} projectSlug={project.slug} />
           {project.brochureUrl ? (
             <BrochureDownloadLink
               slug={project.slug}

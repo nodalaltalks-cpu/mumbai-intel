@@ -3,7 +3,12 @@ import { getOrCreateAnonSessionId } from "@/lib/analytics/session-id";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
 import type { ResearchEventType } from "@prisma/client";
 
-const CLIENT_TRIGGERABLE_EVENT_TYPES: ResearchEventType[] = ["CONTINUE_RESEARCH_CLICKED", "LOCKED_FEATURE_CLICKED"];
+const CLIENT_TRIGGERABLE_EVENT_TYPES: ResearchEventType[] = [
+  "CONTINUE_RESEARCH_CLICKED",
+  "LOCKED_FEATURE_CLICKED",
+  "WHATSAPP_SHARE_CLICKED",
+  "REFERRAL_SHARE_INITIATED",
+];
 
 interface ResearchTrackBody {
   eventType?: string;

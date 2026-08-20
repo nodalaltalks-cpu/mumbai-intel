@@ -122,32 +122,6 @@ export async function sendNewsletterSignupEmail(email: string): Promise<void> {
   });
 }
 
-export async function sendProjectInquiryEmail(params: {
-  name: string;
-  email: string;
-  phone?: string;
-  message: string;
-  projectName: string;
-  projectUrl: string;
-}): Promise<void> {
-  const to = process.env.CONTACT_EMAIL;
-  if (!to) {
-    console.log(`[email] CONTACT_EMAIL is not set — would forward developer inquiry for ${params.projectName} from ${params.email}`);
-    return;
-  }
-  await sendEmail({
-    to,
-    subject: `Developer inquiry — ${params.projectName}`,
-    html: `
-      <p><strong>Project:</strong> ${escapeHtml(params.projectName)} (<a href="${escapeHtml(params.projectUrl)}">${escapeHtml(params.projectUrl)}</a>)</p>
-      <p><strong>From:</strong> ${escapeHtml(params.name)} (${escapeHtml(params.email)})${params.phone ? ` · ${escapeHtml(params.phone)}` : ""}</p>
-      <p><strong>Message:</strong></p>
-      <p>${escapeHtml(params.message).replace(/\n/g, "<br />")}</p>
-    `,
-    replyTo: params.email,
-  });
-}
-
 export async function sendReportIssueEmail(params: {
   reporterName: string | null;
   reporterEmail: string | null;

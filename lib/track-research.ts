@@ -4,7 +4,11 @@
  * Mirrors lib/track-brochure.ts's sendBeacon-with-fetch-fallback shape so
  * the write survives the click's navigation instead of racing it.
  */
-export type ClientResearchEventType = "CONTINUE_RESEARCH_CLICKED" | "LOCKED_FEATURE_CLICKED";
+export type ClientResearchEventType =
+  | "CONTINUE_RESEARCH_CLICKED"
+  | "LOCKED_FEATURE_CLICKED"
+  | "WHATSAPP_SHARE_CLICKED"
+  | "REFERRAL_SHARE_INITIATED";
 
 export function trackResearchEvent(
   eventType: ClientResearchEventType,
