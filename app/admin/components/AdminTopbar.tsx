@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { logoutAction } from "@/lib/actions/auth";
 import { markNotificationReadAction } from "@/lib/actions/notifications";
@@ -72,6 +73,7 @@ export default function AdminTopbar({
   notifications: NotificationItem[];
   onOpenSearch: () => void;
 }) {
+  const router = useRouter();
   const [openMenu, setOpenMenu] = useState<MenuKey>(null);
   const [, startMarkRead] = useTransition();
   const lastSeenAt = useSyncExternalStore(subscribeToActivitySeen, getActivityLastSeen, getActivityLastSeenServer);
@@ -124,9 +126,34 @@ export default function AdminTopbar({
     setOpenMenu((current) => (current === "reports" ? null : "reports"));
   }
 
+  // Server Actions called as plain functions (not <form action>) don't cause the calling
+  // Client Component to re-render just because they run revalidatePath() internally --
+  // that only invalidates the Router Cache, it doesn't refetch already-mounted components.
+  // Without an explicit router.refresh() after the mutation actually commits, the unread
+  // badge here can stay stuck at its stale count indefinitely. This was the real bug behind
+  // "Reports [2] doesn't decrease": clicking a notification raced its own navigation against
+  // a fire-and-forget write with no refresh, and "Mark all read" (no navigation at all) had
+  // no way to ever pick up the new state.
   function readNotification(id: string) {
-    startMarkRead(() => {
-      void markNotificationReadAction(id);
+    startMarkRead(async () => {
+      await markNotificationReadAction(id);
+      router.refresh();
+    });
+  }
+
+  function readAllNotifications() {
+    startMarkRead(async () => {
+      await Promise.all(notifications.filter((n) => !n.readAt).map((n) => markNotificationReadAction(n.id)));
+      router.refresh();
+    });
+  }
+
+  function openNotificationItem(item: NotificationItem) {
+    setOpenMenu(null);
+    startMarkRead(async () => {
+      if (!item.readAt) await markNotificationReadAction(item.id);
+      router.refresh();
+      router.push("/admin/reports");
     });
   }
 
@@ -220,11 +247,7 @@ export default function AdminTopbar({
               <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">Report notifications</p>
               <div className="flex items-center gap-2">
                 {unreadNotificationCount > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => startMarkRead(() => void Promise.all(notifications.filter((n) => !n.readAt).map((n) => markNotificationReadAction(n.id))))}
-                    className="text-[10px] text-muted hover:text-accent hover:underline"
-                  >
+                  <button type="button" onClick={readAllNotifications} className="text-[10px] text-muted hover:text-accent hover:underline">
                     Mark all read
                   </button>
                 ) : null}
@@ -238,14 +261,11 @@ export default function AdminTopbar({
                 <p className="px-3 py-4 text-center text-xs text-muted">No report notifications yet.</p>
               ) : (
                 notifications.map((item) => (
-                  <Link
+                  <button
                     key={item.id}
-                    href="/admin/reports"
-                    onClick={() => {
-                      if (!item.readAt) readNotification(item.id);
-                      setOpenMenu(null);
-                    }}
-                    className={`block border-b border-border px-3 py-2 last:border-b-0 hover:bg-accent/5 ${item.readAt ? "opacity-60" : "bg-accent/5"}`}
+                    type="button"
+                    onClick={() => openNotificationItem(item)}
+                    className={`block w-full border-b border-border px-3 py-2 text-left last:border-b-0 hover:bg-accent/5 ${item.readAt ? "opacity-60" : "bg-accent/5"}`}
                   >
                     <div className="flex items-start gap-1.5">
                       {!item.readAt ? <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" aria-hidden="true" /> : null}
@@ -253,7 +273,7 @@ export default function AdminTopbar({
                     </div>
                     <p className="mt-0.5 line-clamp-2 text-[11px] text-muted">{item.body}</p>
                     <p className="mt-1 text-[10px] text-muted">{formatDateTime(item.createdAt)}</p>
-                  </Link>
+                  </button>
                 ))
               )}
             </div>
