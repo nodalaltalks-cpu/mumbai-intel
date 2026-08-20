@@ -25,8 +25,20 @@ export default function Dialog({
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   useModalBackClose(true, onClose);
 
+  // Mount-only: focuses the close button once when the dialog first opens.
+  // Deliberately NOT re-run on every onClose identity change -- onClose is a
+  // fresh inline closure on every parent re-render (e.g. router.push from a
+  // filter field committing), and re-running this on each of those would
+  // yank focus back to the close button while the visitor is still typing
+  // into a field. If the next keystroke happens to be Space, the browser's
+  // native button-activation behavior then closes the dialog out from under
+  // them -- exactly what happened with the price filter's "1 Cr" input.
   useEffect(() => {
     closeButtonRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
     }

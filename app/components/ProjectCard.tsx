@@ -214,8 +214,15 @@ function QuickViewModal({ project, onClose }: { project: ProjectCardData; onClos
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   useModalBackClose(true, onClose);
 
+  // Mount-only -- see Dialog.tsx for why this must not re-run on every
+  // onClose identity change (it would yank focus back to the close button
+  // on every parent re-render while the visitor is mid-interaction).
   useEffect(() => {
     closeButtonRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
     }

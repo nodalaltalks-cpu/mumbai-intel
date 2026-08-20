@@ -13,6 +13,13 @@ import { useEffect } from "react";
  * of navigating, and consume that entry ourselves if the modal closes any
  * other way (X button, Escape, outside-click) so a later real back-press
  * isn't silently swallowed by our own marker entry.
+ *
+ * The consume-on-close step only fires `history.back()` when `history.state`
+ * still looks like our own marker. If a real navigation happened while the
+ * modal was open (e.g. a client-side redirect right after sign-in, while the
+ * gate modal is still mounted), the current history entry is no longer ours
+ * to consume — blindly calling back() there would undo that navigation and
+ * strand the user on the page they were on before the modal opened.
  */
 export function useModalBackClose(isOpen: boolean, onClose: () => void): void {
   useEffect(() => {
@@ -28,7 +35,7 @@ export function useModalBackClose(isOpen: boolean, onClose: () => void): void {
 
     return () => {
       window.removeEventListener("popstate", handlePopState);
-      if (!closedByPop) history.back();
+      if (!closedByPop && (history.state as { modal?: boolean } | null)?.modal) history.back();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
