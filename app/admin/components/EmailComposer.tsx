@@ -54,8 +54,18 @@ export default function EmailComposer({ localities }: { localities: { id: string
     });
   }
 
+  function deselectAll() {
+    setSelected(new Map());
+  }
+
+  function confirmSend(event: React.FormEvent<HTMLFormElement>) {
+    if (!window.confirm(`Send this campaign to ${selected.size} recipient${selected.size === 1 ? "" : "s"}? This cannot be undone.`)) {
+      event.preventDefault();
+    }
+  }
+
   return (
-    <form action={formAction} className="flex flex-col gap-4">
+    <form action={formAction} onSubmit={confirmSend} className="flex flex-col gap-4">
       {state.error ? <p className="rounded-sm border border-negative/40 bg-negative/10 px-3 py-2 text-xs text-negative">{state.error}</p> : null}
       {state.success ? <p className="rounded-sm border border-positive/40 bg-positive/10 px-3 py-2 text-xs text-positive">{state.success}</p> : null}
 
@@ -93,11 +103,20 @@ export default function EmailComposer({ localities }: { localities: { id: string
 
         <div className="mt-3 flex items-center justify-between text-[11px] text-muted">
           <span>
-            {isSearching ? "Searching…" : `${candidates.length} match${candidates.length === 1 ? "" : "es"}`} · {selected.size} selected
+            {isSearching ? "Searching…" : `${candidates.length} match${candidates.length === 1 ? "" : "es"}`}
+            {candidates.length === 200 ? " (showing first 200)" : ""} ·{" "}
+            <span className={selected.size > 0 ? "font-semibold text-accent" : ""}>{selected.size} selected</span>
           </span>
-          <button type="button" onClick={selectAllFiltered} className="text-accent hover:underline">
-            Select all filtered
-          </button>
+          <div className="flex items-center gap-2">
+            {selected.size > 0 ? (
+              <button type="button" onClick={deselectAll} className="text-muted hover:text-negative hover:underline">
+                Deselect all
+              </button>
+            ) : null}
+            <button type="button" onClick={selectAllFiltered} className="text-accent hover:underline">
+              Select all filtered
+            </button>
+          </div>
         </div>
 
         <div className="mt-2 max-h-48 overflow-y-auto rounded-sm border border-border">
