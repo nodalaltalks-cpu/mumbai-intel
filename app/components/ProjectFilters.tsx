@@ -18,6 +18,7 @@ import { trackFilterApplied, trackSearchPerformed } from "@/lib/analytics/ga";
 import SaveSearchButton from "@/app/components/SaveSearchButton";
 import ActiveFilters, { type ActiveFilterChip } from "@/app/components/ui/ActiveFilters";
 import Dialog from "@/app/components/ui/Dialog";
+import PriceRangeFilter from "@/app/components/PriceRangeFilter";
 import { chipClass, selectClass, selectStyle } from "@/app/components/ui/formStyles";
 
 export interface FilterOption {
@@ -42,15 +43,62 @@ export default function ProjectFilters({ localities, builders }: { localities: F
   const recentSearches = useRecentSearches();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // pendingParamsRef tracks the params this component last asked the router
+  // to navigate to -- NOT what window.location.search currently shows.
+  // Confirmed by direct testing against this project's real (remote, often
+  // multi-second-latency) Neon database: router.push()'s visible URL update
+  // lags behind the call by however long that navigation's data fetch takes,
+  // not just a render tick. Two filter changes fired within that window
+  // (e.g. typing the price range's From field, then its To field a few
+  // hundred ms later) would otherwise both build off the same stale
+  // pre-navigation URL and the second push would silently overwrite the
+  // first's change instead of merging with it. Building from the last
+  // *intended* params instead of the live URL sidesteps that regardless of
+  // how long the underlying navigation takes to actually land.
+  const pendingParamsRef = useRef<URLSearchParams | null>(null);
+
+  function currentParams(): URLSearchParams {
+    return new URLSearchParams((pendingParamsRef.current ?? new URLSearchParams(window.location.search)).toString());
+  }
+
+  function pushParams(params: URLSearchParams) {
+    pendingParamsRef.current = params;
+    router.push(`${pathname}?${params.toString()}`);
+  }
+
+  // Once ANY navigation lands (ours or, e.g., the ActiveFilters chip row's
+  // own independent router.push for clearing a filter), searchParams here
+  // re-renders with fresh values -- at that point window.location.search is
+  // authoritative again, so drop the pending override rather than let it
+  // keep masking an external change indefinitely.
+  useEffect(() => {
+    pendingParamsRef.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
   function updateParam(key: string, value: string) {
-    const params = new URLSearchParams(searchParams.toString());
+    const params = currentParams();
     if (value) params.set(key, value);
     else params.delete(key);
     params.delete("page");
-    router.push(`${pathname}?${params.toString()}`);
+    pushParams(params);
     if (value) {
       if (key === "q") trackSearchPerformed(value);
       else trackFilterApplied("projects", { [key]: value });
+    }
+  }
+
+  /** Sets multiple params in one push — used by the price range slider, whose From/To values must land in the same URL update even when they're committed as two separate blur events. */
+  function updateParams(entries: Record<string, string>) {
+    const params = currentParams();
+    for (const [key, value] of Object.entries(entries)) {
+      if (value) params.set(key, value);
+      else params.delete(key);
+    }
+    params.delete("page");
+    pushParams(params);
+    for (const [key, value] of Object.entries(entries)) {
+      if (value) trackFilterApplied("projects", { [key]: value });
     }
   }
 
@@ -170,24 +218,13 @@ export default function ProjectFilters({ localities, builders }: { localities: F
                 </option>
               ))}
             </select>
-            <div className="flex gap-3">
-              <input
-                type="number"
-                min={0}
-                defaultValue={searchParams.get("priceMin") ?? ""}
-                onBlur={(e) => updateParam("priceMin", e.target.value)}
-                placeholder="Min ₹"
-                className="w-full rounded-sm border border-border bg-surface px-2.5 py-2 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
-              />
-              <input
-                type="number"
-                min={0}
-                defaultValue={searchParams.get("priceMax") ?? ""}
-                onBlur={(e) => updateParam("priceMax", e.target.value)}
-                placeholder="Max ₹"
-                className="w-full rounded-sm border border-border bg-surface px-2.5 py-2 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
-              />
-            </div>
+            <PriceRangeFilter
+              minRupees={searchParams.get("priceMin") ? Number(searchParams.get("priceMin")) : null}
+              maxRupees={searchParams.get("priceMax") ? Number(searchParams.get("priceMax")) : null}
+              onCommit={(min, max) =>
+                updateParams({ priceMin: min !== null ? String(min) : "", priceMax: max !== null ? String(max) : "" })
+              }
+            />
             <select value={searchParams.get("sort") ?? "updated_desc"} onChange={(e) => updateParam("sort", e.target.value)} className={selectClass} style={selectStyle}>
               {PROJECT_SORT_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>

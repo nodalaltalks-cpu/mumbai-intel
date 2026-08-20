@@ -232,3 +232,49 @@ button:focus-visible,
   background: var(--negative);
   color: #ffffff;
 }
+
+/* ── Dual-handle price range slider (PriceRangeFilter) ──
+   Two <input type="range"> stacked in the same box, each with its native
+   track hidden and pointer-events disabled except on the thumb itself, so
+   only the round handle is draggable and the two overlapping inputs never
+   fight each other for clicks on the track. A separate filled div (not
+   part of either input) draws the highlighted range between the handles. */
+.mi-range {
+  appearance: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  pointer-events: none;
+  margin: 0;
+}
+.mi-range::-webkit-slider-runnable-track {
+  appearance: none;
+  background: transparent;
+}
+.mi-range::-webkit-slider-thumb {
+  appearance: none;
+  pointer-events: auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid var(--surface);
+  box-shadow: 0 1px 4px rgba(24, 24, 27, 0.35);
+  cursor: pointer;
+}
+.mi-range::-moz-range-track {
+  background: transparent;
+  border: none;
+}
+.mi-range::-moz-range-thumb {
+  pointer-events: auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid var(--surface);
+  box-shadow: 0 1px 4px rgba(24, 24, 27, 0.35);
+  cursor: pointer;
+}
