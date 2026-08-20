@@ -1308,6 +1308,31 @@ export async function getAuditHistory(entityType: string, entityId: string, limi
   );
 }
 
+export interface ReportContext {
+  id: string;
+  entityType: string;
+  entityId: string | null;
+  entityName: string;
+  category: string | null;
+  issue: string;
+  suggestedValue: string | null;
+  status: string;
+  reporterEmail: string | null;
+  createdAt: Date;
+}
+
+/** Powers the "Apply change" banner on an entity's edit page — the admin arrived here from a specific ACCEPTED report and needs its field-level context (issue/suggested value) without leaving the edit form. Returns null if the report doesn't actually point at this entity, so a stale/mismatched reportId in the URL can't show misleading context. */
+export async function getReportContext(reportId: string, entityType: string, entityId: string): Promise<ReportContext | null> {
+  return safeQuery("getReportContext", null, async () => {
+    const report = await prisma.report.findUnique({
+      where: { id: reportId },
+      select: { id: true, entityType: true, entityId: true, entityName: true, category: true, issue: true, suggestedValue: true, status: true, reporterEmail: true, createdAt: true },
+    });
+    if (!report || report.entityType !== entityType || report.entityId !== entityId) return null;
+    return report;
+  });
+}
+
 /** Recent notifications for one founder/admin User — real readAt-backed unread state (unlike the Activity panel's localStorage timestamp), so it's correct across devices/sessions. */
 export async function getAdminNotifications(adminUserId: string, limit = 15) {
   return safeQuery("getAdminNotifications", [], () =>

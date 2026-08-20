@@ -17,11 +17,38 @@ export function isEmailDeliveryConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
 }
 
-/** Returns whether the send succeeded (or was validly simulated in the no-API-key dev fallback) — every existing internal caller ignores this, so adding it is purely additive; the in-house email campaign sender (lib/actions/email-campaigns.ts) needs to know per-recipient success/failure, which this codebase had no way to report before. */
-async function sendEmail(params: { to: string; subject: string; html: string; replyTo?: string }): Promise<boolean> {
+/**
+ * Whether a missing RESEND_API_KEY/EMAIL_FROM should be silently simulated as
+ * success (true local dev) or treated as a real failure. Vercel sets
+ * VERCEL_ENV on every deployment, Preview and Production alike — this is
+ * what stops the exact bug that shipped once already: a misnamed env var
+ * (`Resend_API_Key` instead of `RESEND_API_KEY`) plus a missing `EMAIL_FROM`
+ * made isEmailDeliveryConfigured() false in every deployed environment, so
+ * every campaign send silently no-op'd and reported "Success" without ever
+ * calling Resend. A deployed environment must never fake success.
+ */
+function isDeployedEnvironment(): boolean {
+  return Boolean(process.env.VERCEL_ENV);
+}
+
+export interface SendEmailResult {
+  ok: boolean;
+  /** Resend's own email id, when the API accepted the send — for traceability, never proof of delivery. */
+  providerMessageId?: string;
+  /** Present only on failure — distinct from "delivered", since Resend's API accepting a send is not delivery confirmation. */
+  error?: string;
+}
+
+/** Every existing internal caller uses the sendXEmail wrappers below, which only look at the boolean; the in-house email campaign sender (lib/actions/email-campaigns.ts) needs the full result to record an honest per-recipient status. */
+async function sendEmailDetailed(params: { to: string; subject: string; html: string; replyTo?: string }): Promise<SendEmailResult> {
   if (!isEmailDeliveryConfigured()) {
+    if (isDeployedEnvironment()) {
+      const error = "Email delivery is not configured (RESEND_API_KEY/EMAIL_FROM missing) in a deployed environment.";
+      console.error(`[email] ${error} Refusing to fake-send "${params.subject}" to ${params.to}.`);
+      return { ok: false, error };
+    }
     console.log(`[email] Would send "${params.subject}" to ${params.to}:\n${params.html}`);
-    return true;
+    return { ok: true };
   }
 
   const response = await fetch(RESEND_API_URL, {
@@ -42,14 +69,19 @@ async function sendEmail(params: { to: string; subject: string; html: string; re
   if (!response.ok) {
     const body = await response.text().catch(() => "");
     console.error(`[email] Resend send failed (${response.status}): ${body}`);
-    return false;
+    return { ok: false, error: `Resend API error ${response.status}` };
   }
-  return true;
+  const json = await response.json().catch(() => null);
+  return { ok: true, providerMessageId: typeof json?.id === "string" ? json.id : undefined };
 }
 
-/** Exported for the in-house email campaign sender only — every other email in this file goes through a specific named template function instead. */
-export async function sendCampaignEmail(to: string, subject: string, html: string): Promise<boolean> {
-  return sendEmail({ to, subject, html });
+async function sendEmail(params: { to: string; subject: string; html: string; replyTo?: string }): Promise<boolean> {
+  return (await sendEmailDetailed(params)).ok;
+}
+
+/** Exported for the in-house email campaign sender only — every other email in this file goes through a specific named template function instead. Returns the full result so the campaign sender can store a real provider message id and failure reason per recipient, instead of a bare boolean. */
+export async function sendCampaignEmail(to: string, subject: string, html: string): Promise<SendEmailResult> {
+  return sendEmailDetailed({ to, subject, html });
 }
 
 function escapeHtml(value: string): string {

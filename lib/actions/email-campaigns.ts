@@ -63,18 +63,28 @@ export async function sendCampaignAction(_prevState: SendCampaignState, formData
   let successCount = 0;
   let failureCount = 0;
   for (const row of recipientRows) {
-    let sent = false;
+    // sendCampaignEmail reports what Resend's API actually returned — "ACCEPTED" means
+    // the provider took the send request, never that it was delivered (no webhook exists
+    // to confirm that). A failure here always carries the real provider/config error, never
+    // a generic placeholder, so the admin can see exactly why a recipient didn't go out.
+    let result: { ok: boolean; providerMessageId?: string; error?: string };
     try {
-      sent = await sendCampaignEmail(row.email, subject, bodyHtml);
+      result = await sendCampaignEmail(row.email, subject, bodyHtml);
     } catch (error) {
-      console.error("[email-campaigns] send failed for", row.email, error);
+      result = { ok: false, error: error instanceof Error ? error.message : "Unexpected send error" };
     }
-    if (sent) {
+    if (result.ok) {
       successCount += 1;
-      await prisma.emailCampaignRecipient.update({ where: { id: row.id }, data: { status: "SENT", sentAt: new Date() } });
+      await prisma.emailCampaignRecipient.update({
+        where: { id: row.id },
+        data: { status: "ACCEPTED", sentAt: new Date(), providerMessageId: result.providerMessageId ?? null },
+      });
     } else {
       failureCount += 1;
-      await prisma.emailCampaignRecipient.update({ where: { id: row.id }, data: { status: "FAILED", failureReason: "Send failed" } });
+      await prisma.emailCampaignRecipient.update({
+        where: { id: row.id },
+        data: { status: "FAILED", failureReason: result.error ?? "Send failed" },
+      });
     }
     await sleep(SEND_DELAY_MS);
   }
@@ -85,5 +95,7 @@ export async function sendCampaignAction(_prevState: SendCampaignState, formData
   });
 
   revalidatePath("/admin/email");
-  return { success: `Sent to ${successCount} of ${recipientRows.length} recipient${recipientRows.length === 1 ? "" : "s"}${failureCount > 0 ? ` (${failureCount} failed)` : ""}.` };
+  return {
+    success: `Accepted by provider for ${successCount} of ${recipientRows.length} recipient${recipientRows.length === 1 ? "" : "s"}${failureCount > 0 ? ` (${failureCount} failed)` : ""}. This confirms the provider accepted the send, not that it was delivered.`,
+  };
 }

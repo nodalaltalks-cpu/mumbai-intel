@@ -1,7 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getAmenities, getAuditHistory, getBrochureVersions, getBuildersForSelect, getInfraAssetsForCity, getLocalitiesForSelect, getProjectForEdit } from "@/lib/admin-queries";
+import { getAmenities, getAuditHistory, getBrochureVersions, getBuildersForSelect, getInfraAssetsForCity, getLocalitiesForSelect, getProjectForEdit, getReportContext } from "@/lib/admin-queries";
+import ReportContextBanner from "@/app/admin/components/ReportContextBanner";
 import { requireSession } from "@/lib/auth/guard";
 import { getProjectBrochureStats } from "@/lib/analytics/brochure-queries";
 import BrochureStatsCard from "@/app/admin/components/BrochureStatsCard";
@@ -29,13 +30,13 @@ export default async function EditProjectPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ created?: string; saved?: string; brochureError?: string }>;
+  searchParams: Promise<{ created?: string; saved?: string; brochureError?: string; reportId?: string }>;
 }) {
   const { id } = await params;
   const query = await searchParams;
   const session = await requireSession();
 
-  const [project, localities, builders, amenities, infraOptions, history, brochureVersions, brochureStats] = await Promise.all([
+  const [project, localities, builders, amenities, infraOptions, history, brochureVersions, brochureStats, reportContext] = await Promise.all([
     getProjectForEdit(id),
     getLocalitiesForSelect(),
     getBuildersForSelect(),
@@ -44,6 +45,7 @@ export default async function EditProjectPage({
     getAuditHistory("Project", id),
     getBrochureVersions(id),
     getProjectBrochureStats(id),
+    query.reportId ? getReportContext(query.reportId, "Project", id) : Promise.resolve(null),
   ]);
 
   if (!project) notFound();
@@ -65,6 +67,8 @@ export default async function EditProjectPage({
       </div>
 
       <FlashMessage type={query.created ? "created" : query.saved ? "saved" : null} warning={query.brochureError} />
+
+      {reportContext ? <ReportContextBanner report={reportContext} /> : null}
 
       <div className="rounded-sm border border-border bg-surface p-4">
         <ProjectForm

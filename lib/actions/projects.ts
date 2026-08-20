@@ -177,7 +177,18 @@ export async function updateProjectAction(
   _prevState: ProjectFormState,
   formData: FormData
 ): Promise<ProjectFormState> {
-  const session = await requireMutateSession();
+  // requireMutateSession() must be inside a try/catch here, not called bare:
+  // an expired/missing session throws, and letting that throw escape a
+  // Server Action unhandled trips the nearest error boundary ("Something
+  // went wrong") instead of surfacing as a normal inline form error. Same
+  // bug already found and fixed once in lib/actions/reports.ts's setStatus() —
+  // this is the flow a founder hits applying a report's suggested change.
+  let session;
+  try {
+    session = await requireMutateSession();
+  } catch (error) {
+    return { error: friendlyPrismaError(error) };
+  }
 
   const parsed = parseProjectForm(formData);
   if (!parsed.success) {
@@ -225,7 +236,11 @@ export async function updateProjectAction(
 
 /** Silent background autosave from the edit form — same shape as updateProjectAction but no redirect. */
 export async function autosaveProjectAction(projectId: string, formData: FormData): Promise<{ error?: string; savedAt?: string }> {
-  await requireMutateSession();
+  try {
+    await requireMutateSession();
+  } catch (error) {
+    return { error: friendlyPrismaError(error) };
+  }
 
   const parsed = parseProjectForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -329,11 +344,15 @@ export async function updateProjectStatusAction(
   projectId: string,
   nextStatus: (typeof PROJECT_STATUSES)[number]
 ): Promise<{ error?: string }> {
-  const session = await requireMutateSession();
-  if (!PROJECT_STATUSES.includes(nextStatus)) return { error: "Invalid status" };
-  const updated = await prisma.project.update({ where: { id: projectId }, data: { status: nextStatus }, select: { slug: true } });
-  await logAudit(session.userId, "project.status.update", "Project", projectId);
-  revalidateProject({ id: projectId, slug: updated.slug });
+  try {
+    const session = await requireMutateSession();
+    if (!PROJECT_STATUSES.includes(nextStatus)) return { error: "Invalid status" };
+    const updated = await prisma.project.update({ where: { id: projectId }, data: { status: nextStatus }, select: { slug: true } });
+    await logAudit(session.userId, "project.status.update", "Project", projectId);
+    revalidateProject({ id: projectId, slug: updated.slug });
+  } catch (error) {
+    return { error: friendlyPrismaError(error) };
+  }
   return {};
 }
 

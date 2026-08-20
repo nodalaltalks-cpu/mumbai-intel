@@ -154,12 +154,20 @@ export default function ReportQueueList({ reports, canDelete = false }: { report
                   </button>
                 ) : null}
                 {report.status === "ACCEPTED" && href ? (
-                  <Link
-                    href={href}
-                    className="rounded-sm border border-accent/40 bg-accent/10 px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-accent hover:bg-accent/20"
-                  >
-                    Apply change →
-                  </Link>
+                  <>
+                    <Link
+                      href={href}
+                      className="rounded-sm border border-border px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+                    >
+                      Open project
+                    </Link>
+                    <Link
+                      href={`${href}?reportId=${report.id}`}
+                      className="rounded-sm border border-accent/40 bg-accent/10 px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-accent hover:bg-accent/20"
+                    >
+                      Edit reported information →
+                    </Link>
+                  </>
                 ) : null}
                 {report.status === "ACCEPTED" ? (
                   <button

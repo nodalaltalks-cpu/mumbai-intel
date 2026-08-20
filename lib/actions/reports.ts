@@ -11,18 +11,22 @@ import { logAudit } from "@/lib/audit";
 import { friendlyPrismaError } from "./errors";
 import type { ReportStatus } from "@prisma/client";
 
-const REPORT_NOTIFICATION_COPY: Partial<Record<ReportStatus, { title: string; body: string }>> = {
+const REPORT_NOTIFICATION_COPY: Partial<Record<ReportStatus, { title: string; body: (entityName: string) => string }>> = {
   UNDER_REVIEW: {
     title: "We're reviewing your report",
-    body: "Thank you for reporting this. We are reviewing your query and aim to resolve it within 48 working hours.",
+    body: () => "Thank you for reporting this. We are reviewing your query and aim to resolve it within 48 working hours.",
   },
   ACCEPTED: {
-    title: "We're reviewing your report",
-    body: "Thank you for reporting this. We are reviewing your query and aim to resolve it within 48 working hours.",
+    title: "Your report has been accepted",
+    body: (entityName) => `Your report about ${entityName} has been accepted. We are reviewing the information and will work on the correction.`,
+  },
+  REJECTED: {
+    title: "Your report has been reviewed",
+    body: (entityName) => `Your report about ${entityName} has been reviewed but we could not verify the suggested correction.`,
   },
   RESOLVED: {
     title: "Your report has been resolved",
-    body: "Your reported issue has been resolved. Please review the updated information.",
+    body: (entityName) => `Your report about ${entityName} has been resolved. Thank you for helping us keep Mumbai Intel accurate.`,
   },
 };
 
@@ -56,9 +60,12 @@ async function setStatus(reportId: string, status: ReportStatus, resolutionNote?
 
     const copy = REPORT_NOTIFICATION_COPY[status];
     if (copy && report.reporterUserId) {
-      const body = status === "RESOLVED" ? await appendReviewRequest(copy.body) : copy.body;
+      const rawBody = copy.body(report.entityName);
+      const body = status === "RESOLVED" ? await appendReviewRequest(rawBody) : rawBody;
+      const notificationType =
+        status === "RESOLVED" ? "REPORT_RESOLVED" : status === "ACCEPTED" ? "REPORT_ACCEPTED" : status === "REJECTED" ? "REPORT_REJECTED" : "REPORT_UNDER_REVIEW";
       await createNotification({
-        type: status === "RESOLVED" ? "REPORT_RESOLVED" : "REPORT_UNDER_REVIEW",
+        type: notificationType,
         title: copy.title,
         body,
         recipientPublicUserId: report.reporterUserId,

@@ -1107,6 +1107,8 @@ model Report {
 enum NotificationType {
   REPORT_RECEIVED
   REPORT_UNDER_REVIEW
+  REPORT_ACCEPTED
+  REPORT_REJECTED
   REPORT_RESOLVED
   ADMIN_NEW_REPORT
   ADMIN_REPORT_UNRESOLVED
@@ -1488,9 +1490,15 @@ enum EmailCampaignStatus {
   FAILED
 }
 
+/// ACCEPTED means Resend's API accepted the send request — it is NOT delivery
+/// confirmation. No provider webhook is wired up (see EmailCampaign's doc
+/// comment), so true DELIVERED/BOUNCED/OPENED/CLICKED status is unknowable
+/// today; the UI must never claim delivery from this value alone. Named
+/// ACCEPTED rather than SENT specifically so nothing in the admin UI can be
+/// misread as a delivery guarantee.
 enum EmailRecipientStatus {
   PENDING
-  SENT
+  ACCEPTED
   FAILED
 }
 
@@ -1534,6 +1542,8 @@ model EmailCampaignRecipient {
   email         String
   status        EmailRecipientStatus @default(PENDING)
   sentAt        DateTime?
+  /// Resend's own email id when accepted — for support/traceability lookups against Resend's dashboard, never proof of delivery.
+  providerMessageId String?
   failureReason String?
 
   @@index([campaignId, status])
