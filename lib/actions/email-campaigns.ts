@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { requireAdminSession } from "@/lib/auth/guard";
 import { prisma } from "@/lib/prisma";
 import { sendCampaignEmail } from "@/lib/email";
+import { logAudit } from "@/lib/audit";
+import { friendlyPrismaError } from "@/lib/actions/errors";
 import { searchEmailRecipients, type EmailRecipientCandidate, type EmailRecipientFilters } from "@/lib/analytics/email-queries";
 import type { EmailCampaignType } from "@prisma/client";
 
@@ -98,4 +100,30 @@ export async function sendCampaignAction(_prevState: SendCampaignState, formData
   return {
     success: `Accepted by provider for ${successCount} of ${recipientRows.length} recipient${recipientRows.length === 1 ? "" : "s"}${failureCount > 0 ? ` (${failureCount} failed)` : ""}. This confirms the provider accepted the send, not that it was delivered.`,
   };
+}
+
+/**
+ * Permanently deletes a campaign record and its EmailCampaignRecipient rows
+ * (cascade, per the schema's onDelete: Cascade on that relation) -- never
+ * touches PublicUser accounts, which only reference recipients by a nullable
+ * FK (onDelete: SetNull). ADMIN-only, matches deleteReportAction's pattern:
+ * audit-log the campaign's identifying details before deleting, since
+ * nothing else holds a real foreign key to EmailCampaign to make deletion
+ * unsafe.
+ */
+export async function deleteCampaignAction(campaignId: string): Promise<{ error?: string }> {
+  try {
+    const session = await requireAdminSession();
+    const campaign = await prisma.emailCampaign.findUnique({
+      where: { id: campaignId },
+      select: { subject: true, type: true, status: true, recipientCount: true, successCount: true, failureCount: true },
+    });
+    if (!campaign) return { error: "Campaign not found — it may have already been deleted." };
+    await logAudit(session.userId, "email_campaign.delete", "EmailCampaign", campaignId, { before: campaign });
+    await prisma.emailCampaign.delete({ where: { id: campaignId } });
+  } catch (error) {
+    return { error: friendlyPrismaError(error) };
+  }
+  revalidatePath("/admin/email");
+  return {};
 }

@@ -24,11 +24,23 @@ export type AnalyticsGranularity = "hour" | "day" | "week" | "month";
 export interface AnalyticsPeriod {
   key: AnalyticsPeriodKey;
   label: string;
+  /** "1 Aug 2026 – 21 Aug 2026" — the exact since/until being queried, not a rounded-up "to end of period" range (a not-yet-finished month shows today as its end, honestly). */
+  dateRangeLabel: string;
   since: Date;
   until: Date;
   previousSince: Date;
   previousUntil: Date;
   granularity: AnalyticsGranularity;
+}
+
+function formatPeriodDate(d: Date): string {
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+}
+
+/** IST throughout, matching the rest of this app's admin-facing date display (formatDate/formatDateTime in lib/format.ts). */
+function formatDateRangeLabel(since: Date, until: Date): string {
+  const untilInclusive = new Date(until.getTime() - 1);
+  return `${formatPeriodDate(since)} – ${formatPeriodDate(untilInclusive)}`;
 }
 
 function startOfDay(d: Date): Date {
@@ -105,6 +117,7 @@ export function resolveAnalyticsPeriod(params: { period?: string; from?: string;
     return {
       key,
       label: `${params.from} → ${params.to}`,
+      dateRangeLabel: formatDateRangeLabel(since, until),
       since,
       until,
       previousSince,
@@ -113,39 +126,42 @@ export function resolveAnalyticsPeriod(params: { period?: string; from?: string;
     };
   }
 
-  switch (key) {
-    case "day": {
-      const since = startOfDay(now);
-      const previousSince = new Date(since.getTime() - 24 * 60 * 60 * 1000);
-      return { key, label: "Today", since, until: now, previousSince, previousUntil: since, granularity: "hour" };
+  const resolved = ((): Omit<AnalyticsPeriod, "dateRangeLabel"> => {
+    switch (key) {
+      case "day": {
+        const since = startOfDay(now);
+        const previousSince = new Date(since.getTime() - 24 * 60 * 60 * 1000);
+        return { key, label: "Today", since, until: now, previousSince, previousUntil: since, granularity: "hour" };
+      }
+      case "week": {
+        const since = startOfISOWeek(now);
+        const previousSince = new Date(since.getTime() - 7 * 24 * 60 * 60 * 1000);
+        return { key, label: "This Week", since, until: now, previousSince, previousUntil: since, granularity: "day" };
+      }
+      case "quarter": {
+        const since = startOfQuarter(now);
+        const previousSince = startOfQuarter(new Date(since.getTime() - 24 * 60 * 60 * 1000));
+        return { key, label: "This Quarter", since, until: now, previousSince, previousUntil: since, granularity: "week" };
+      }
+      case "half_year": {
+        const since = startOfHalfYear(now);
+        const previousSince = startOfHalfYear(new Date(since.getTime() - 24 * 60 * 60 * 1000));
+        return { key, label: "This Half Year", since, until: now, previousSince, previousUntil: since, granularity: "month" };
+      }
+      case "year": {
+        const since = startOfYear(now);
+        const previousSince = new Date(since.getFullYear() - 1, 0, 1);
+        return { key, label: "This Year", since, until: now, previousSince, previousUntil: since, granularity: "month" };
+      }
+      case "month":
+      default: {
+        const since = startOfMonth(now);
+        const previousSince = new Date(since.getFullYear(), since.getMonth() - 1, 1);
+        return { key: "month", label: "This Month", since, until: now, previousSince, previousUntil: since, granularity: "day" };
+      }
     }
-    case "week": {
-      const since = startOfISOWeek(now);
-      const previousSince = new Date(since.getTime() - 7 * 24 * 60 * 60 * 1000);
-      return { key, label: "This Week", since, until: now, previousSince, previousUntil: since, granularity: "day" };
-    }
-    case "quarter": {
-      const since = startOfQuarter(now);
-      const previousSince = startOfQuarter(new Date(since.getTime() - 24 * 60 * 60 * 1000));
-      return { key, label: "This Quarter", since, until: now, previousSince, previousUntil: since, granularity: "week" };
-    }
-    case "half_year": {
-      const since = startOfHalfYear(now);
-      const previousSince = startOfHalfYear(new Date(since.getTime() - 24 * 60 * 60 * 1000));
-      return { key, label: "This Half Year", since, until: now, previousSince, previousUntil: since, granularity: "month" };
-    }
-    case "year": {
-      const since = startOfYear(now);
-      const previousSince = new Date(since.getFullYear() - 1, 0, 1);
-      return { key, label: "This Year", since, until: now, previousSince, previousUntil: since, granularity: "month" };
-    }
-    case "month":
-    default: {
-      const since = startOfMonth(now);
-      const previousSince = new Date(since.getFullYear(), since.getMonth() - 1, 1);
-      return { key: "month", label: "This Month", since, until: now, previousSince, previousUntil: since, granularity: "day" };
-    }
-  }
+  })();
+  return { ...resolved, dateRangeLabel: formatDateRangeLabel(resolved.since, resolved.until) };
 }
 
 export interface PeriodChange {

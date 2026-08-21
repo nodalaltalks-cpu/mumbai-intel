@@ -92,3 +92,60 @@ export async function getEmailPeriodStats(period: AnalyticsPeriod): Promise<Emai
   ]);
   return { campaignsInPeriod, previousCampaignsInPeriod, recipientsAcceptedInPeriod, recipientsFailedInPeriod };
 }
+
+export interface EmailCampaignDetailRecipient {
+  id: string;
+  email: string;
+  status: string;
+  sentAt: Date | null;
+  providerMessageId: string | null;
+  failureReason: string | null;
+}
+
+export interface EmailCampaignDetail {
+  id: string;
+  type: string;
+  subject: string;
+  bodyHtml: string;
+  status: string;
+  recipientCount: number;
+  successCount: number;
+  failureCount: number;
+  sentAt: Date | null;
+  createdAt: Date;
+  createdByUser: { name: string | null; email: string } | null;
+  recipients: EmailCampaignDetailRecipient[];
+}
+
+/**
+ * Full single-campaign view for the detail page: Overview (aggregate
+ * counts, already on the campaign row), Recipient Details (every
+ * EmailCampaignRecipient row -- real per-recipient provider outcome, never
+ * "delivered" since no webhook exists), Content (subject/body), and
+ * Audience is derived by the caller from the recipient list itself (no
+ * separate "how were these selected" record is kept -- segmentation is
+ * query-based at send time, not stored, per the existing design).
+ */
+export async function getEmailCampaignDetail(campaignId: string): Promise<EmailCampaignDetail | null> {
+  const campaign = await prisma.emailCampaign.findUnique({
+    where: { id: campaignId },
+    select: {
+      id: true,
+      type: true,
+      subject: true,
+      bodyHtml: true,
+      status: true,
+      recipientCount: true,
+      successCount: true,
+      failureCount: true,
+      sentAt: true,
+      createdAt: true,
+      createdByUser: { select: { name: true, email: true } },
+      recipients: {
+        select: { id: true, email: true, status: true, sentAt: true, providerMessageId: true, failureReason: true },
+        orderBy: { email: "asc" },
+      },
+    },
+  });
+  return campaign;
+}

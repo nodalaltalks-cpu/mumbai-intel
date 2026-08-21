@@ -1,9 +1,10 @@
+import Link from "next/link";
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { requireAdminSession } from "@/lib/auth/guard";
 import { getLocalitiesForSelect } from "@/lib/admin-queries";
 import { getEmailCampaigns, getEmailPeriodStats } from "@/lib/analytics/email-queries";
-import { formatDate } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 import { ANALYTICS_PERIOD_COOKIE, computeChange, resolveAnalyticsPeriodFromRequest } from "@/lib/analytics/period";
 import AnalyticsPeriodFilter from "@/app/admin/components/AnalyticsPeriodFilter";
 import AnalyticsStatCard from "@/app/admin/components/AnalyticsStatCard";
@@ -51,13 +52,18 @@ export default async function AdminEmailPage({ searchParams }: { searchParams: P
 
       <EmailComposer localities={localities} />
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface p-4">
+      <div className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="font-mono text-xs uppercase tracking-wide text-accent">
+            {period.label} <span className="text-muted">· {period.dateRangeLabel} IST</span>
+          </p>
+          <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} />
+        </div>
         <div className="flex flex-wrap gap-3">
           <AnalyticsStatCard label="Campaigns (period)" value={periodStats.campaignsInPeriod} previousValue={periodStats.previousCampaignsInPeriod} change={campaignsChange} />
           <AnalyticsStatCard label="Accepted by provider (period)" value={periodStats.recipientsAcceptedInPeriod} />
           <AnalyticsStatCard label="Failed (period)" value={periodStats.recipientsFailedInPeriod} />
         </div>
-        <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} />
       </div>
 
       <section className="rounded-sm border border-border bg-surface p-4">
@@ -73,14 +79,19 @@ export default async function AdminEmailPage({ searchParams }: { searchParams: P
                   <th className="px-3 py-2 font-medium">Type</th>
                   <th className="px-3 py-2 font-medium">Status</th>
                   <th className="px-3 py-2 font-medium text-right">Recipients</th>
-                  <th className="px-3 py-2 font-medium text-right">Success / Failed</th>
+                  <th className="px-3 py-2 font-medium text-right">Accepted / Failed</th>
+                  <th className="px-3 py-2 font-medium">Created</th>
                   <th className="px-3 py-2 font-medium">Sent</th>
                 </tr>
               </thead>
               <tbody>
                 {campaigns.map((c) => (
-                  <tr key={c.id} className="border-b border-border last:border-b-0">
-                    <td className="px-3 py-2 font-mono text-foreground">{c.subject}</td>
+                  <tr key={c.id} className="border-b border-border last:border-b-0 hover:bg-surface-raised">
+                    <td className="px-3 py-2 font-mono text-foreground">
+                      <Link href={`/admin/email/${c.id}`} className="hover:text-accent hover:underline">
+                        {c.subject}
+                      </Link>
+                    </td>
                     <td className="px-3 py-2 text-muted">{TYPE_LABEL[c.type] ?? c.type}</td>
                     <td className="px-3 py-2">
                       <span className={`rounded-sm border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${STATUS_CLASS[c.status]}`}>{c.status}</span>
@@ -89,7 +100,8 @@ export default async function AdminEmailPage({ searchParams }: { searchParams: P
                     <td className="px-3 py-2 text-right font-mono text-muted">
                       {c.successCount} / {c.failureCount}
                     </td>
-                    <td className="px-3 py-2 text-muted">{c.sentAt ? formatDate(c.sentAt) : "--"}</td>
+                    <td className="px-3 py-2 text-muted">{formatDateTime(c.createdAt)}</td>
+                    <td className="px-3 py-2 text-muted">{c.sentAt ? formatDateTime(c.sentAt) : "--"}</td>
                   </tr>
                 ))}
               </tbody>
