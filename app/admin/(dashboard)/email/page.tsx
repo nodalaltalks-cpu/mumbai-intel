@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { requireAdminSession } from "@/lib/auth/guard";
 import { getLocalitiesForSelect } from "@/lib/admin-queries";
-import { getEmailCampaigns } from "@/lib/analytics/email-queries";
+import { getEmailCampaigns, getEmailPeriodStats } from "@/lib/analytics/email-queries";
 import { formatDate } from "@/lib/format";
+import { ANALYTICS_PERIOD_COOKIE, computeChange, resolveAnalyticsPeriodFromRequest } from "@/lib/analytics/period";
+import AnalyticsPeriodFilter from "@/app/admin/components/AnalyticsPeriodFilter";
+import AnalyticsStatCard from "@/app/admin/components/AnalyticsStatCard";
 import EmailComposer from "@/app/admin/components/EmailComposer";
 
 export const metadata: Metadata = { title: "Email — NoDalalTalks Admin" };
@@ -23,9 +27,18 @@ const STATUS_CLASS: Record<string, string> = {
   FAILED: "border-negative/40 bg-negative/10 text-negative",
 };
 
-export default async function AdminEmailPage() {
+export default async function AdminEmailPage({ searchParams }: { searchParams: Promise<{ period?: string; from?: string; to?: string }> }) {
   await requireAdminSession();
-  const [localities, campaigns] = await Promise.all([getLocalitiesForSelect(), getEmailCampaigns(20)]);
+  const params = await searchParams;
+  const cookieStore = await cookies();
+  const period = resolveAnalyticsPeriodFromRequest(params, cookieStore.get(ANALYTICS_PERIOD_COOKIE)?.value);
+
+  const [localities, campaigns, periodStats] = await Promise.all([
+    getLocalitiesForSelect(),
+    getEmailCampaigns(20, period),
+    getEmailPeriodStats(period),
+  ]);
+  const campaignsChange = computeChange(periodStats.campaignsInPeriod, periodStats.previousCampaignsInPeriod);
 
   return (
     <div className="flex flex-col gap-6">
@@ -38,10 +51,19 @@ export default async function AdminEmailPage() {
 
       <EmailComposer localities={localities} />
 
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface p-4">
+        <div className="flex flex-wrap gap-3">
+          <AnalyticsStatCard label="Campaigns (period)" value={periodStats.campaignsInPeriod} previousValue={periodStats.previousCampaignsInPeriod} change={campaignsChange} />
+          <AnalyticsStatCard label="Accepted by provider (period)" value={periodStats.recipientsAcceptedInPeriod} />
+          <AnalyticsStatCard label="Failed (period)" value={periodStats.recipientsFailedInPeriod} />
+        </div>
+        <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} />
+      </div>
+
       <section className="rounded-sm border border-border bg-surface p-4">
-        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Past campaigns</h2>
+        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Past campaigns — {period.label}</h2>
         {campaigns.length === 0 ? (
-          <p className="text-xs text-muted">No campaigns sent yet.</p>
+          <p className="text-xs text-muted">No data for this period.</p>
         ) : (
           <div className="overflow-x-auto rounded-sm border border-border">
             <table className="w-full min-w-[640px] border-collapse text-left text-xs">

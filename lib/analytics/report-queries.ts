@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import type { ReportStatus } from "@prisma/client";
+import type { AnalyticsPeriod } from "./period";
 
 export interface ReportRow {
   id: string;
@@ -136,4 +137,27 @@ export async function getReportResolutionStats(): Promise<ReportResolutionStats>
     rejectionRatePercent: total > 0 ? Math.round((rejectedCount / total) * 100) : null,
     avgResolutionHours,
   };
+}
+
+export interface ReportPeriodStats {
+  submittedInPeriod: number;
+  previousSubmittedInPeriod: number;
+  /** Reports that reached RESOLVED with their report.resolved AuditLog timestamp inside the period -- an operational "how much did we clear this period" figure, independent of when those reports were originally submitted. */
+  resolvedInPeriod: number;
+}
+
+/**
+ * Section 34's "Reports submitted" reflecting the selected Day/Week/Month/...
+ * filter, additive alongside getReportResolutionStats()'s existing all-time
+ * totals (Section 12 explicitly requires the existing all-time Total/Open/
+ * Resolution Rate/Avg Resolution Time to keep working exactly as before —
+ * this is a new, separate period-scoped figure, not a replacement).
+ */
+export async function getReportPeriodStats(period: AnalyticsPeriod): Promise<ReportPeriodStats> {
+  const [submittedInPeriod, previousSubmittedInPeriod, resolvedLogs] = await Promise.all([
+    prisma.report.count({ where: { createdAt: { gte: period.since, lt: period.until } } }),
+    prisma.report.count({ where: { createdAt: { gte: period.previousSince, lt: period.previousUntil } } }),
+    prisma.auditLog.count({ where: { entityType: "Report", action: "report.resolved", at: { gte: period.since, lt: period.until } } }),
+  ]);
+  return { submittedInPeriod, previousSubmittedInPeriod, resolvedInPeriod: resolvedLogs };
 }

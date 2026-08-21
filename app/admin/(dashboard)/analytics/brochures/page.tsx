@@ -1,17 +1,20 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import {
   getBrochureAnalyticsSummary,
-  getDailyDownloadTrend,
+  getDownloadTrend,
   getDownloadsByDevice,
   getDownloadsBySource,
-  getMonthlyDownloadTrend,
   getTopDownloadedBuilders,
   getTopDownloadedLocalities,
   getTopDownloadedMicroMarkets,
   getTopDownloadedProjects,
 } from "@/lib/analytics/brochure-queries";
+import { ANALYTICS_PERIOD_COOKIE, computeChange, resolveAnalyticsPeriodFromRequest } from "@/lib/analytics/period";
 import BarChart from "@/app/admin/components/charts/BarChart";
+import AnalyticsPeriodFilter from "@/app/admin/components/AnalyticsPeriodFilter";
+import AnalyticsStatCard from "@/app/admin/components/AnalyticsStatCard";
 
 export const metadata: Metadata = { title: "Brochure Analytics — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
@@ -22,7 +25,7 @@ function BreakdownList({ title, items }: { title: string; items: { label: string
     <section className="rounded-sm border border-border bg-surface p-4">
       <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">{title}</h2>
       {items.length === 0 ? (
-        <p className="text-xs text-muted">No downloads recorded yet.</p>
+        <p className="text-xs text-muted">No data for this period.</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {items.map((item) => (
@@ -45,7 +48,7 @@ function TopList({ title, href, items }: { title: string; href: (id: string, slu
     <section className="rounded-sm border border-border bg-surface p-4">
       <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">{title}</h2>
       {items.length === 0 ? (
-        <p className="text-xs text-muted">No downloads recorded yet.</p>
+        <p className="text-xs text-muted">No data for this period.</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {items.map((item, i) => (
@@ -65,22 +68,27 @@ function TopList({ title, href, items }: { title: string; href: (id: string, slu
   );
 }
 
-export default async function BrochureAnalyticsPage() {
-  const [summary, dailyTrend, monthlyTrend, topProjects, topBuilders, topLocalities, topMicroMarkets, byDevice, bySource] = await Promise.all([
-    getBrochureAnalyticsSummary(),
-    getDailyDownloadTrend(30),
-    getMonthlyDownloadTrend(12),
-    getTopDownloadedProjects(10),
-    getTopDownloadedBuilders(10),
-    getTopDownloadedLocalities(10),
-    getTopDownloadedMicroMarkets(10),
-    getDownloadsByDevice(),
-    getDownloadsBySource(8),
+export default async function BrochureAnalyticsPage({ searchParams }: { searchParams: Promise<{ period?: string; from?: string; to?: string }> }) {
+  const params = await searchParams;
+  const cookieStore = await cookies();
+  const period = resolveAnalyticsPeriodFromRequest(params, cookieStore.get(ANALYTICS_PERIOD_COOKIE)?.value);
+
+  const [summary, trend, topProjects, topBuilders, topLocalities, topMicroMarkets, byDevice, bySource] = await Promise.all([
+    getBrochureAnalyticsSummary(period),
+    getDownloadTrend(period),
+    getTopDownloadedProjects(period, 10),
+    getTopDownloadedBuilders(period, 10),
+    getTopDownloadedLocalities(period, 10),
+    getTopDownloadedMicroMarkets(period, 10),
+    getDownloadsByDevice(period),
+    getDownloadsBySource(period, 8),
   ]);
+
+  const downloadsChange = computeChange(summary.downloadsInPeriod, summary.previousDownloadsInPeriod);
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-mono text-lg font-semibold text-foreground">Brochure Analytics</h1>
           <p className="text-xs text-muted">
@@ -91,28 +99,23 @@ export default async function BrochureAnalyticsPage() {
             for transaction/builder/locality intelligence.
           </p>
         </div>
-        <a
-          href="/api/admin/brochure-analytics/export"
-          className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
-        >
-          Export CSV
-        </a>
+        <div className="flex items-center gap-2">
+          <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} />
+          <a
+            href="/api/admin/brochure-analytics/export"
+            className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+          >
+            Export CSV
+          </a>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        {[
-          ["Total Downloads", summary.totalDownloads],
-          ["Today", summary.downloadsToday],
-          ["Last 7 Days", summary.downloadsThisWeek],
-          ["This Month", summary.downloadsThisMonth],
-          ["This Year", summary.downloadsThisYear],
-          ["Brochure Views", summary.totalViews],
-        ].map(([label, value]) => (
-          <div key={label as string} className="rounded-sm border border-border bg-surface p-4">
-            <p className="text-[10px] uppercase tracking-wide text-muted">{label}</p>
-            <p className="mt-1.5 font-mono text-2xl font-semibold text-foreground">{value}</p>
-          </div>
-        ))}
+        <AnalyticsStatCard label="Downloads (period)" value={summary.downloadsInPeriod} previousValue={summary.previousDownloadsInPeriod} change={downloadsChange} />
+        <AnalyticsStatCard label="Total Downloads (all time)" value={summary.totalDownloads} />
+        <AnalyticsStatCard label="Today" value={summary.downloadsToday} />
+        <AnalyticsStatCard label="Last 7 Days" value={summary.downloadsThisWeek} />
+        <AnalyticsStatCard label="Brochure Views (all time)" value={summary.totalViews} />
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -131,13 +134,8 @@ export default async function BrochureAnalyticsPage() {
       </div>
 
       <section className="rounded-sm border border-border bg-surface p-4">
-        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Daily downloads — last 30 days</h2>
-        <BarChart data={dailyTrend.map((p) => ({ label: p.date.slice(5), count: p.count }))} emptyLabel="No downloads recorded in this window yet" />
-      </section>
-
-      <section className="rounded-sm border border-border bg-surface p-4">
-        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Monthly downloads — last 12 months</h2>
-        <BarChart data={monthlyTrend.map((p) => ({ label: p.month, count: p.count }))} emptyLabel="No downloads recorded in this window yet" />
+        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Downloads — {period.label}</h2>
+        <BarChart data={trend.map((p) => ({ label: p.label, count: p.count }))} emptyLabel="No data for this period" />
       </section>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

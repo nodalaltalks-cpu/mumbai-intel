@@ -1,33 +1,21 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-
-function startOfDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-function daysAgo(n: number): Date {
-  const d = startOfDay(new Date());
-  d.setDate(d.getDate() - n);
-  return d;
-}
+import { buildBuckets, countByBucket, type AnalyticsPeriod } from "./period";
 
 export interface NewsletterSummary {
   totalSubscribers: number;
-  subscribersToday: number;
-  weeklyGrowth: number;
-  monthlyGrowth: number;
+  newSubscribersInPeriod: number;
+  previousNewSubscribersInPeriod: number;
 }
 
-export async function getNewsletterSummary(): Promise<NewsletterSummary> {
-  const now = new Date();
-  const [totalSubscribers, subscribersToday, weeklyGrowth, monthlyGrowth] = await Promise.all([
+/** totalSubscribers stays an all-time cumulative total; newSubscribersInPeriod is scoped to the selected period with a previous-period comparison. */
+export async function getNewsletterSummary(period: AnalyticsPeriod): Promise<NewsletterSummary> {
+  const [totalSubscribers, newSubscribersInPeriod, previousNewSubscribersInPeriod] = await Promise.all([
     prisma.newsletterSubscriber.count({ where: { status: "SUBSCRIBED" } }),
-    prisma.newsletterSubscriber.count({ where: { status: "SUBSCRIBED", subscribedAt: { gte: startOfDay(now) } } }),
-    prisma.newsletterSubscriber.count({ where: { status: "SUBSCRIBED", subscribedAt: { gte: daysAgo(7) } } }),
-    prisma.newsletterSubscriber.count({ where: { status: "SUBSCRIBED", subscribedAt: { gte: daysAgo(30) } } }),
+    prisma.newsletterSubscriber.count({ where: { status: "SUBSCRIBED", subscribedAt: { gte: period.since, lt: period.until } } }),
+    prisma.newsletterSubscriber.count({ where: { status: "SUBSCRIBED", subscribedAt: { gte: period.previousSince, lt: period.previousUntil } } }),
   ]);
-  return { totalSubscribers, subscribersToday, weeklyGrowth, monthlyGrowth };
+  return { totalSubscribers, newSubscribersInPeriod, previousNewSubscribersInPeriod };
 }
 
 export interface LatestSubscriber {
@@ -46,26 +34,15 @@ export async function getLatestSubscribers(limit = 10): Promise<LatestSubscriber
   });
 }
 
-export interface DailySubscriberPoint {
-  date: string; // YYYY-MM-DD
+export interface SubscriberTrendPoint {
+  label: string;
   count: number;
 }
 
-export async function getSubscriptionTrend(days = 30): Promise<DailySubscriberPoint[]> {
-  const since = daysAgo(days - 1);
+export async function getSubscriptionTrend(period: AnalyticsPeriod): Promise<SubscriberTrendPoint[]> {
   const rows = await prisma.newsletterSubscriber.findMany({
-    where: { subscribedAt: { gte: since } },
+    where: { subscribedAt: { gte: period.since, lt: period.until } },
     select: { subscribedAt: true },
   });
-  const buckets = new Map<string, number>();
-  for (let i = 0; i < days; i++) {
-    const d = new Date(since);
-    d.setDate(d.getDate() + i);
-    buckets.set(d.toISOString().slice(0, 10), 0);
-  }
-  for (const row of rows) {
-    const key = row.subscribedAt.toISOString().slice(0, 10);
-    buckets.set(key, (buckets.get(key) ?? 0) + 1);
-  }
-  return Array.from(buckets.entries()).map(([date, count]) => ({ date, count }));
+  return countByBucket(rows.map((r) => r.subscribedAt), buildBuckets(period));
 }

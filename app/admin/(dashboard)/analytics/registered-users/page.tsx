@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { requireSession } from "@/lib/auth/guard";
-import { getRegisteredUsersPage } from "@/lib/admin-queries";
+import { getRegisteredUsersPage, getRegisteredUsersPeriodStats } from "@/lib/admin-queries";
 import { formatDate, formatRelativeTime } from "@/lib/format";
+import { ANALYTICS_PERIOD_COOKIE, computeChange, resolveAnalyticsPeriodFromRequest } from "@/lib/analytics/period";
+import AnalyticsPeriodFilter from "@/app/admin/components/AnalyticsPeriodFilter";
+import AnalyticsStatCard from "@/app/admin/components/AnalyticsStatCard";
 import BackButton from "@/app/admin/components/BackButton";
 import Pagination from "@/app/admin/components/Pagination";
 
@@ -18,28 +22,49 @@ const ACTIVITY_CLASS: Record<string, string> = {
 export default async function RegisteredUsersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<{ page?: string; period?: string; from?: string; to?: string }>;
 }) {
   await requireSession();
   const params = await searchParams;
   const page = Math.max(1, Number(params.page ?? 1) || 1);
+  const cookieStore = await cookies();
+  const period = resolveAnalyticsPeriodFromRequest(params, cookieStore.get(ANALYTICS_PERIOD_COOKIE)?.value);
 
-  const { items: users, total, totalPages } = await getRegisteredUsersPage(page, 20);
+  const [{ items: users, total, totalPages }, periodStats] = await Promise.all([
+    getRegisteredUsersPage(page, 20),
+    getRegisteredUsersPeriodStats(period.since, period.until, period.previousSince, period.previousUntil),
+  ]);
+  const newUsersChange = computeChange(periodStats.newUsersInPeriod, periodStats.previousNewUsersInPeriod);
 
   function buildHref(targetPage: number) {
-    return targetPage > 1 ? `/admin/analytics/registered-users?page=${targetPage}` : "/admin/analytics/registered-users";
+    const qs = new URLSearchParams();
+    if (targetPage > 1) qs.set("page", String(targetPage));
+    if (params.period) qs.set("period", params.period);
+    if (params.from) qs.set("from", params.from);
+    if (params.to) qs.set("to", params.to);
+    const query = qs.toString();
+    return query ? `/admin/analytics/registered-users?${query}` : "/admin/analytics/registered-users";
   }
 
   return (
     <div className="flex flex-col gap-4">
       <BackButton fallbackHref="/admin" />
 
-      <div>
-        <h1 className="font-mono text-lg font-semibold text-foreground">Registered Users</h1>
-        <p className="text-xs text-muted">
-          {total} total · Activity is derived from ResearchEvent rows (project views, searches, compares, wishlist
-          adds), same as the dashboard&apos;s DAU/WAU/MAU.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="font-mono text-lg font-semibold text-foreground">Registered Users</h1>
+          <p className="text-xs text-muted">
+            {total} total (all time) · Activity is derived from ResearchEvent rows (project views, searches, compares, wishlist
+            adds), same as the dashboard&apos;s DAU/WAU/MAU.
+          </p>
+        </div>
+        <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <AnalyticsStatCard label="New Signups (period)" value={periodStats.newUsersInPeriod} previousValue={periodStats.previousNewUsersInPeriod} change={newUsersChange} />
+        <AnalyticsStatCard label="Active Users (period)" value={periodStats.activeUsersInPeriod} />
+        <AnalyticsStatCard label="Registered Users (all time)" value={total} />
       </div>
 
       <div className="overflow-x-auto rounded-sm border border-border">

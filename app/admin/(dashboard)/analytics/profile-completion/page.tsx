@@ -38,7 +38,8 @@ export default async function ProfileCompletionAnalyticsPage({
         <div>
           <h1 className="font-mono text-lg font-semibold text-foreground">Profile Completion</h1>
           <p className="text-xs text-muted">
-            Live from every PublicUser row —{" "}
+            Live from every PublicUser row — a current-state snapshot of every account&apos;s completion right now, not a
+            period metric, so it intentionally doesn&apos;t carry the Day/Week/Month/... filter used elsewhere in Analytics —{" "}
             <Link href="/admin/analytics" className="text-accent hover:underline">
               Analytics
             </Link>

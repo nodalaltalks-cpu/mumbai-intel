@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
+import type { AnalyticsPeriod } from "./period";
 
 export interface EmailRecipientCandidate {
   id: string;
@@ -54,8 +55,9 @@ export interface EmailCampaignSummary {
   createdByUser: { name: string | null; email: string } | null;
 }
 
-export async function getEmailCampaigns(limit = 50): Promise<EmailCampaignSummary[]> {
+export async function getEmailCampaigns(limit = 50, period?: AnalyticsPeriod): Promise<EmailCampaignSummary[]> {
   return prisma.emailCampaign.findMany({
+    where: period ? { createdAt: { gte: period.since, lt: period.until } } : undefined,
     orderBy: { createdAt: "desc" },
     take: limit,
     select: {
@@ -71,4 +73,22 @@ export async function getEmailCampaigns(limit = 50): Promise<EmailCampaignSummar
       createdByUser: { select: { name: true, email: true } },
     },
   });
+}
+
+export interface EmailPeriodStats {
+  campaignsInPeriod: number;
+  previousCampaignsInPeriod: number;
+  recipientsAcceptedInPeriod: number;
+  recipientsFailedInPeriod: number;
+}
+
+/** Campaign-count and per-recipient accepted/failed totals for the selected period — reads EmailCampaignRecipient rows directly, not the campaign-level successCount/failureCount aggregate, so this reflects real per-recipient provider outcomes within the exact window (a campaign spanning a period boundary would otherwise misattribute its whole count to one bucket). */
+export async function getEmailPeriodStats(period: AnalyticsPeriod): Promise<EmailPeriodStats> {
+  const [campaignsInPeriod, previousCampaignsInPeriod, recipientsAcceptedInPeriod, recipientsFailedInPeriod] = await Promise.all([
+    prisma.emailCampaign.count({ where: { createdAt: { gte: period.since, lt: period.until } } }),
+    prisma.emailCampaign.count({ where: { createdAt: { gte: period.previousSince, lt: period.previousUntil } } }),
+    prisma.emailCampaignRecipient.count({ where: { status: "ACCEPTED", sentAt: { gte: period.since, lt: period.until } } }),
+    prisma.emailCampaignRecipient.count({ where: { status: "FAILED", campaign: { createdAt: { gte: period.since, lt: period.until } } } }),
+  ]);
+  return { campaignsInPeriod, previousCampaignsInPeriod, recipientsAcceptedInPeriod, recipientsFailedInPeriod };
 }

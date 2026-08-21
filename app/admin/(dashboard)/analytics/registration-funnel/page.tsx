@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import {
   getConversionSummary,
   getGuestVsLoggedInSplit,
@@ -11,7 +12,10 @@ import { getResearchActivitySummary } from "@/lib/analytics/research-queries";
 import { getBrochureAnalyticsSummary } from "@/lib/analytics/brochure-queries";
 import { getNewsletterSummary } from "@/lib/analytics/newsletter-queries";
 import { PREMIUM_FEATURE_LABEL } from "@/lib/premium/types";
+import { ANALYTICS_PERIOD_COOKIE, computeChange, resolveAnalyticsPeriodFromRequest } from "@/lib/analytics/period";
 import BarChart from "@/app/admin/components/charts/BarChart";
+import AnalyticsPeriodFilter from "@/app/admin/components/AnalyticsPeriodFilter";
+import AnalyticsStatCard from "@/app/admin/components/AnalyticsStatCard";
 
 export const metadata: Metadata = { title: "Registration Funnel — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
@@ -20,49 +24,53 @@ function formatPercent(value: number | null): string {
   return value === null ? "--" : `${value.toFixed(1)}%`;
 }
 
-export default async function RegistrationFunnelPage() {
+export default async function RegistrationFunnelPage({ searchParams }: { searchParams: Promise<{ period?: string; from?: string; to?: string }> }) {
+  const params = await searchParams;
+  const cookieStore = await cookies();
+  const period = resolveAnalyticsPeriodFromRequest(params, cookieStore.get(ANALYTICS_PERIOD_COOKIE)?.value);
+
   const [conversion, signupTrend, lockedClicks, research, brochures, newsletter, guestVsLoggedIn, topBeforeSignup] = await Promise.all([
-    getConversionSummary(),
-    getSignupTrend(30),
-    getLockedFeatureClickCounts(),
-    getResearchActivitySummary(),
-    getBrochureAnalyticsSummary(),
-    getNewsletterSummary(),
-    getGuestVsLoggedInSplit(30),
-    getTopProjectsBeforeSignup(10),
+    getConversionSummary(period),
+    getSignupTrend(period),
+    getLockedFeatureClickCounts(period),
+    getResearchActivitySummary(period),
+    getBrochureAnalyticsSummary(period),
+    getNewsletterSummary(period),
+    getGuestVsLoggedInSplit(period),
+    getTopProjectsBeforeSignup(period, 10),
   ]);
 
   const maxLockedClicks = Math.max(...lockedClicks.map((c) => c.count), 1);
   const totalGuestVsLoggedIn = guestVsLoggedIn.guestEvents + guestVsLoggedIn.loggedInEvents;
   const guestSharePercent = totalGuestVsLoggedIn > 0 ? (guestVsLoggedIn.guestEvents / totalGuestVsLoggedIn) * 100 : null;
+  const guestSessionsChange = computeChange(conversion.guestSessions, conversion.previousGuestSessions);
+  const newUsersChange = computeChange(conversion.newUsersInPeriod, conversion.previousNewUsersInPeriod);
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="font-mono text-lg font-semibold text-foreground">Registration Funnel</h1>
-        <p className="text-xs text-muted">
-          Guest browsing vs. free-account conversion — every number here is derived from ResearchEvent rows, same identity model as{" "}
-          <Link href="/admin/analytics/research" className="text-accent hover:underline">
-            Research Intent
-          </Link>
-          .
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="font-mono text-lg font-semibold text-foreground">Registration Funnel</h1>
+          <p className="text-xs text-muted">
+            Guest browsing vs. free-account conversion — every number here is derived from ResearchEvent rows, same identity model as{" "}
+            <Link href="/admin/analytics/research" className="text-accent hover:underline">
+              Research Intent
+            </Link>
+            .
+          </p>
+        </div>
+        <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} />
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        {[
-          ["Guest Sessions (30d)", conversion.guestSessions30d],
-          ["Registered Users", conversion.registeredUsers],
-          ["Registration Rate", formatPercent(conversion.registrationRate)],
-          ["Locked Clicks (30d)", conversion.lockedClicks30d],
-          ["Signups Today", conversion.signupsToday],
-          ["Signups This Week", conversion.signupsThisWeek],
-        ].map(([label, value]) => (
-          <div key={label as string} className="rounded-sm border border-border bg-surface p-4">
-            <p className="text-[10px] uppercase tracking-wide text-muted">{label}</p>
-            <p className="mt-1.5 font-mono text-2xl font-semibold text-foreground">{value}</p>
-          </div>
-        ))}
+        <AnalyticsStatCard label="Guest Sessions" value={conversion.guestSessions} previousValue={conversion.previousGuestSessions} change={guestSessionsChange} />
+        <AnalyticsStatCard label="New Signups" value={conversion.newUsersInPeriod} previousValue={conversion.previousNewUsersInPeriod} change={newUsersChange} />
+        <AnalyticsStatCard label="Registered Users (all time)" value={conversion.registeredUsers} />
+        <div className="rounded-sm border border-border bg-surface p-4">
+          <p className="text-[10px] uppercase tracking-wide text-muted">Registration Rate</p>
+          <p className="mt-1.5 font-mono text-2xl font-semibold text-foreground">{formatPercent(conversion.registrationRate)}</p>
+        </div>
+        <AnalyticsStatCard label="Locked Clicks" value={conversion.lockedClicks} />
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -77,9 +85,9 @@ export default async function RegistrationFunnelPage() {
       </div>
 
       <section className="rounded-sm border border-border bg-surface p-4">
-        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Guest vs. Logged-in — last 30 days</h2>
+        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Guest vs. Logged-in — {period.label}</h2>
         {totalGuestVsLoggedIn === 0 ? (
-          <p className="text-xs text-muted">No events recorded in this window yet.</p>
+          <p className="text-xs text-muted">No data for this period.</p>
         ) : (
           <>
             <div className="flex h-2 overflow-hidden rounded-full bg-background">
@@ -95,14 +103,14 @@ export default async function RegistrationFunnelPage() {
       </section>
 
       <section className="rounded-sm border border-border bg-surface p-4">
-        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Weekly Signups — last 30 days</h2>
-        <BarChart data={signupTrend.map((p) => ({ label: p.date.slice(5), count: p.count }))} emptyLabel="No signups recorded in this window yet" />
+        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Signups — {period.label}</h2>
+        <BarChart data={signupTrend.map((p) => ({ label: p.label, count: p.count }))} emptyLabel="No data for this period" />
       </section>
 
       <section className="rounded-sm border border-border bg-surface p-4">
-        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Top Locked Features</h2>
+        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Top Locked Features — {period.label}</h2>
         {lockedClicks.length === 0 ? (
-          <p className="text-xs text-muted">No locked-feature clicks recorded yet.</p>
+          <p className="text-xs text-muted">No data for this period.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {lockedClicks.map((c) => (
@@ -119,9 +127,9 @@ export default async function RegistrationFunnelPage() {
       </section>
 
       <section className="rounded-sm border border-border bg-surface p-4">
-        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Most Clicked Projects Before Signup</h2>
+        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Most Clicked Projects Before Signup — {period.label}</h2>
         {topBeforeSignup.length === 0 ? (
-          <p className="text-xs text-muted">No pre-signup project views recorded yet.</p>
+          <p className="text-xs text-muted">No data for this period.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {topBeforeSignup.map((item, i) => (
@@ -142,9 +150,9 @@ export default async function RegistrationFunnelPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <section className="rounded-sm border border-border bg-surface p-4">
           <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Brochure Downloads</h2>
-          <p className="font-mono text-2xl font-semibold text-foreground">{brochures.totalDownloads}</p>
+          <p className="font-mono text-2xl font-semibold text-foreground">{brochures.downloadsInPeriod}</p>
           <p className="mt-1 text-[11px] text-muted">
-            {brochures.downloadsThisWeek} this week ·{" "}
+            {period.label} ·{" "}
             <Link href="/admin/analytics/brochures" className="text-accent hover:underline">
               Full report →
             </Link>
@@ -165,7 +173,7 @@ export default async function RegistrationFunnelPage() {
           <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Newsletter Subscribers</h2>
           <p className="font-mono text-2xl font-semibold text-foreground">{newsletter.totalSubscribers}</p>
           <p className="mt-1 text-[11px] text-muted">
-            +{newsletter.weeklyGrowth} this week ·{" "}
+            +{newsletter.newSubscribersInPeriod} in {period.label.toLowerCase()} ·{" "}
             <Link href="/admin/analytics/newsletter" className="text-accent hover:underline">
               Full report →
             </Link>

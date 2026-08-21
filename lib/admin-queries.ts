@@ -1022,12 +1022,16 @@ export async function getBuilderTrustLeaderboard() {
 }
 
 /** Citywide monthly transaction count trend — the "Transaction Velocity" chart on the Analytics page. */
-export async function getTransactionVelocityTrend(monthsBack = 12) {
+/** `range` optionally scopes to an exact [since, until) window (Section 34/37's shared analytics period) instead of a trailing `monthsBack` count — bucketing itself stays monthly regardless of the selected period's own granularity, since transaction velocity is conventionally read month-over-month even when the founder is viewing, say, a single week. */
+export async function getTransactionVelocityTrend(monthsBack = 12, range?: { since: Date; until: Date }) {
   return safeQuery("getTransactionVelocityTrend", [] as { month: string; count: number }[], async () => {
-    const since = new Date();
-    since.setMonth(since.getMonth() - monthsBack);
+    const since = range?.since ?? (() => {
+      const d = new Date();
+      d.setMonth(d.getMonth() - monthsBack);
+      return d;
+    })();
     const rows = await prisma.transaction.findMany({
-      where: { registrationDate: { gte: since } },
+      where: { registrationDate: { gte: since, ...(range ? { lt: range.until } : {}) } },
       select: { valuePaise: true, registrationDate: true, pricePerSqftPaise: true, carpetSqft: true },
     });
     return AnalyticsService.Transaction.calculateMonthlyTrend(rows).map((p) => ({
@@ -1330,6 +1334,24 @@ export async function getReportContext(reportId: string, entityType: string, ent
     });
     if (!report || report.entityType !== entityType || report.entityId !== entityId) return null;
     return report;
+  });
+}
+
+export interface RegisteredUsersPeriodStats {
+  newUsersInPeriod: number;
+  previousNewUsersInPeriod: number;
+  activeUsersInPeriod: number;
+}
+
+/** Section 34's "Users"/"Active users" for the User Analytics page — additive alongside getUserGrowthStats' existing all-time totals and fixed DAU/WAU/MAU (Section 12-style "don't lose existing metrics" applies here too: those keep their fixed-window meaning, this is a new period-scoped pair). activeUsersInPeriod = distinct PublicUsers with >=1 ResearchEvent inside the period. */
+export async function getRegisteredUsersPeriodStats(since: Date, until: Date, previousSince: Date, previousUntil: Date): Promise<RegisteredUsersPeriodStats> {
+  return safeQuery("getRegisteredUsersPeriodStats", { newUsersInPeriod: 0, previousNewUsersInPeriod: 0, activeUsersInPeriod: 0 }, async () => {
+    const [newUsersInPeriod, previousNewUsersInPeriod, activeGroups] = await Promise.all([
+      prisma.publicUser.count({ where: { createdAt: { gte: since, lt: until } } }),
+      prisma.publicUser.count({ where: { createdAt: { gte: previousSince, lt: previousUntil } } }),
+      prisma.researchEvent.groupBy({ by: ["publicUserId"], where: { publicUserId: { not: null }, createdAt: { gte: since, lt: until } } }),
+    ]);
+    return { newUsersInPeriod, previousNewUsersInPeriod, activeUsersInPeriod: activeGroups.length };
   });
 }
 

@@ -65,6 +65,10 @@ export default async function DataQualityPage() {
           incomplete). Completion % is the same section-weighted score shown on each project&apos;s own edit form, not a new
           metric invented for this page.
         </p>
+        <p className="mt-1 text-[11px] text-muted">
+          This is a current-state snapshot, not a period metric — it reflects the catalog&apos;s condition right now, not
+          activity during a date range, so it intentionally doesn&apos;t carry the Day/Week/Month/... filter used elsewhere in Analytics.
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">

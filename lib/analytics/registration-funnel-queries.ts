@@ -2,49 +2,39 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import type { PremiumFeature } from "@/lib/premium/types";
 import type { TopViewedEntity } from "./research-queries";
-
-function startOfDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-function daysAgo(n: number): Date {
-  const d = startOfDay(new Date());
-  d.setDate(d.getDate() - n);
-  return d;
-}
+import { buildBuckets, countByBucket, type AnalyticsPeriod } from "./period";
 
 export interface ConversionSummary {
-  guestSessions30d: number;
+  guestSessions: number;
+  previousGuestSessions: number;
   registeredUsers: number;
+  newUsersInPeriod: number;
+  previousNewUsersInPeriod: number;
   registrationRate: number | null;
-  lockedClicks30d: number;
-  signupsToday: number;
-  signupsThisWeek: number;
+  lockedClicks: number;
   googleSignupPercent: number | null;
   emailSignupPercent: number | null;
 }
 
 /** Guest visitors = distinct anon session ids with research activity but no signed-in user in the window — the same identity model as every other ResearchEvent query (getPublicSession()/anon cookie). */
-async function countGuestSessions(since: Date): Promise<number> {
+async function countGuestSessions(since: Date, until: Date): Promise<number> {
   const rows = await prisma.researchEvent.findMany({
-    where: { createdAt: { gte: since }, publicUserId: null, sessionId: { not: null } },
+    where: { createdAt: { gte: since, lt: until }, publicUserId: null, sessionId: { not: null } },
     select: { sessionId: true },
   });
   return new Set(rows.map((r) => r.sessionId)).size;
 }
 
-export async function getConversionSummary(): Promise<ConversionSummary> {
-  const now = new Date();
-  const since30d = daysAgo(30);
-
-  const [guestSessions30d, registeredUsers, lockedClicks30d, signupsToday, signupsThisWeek, signupEvents] = await Promise.all([
-    countGuestSessions(since30d),
+/** registeredUsers stays an all-time cumulative total (the current user base size) -- newUsersInPeriod/guestSessions/lockedClicks/signup-method split are all scoped to the selected period, with a previous-period comparison for the two headline figures. */
+export async function getConversionSummary(period: AnalyticsPeriod): Promise<ConversionSummary> {
+  const [guestSessions, previousGuestSessions, registeredUsers, newUsersInPeriod, previousNewUsersInPeriod, lockedClicks, signupEvents] = await Promise.all([
+    countGuestSessions(period.since, period.until),
+    countGuestSessions(period.previousSince, period.previousUntil),
     prisma.publicUser.count(),
-    prisma.researchEvent.count({ where: { eventType: "LOCKED_FEATURE_CLICKED", createdAt: { gte: since30d } } }),
-    prisma.publicUser.count({ where: { createdAt: { gte: startOfDay(now) } } }),
-    prisma.publicUser.count({ where: { createdAt: { gte: daysAgo(7) } } }),
-    prisma.researchEvent.findMany({ where: { eventType: "SIGNUP_COMPLETED" }, select: { metadata: true } }),
+    prisma.publicUser.count({ where: { createdAt: { gte: period.since, lt: period.until } } }),
+    prisma.publicUser.count({ where: { createdAt: { gte: period.previousSince, lt: period.previousUntil } } }),
+    prisma.researchEvent.count({ where: { eventType: "LOCKED_FEATURE_CLICKED", createdAt: { gte: period.since, lt: period.until } } }),
+    prisma.researchEvent.findMany({ where: { eventType: "SIGNUP_COMPLETED", createdAt: { gte: period.since, lt: period.until } }, select: { metadata: true } }),
   ]);
 
   let googleCount = 0;
@@ -57,37 +47,27 @@ export async function getConversionSummary(): Promise<ConversionSummary> {
   const totalMethodEvents = googleCount + emailCount;
 
   return {
-    guestSessions30d,
+    guestSessions,
+    previousGuestSessions,
     registeredUsers,
-    registrationRate: guestSessions30d + registeredUsers > 0 ? (registeredUsers / (guestSessions30d + registeredUsers)) * 100 : null,
-    lockedClicks30d,
-    signupsToday,
-    signupsThisWeek,
+    newUsersInPeriod,
+    previousNewUsersInPeriod,
+    registrationRate: guestSessions + newUsersInPeriod > 0 ? (newUsersInPeriod / (guestSessions + newUsersInPeriod)) * 100 : null,
+    lockedClicks,
     googleSignupPercent: totalMethodEvents > 0 ? (googleCount / totalMethodEvents) * 100 : null,
     emailSignupPercent: totalMethodEvents > 0 ? (emailCount / totalMethodEvents) * 100 : null,
   };
 }
 
-export interface DailySignupPoint {
-  date: string;
+export interface BucketPoint {
+  label: string;
   count: number;
 }
 
-/** Daily PublicUser signups — matches lib/analytics/research-queries.ts's getEventTrend bucketing shape exactly. */
-export async function getSignupTrend(days = 30): Promise<DailySignupPoint[]> {
-  const since = daysAgo(days - 1);
-  const rows = await prisma.publicUser.findMany({ where: { createdAt: { gte: since } }, select: { createdAt: true } });
-  const buckets = new Map<string, number>();
-  for (let i = 0; i < days; i++) {
-    const d = new Date(since);
-    d.setDate(d.getDate() + i);
-    buckets.set(d.toISOString().slice(0, 10), 0);
-  }
-  for (const row of rows) {
-    const key = row.createdAt.toISOString().slice(0, 10);
-    buckets.set(key, (buckets.get(key) ?? 0) + 1);
-  }
-  return Array.from(buckets.entries()).map(([date, count]) => ({ date, count }));
+/** Signup trend bucketed at the period's granularity — matches lib/analytics/research-queries.ts's getEventTrend bucketing approach exactly. */
+export async function getSignupTrend(period: AnalyticsPeriod): Promise<BucketPoint[]> {
+  const rows = await prisma.publicUser.findMany({ where: { createdAt: { gte: period.since, lt: period.until } }, select: { createdAt: true } });
+  return countByBucket(rows.map((r) => r.createdAt), buildBuckets(period));
 }
 
 export interface GuestVsLoggedInSplit {
@@ -96,11 +76,10 @@ export interface GuestVsLoggedInSplit {
 }
 
 /** Event-volume split by identity — publicUserId null means the event was recorded while browsing as a guest, same identity model as every other ResearchEvent query. */
-export async function getGuestVsLoggedInSplit(days = 30): Promise<GuestVsLoggedInSplit> {
-  const since = daysAgo(days - 1);
+export async function getGuestVsLoggedInSplit(period: AnalyticsPeriod): Promise<GuestVsLoggedInSplit> {
   const [guestEvents, loggedInEvents] = await Promise.all([
-    prisma.researchEvent.count({ where: { createdAt: { gte: since }, publicUserId: null } }),
-    prisma.researchEvent.count({ where: { createdAt: { gte: since }, publicUserId: { not: null } } }),
+    prisma.researchEvent.count({ where: { createdAt: { gte: period.since, lt: period.until }, publicUserId: null } }),
+    prisma.researchEvent.count({ where: { createdAt: { gte: period.since, lt: period.until }, publicUserId: { not: null } } }),
   ]);
   return { guestEvents, loggedInEvents };
 }
@@ -109,13 +88,13 @@ export async function getGuestVsLoggedInSplit(days = 30): Promise<GuestVsLoggedI
  * Projects a now-registered user viewed anonymously before they signed up —
  * the anon session cookie (mi_anon_id) is never rotated on login, so a
  * SIGNUP_COMPLETED row and the PROJECT_VIEWED rows that preceded it share
- * the same sessionId without any explicit backfill/link step. Grouped in
- * JS (Neon HTTP adapter groupBy avoidance), same pattern as getTopViewed
- * in research-queries.ts.
+ * the same sessionId without any explicit backfill/link step. Scoped to
+ * signups within the selected period. Grouped in JS (Neon HTTP adapter
+ * groupBy avoidance), same pattern as getTopViewed in research-queries.ts.
  */
-export async function getTopProjectsBeforeSignup(limit = 10): Promise<TopViewedEntity[]> {
+export async function getTopProjectsBeforeSignup(period: AnalyticsPeriod, limit = 10): Promise<TopViewedEntity[]> {
   const signups = await prisma.researchEvent.findMany({
-    where: { eventType: "SIGNUP_COMPLETED", sessionId: { not: null } },
+    where: { eventType: "SIGNUP_COMPLETED", sessionId: { not: null }, createdAt: { gte: period.since, lt: period.until } },
     select: { sessionId: true, createdAt: true },
   });
   if (signups.length === 0) return [];
@@ -158,9 +137,12 @@ export interface LockedFeatureClickCount {
   count: number;
 }
 
-/** Which locked surfaces actually drive sign-in prompts — top-of-funnel breakdown for LOCKED_FEATURE_CLICKED, grouped in JS (Neon HTTP adapter has no groupBy on a JSON field). */
-export async function getLockedFeatureClickCounts(): Promise<LockedFeatureClickCount[]> {
-  const rows = await prisma.researchEvent.findMany({ where: { eventType: "LOCKED_FEATURE_CLICKED" }, select: { metadata: true } });
+/** Which locked surfaces actually drive sign-in prompts — top-of-funnel breakdown for LOCKED_FEATURE_CLICKED within the period, grouped in JS (Neon HTTP adapter has no groupBy on a JSON field). */
+export async function getLockedFeatureClickCounts(period: AnalyticsPeriod): Promise<LockedFeatureClickCount[]> {
+  const rows = await prisma.researchEvent.findMany({
+    where: { eventType: "LOCKED_FEATURE_CLICKED", createdAt: { gte: period.since, lt: period.until } },
+    select: { metadata: true },
+  });
   const counts = new Map<string, number>();
   for (const row of rows) {
     const feature = (row.metadata as { feature?: string } | null)?.feature ?? "unknown";

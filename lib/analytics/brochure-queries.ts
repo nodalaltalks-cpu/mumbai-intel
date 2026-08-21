@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { buildBuckets, countByBucket, type AnalyticsPeriod } from "./period";
 
 /**
  * All admin Brochure Analytics reads — every number here is derived from
@@ -23,52 +24,51 @@ function daysAgo(n: number): Date {
 function startOfMonth(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), 1);
 }
-function startOfYear(d: Date): Date {
-  return new Date(d.getFullYear(), 0, 1);
-}
 
 export interface BrochureAnalyticsSummary {
   totalDownloads: number;
+  downloadsInPeriod: number;
+  previousDownloadsInPeriod: number;
   downloadsToday: number;
   downloadsThisWeek: number;
-  downloadsThisMonth: number;
-  downloadsThisYear: number;
   anonymousDownloads: number;
   loggedInDownloads: number;
   returningDownloaders: number;
   totalViews: number;
 }
 
-export async function getBrochureAnalyticsSummary(): Promise<BrochureAnalyticsSummary> {
+/** totalDownloads/totalViews stay all-time cumulative totals (legitimate "since launch" figures); everything else is scoped to the selected period, with downloadsInPeriod carrying a previous-period comparison. */
+export async function getBrochureAnalyticsSummary(period: AnalyticsPeriod): Promise<BrochureAnalyticsSummary> {
   const now = new Date();
+  const inPeriod = { createdAt: { gte: period.since, lt: period.until } };
   const [
     totalDownloads,
+    downloadsInPeriod,
+    previousDownloadsInPeriod,
     downloadsToday,
     downloadsThisWeek,
-    downloadsThisMonth,
-    downloadsThisYear,
     anonymousDownloads,
     loggedInDownloads,
     returningDownloaders,
     totalViews,
   ] = await Promise.all([
     prisma.brochureDownloadEvent.count({ where: { eventType: DOWNLOAD } }),
+    prisma.brochureDownloadEvent.count({ where: { eventType: DOWNLOAD, ...inPeriod } }),
+    prisma.brochureDownloadEvent.count({ where: { eventType: DOWNLOAD, createdAt: { gte: period.previousSince, lt: period.previousUntil } } }),
     prisma.brochureDownloadEvent.count({ where: { eventType: DOWNLOAD, createdAt: { gte: startOfDay(now) } } }),
     prisma.brochureDownloadEvent.count({ where: { eventType: DOWNLOAD, createdAt: { gte: daysAgo(7) } } }),
-    prisma.brochureDownloadEvent.count({ where: { eventType: DOWNLOAD, createdAt: { gte: startOfMonth(now) } } }),
-    prisma.brochureDownloadEvent.count({ where: { eventType: DOWNLOAD, createdAt: { gte: startOfYear(now) } } }),
-    prisma.brochureDownloadEvent.count({ where: { eventType: DOWNLOAD, publicUserId: null } }),
-    prisma.brochureDownloadEvent.count({ where: { eventType: DOWNLOAD, publicUserId: { not: null } } }),
-    prisma.brochureDownloadEvent.count({ where: { eventType: DOWNLOAD, isRepeat: true } }),
+    prisma.brochureDownloadEvent.count({ where: { eventType: DOWNLOAD, publicUserId: null, ...inPeriod } }),
+    prisma.brochureDownloadEvent.count({ where: { eventType: DOWNLOAD, publicUserId: { not: null }, ...inPeriod } }),
+    prisma.brochureDownloadEvent.count({ where: { eventType: DOWNLOAD, isRepeat: true, ...inPeriod } }),
     prisma.brochureDownloadEvent.count({ where: { eventType: "VIEWED" } }),
   ]);
 
   return {
     totalDownloads,
+    downloadsInPeriod,
+    previousDownloadsInPeriod,
     downloadsToday,
     downloadsThisWeek,
-    downloadsThisMonth,
-    downloadsThisYear,
     anonymousDownloads,
     loggedInDownloads,
     returningDownloaders,
@@ -83,10 +83,10 @@ export interface TopEntityDownloads {
   downloadCount: number;
 }
 
-export async function getTopDownloadedProjects(limit = 10): Promise<TopEntityDownloads[]> {
+export async function getTopDownloadedProjects(period: AnalyticsPeriod, limit = 10): Promise<TopEntityDownloads[]> {
   const grouped = await prisma.brochureDownloadEvent.groupBy({
     by: ["projectId"],
-    where: { eventType: DOWNLOAD },
+    where: { eventType: DOWNLOAD, createdAt: { gte: period.since, lt: period.until } },
     _count: { _all: true },
     orderBy: { _count: { projectId: "desc" } },
     take: limit,
@@ -103,10 +103,10 @@ export async function getTopDownloadedProjects(limit = 10): Promise<TopEntityDow
     .filter((x): x is TopEntityDownloads => x !== null);
 }
 
-export async function getTopDownloadedBuilders(limit = 10): Promise<TopEntityDownloads[]> {
+export async function getTopDownloadedBuilders(period: AnalyticsPeriod, limit = 10): Promise<TopEntityDownloads[]> {
   const grouped = await prisma.brochureDownloadEvent.groupBy({
     by: ["builderId"],
-    where: { eventType: DOWNLOAD, builderId: { not: null } },
+    where: { eventType: DOWNLOAD, builderId: { not: null }, createdAt: { gte: period.since, lt: period.until } },
     _count: { _all: true },
     orderBy: { _count: { builderId: "desc" } },
     take: limit,
@@ -124,10 +124,10 @@ export async function getTopDownloadedBuilders(limit = 10): Promise<TopEntityDow
     .filter((x): x is TopEntityDownloads => x !== null);
 }
 
-export async function getTopDownloadedLocalities(limit = 10): Promise<TopEntityDownloads[]> {
+export async function getTopDownloadedLocalities(period: AnalyticsPeriod, limit = 10): Promise<TopEntityDownloads[]> {
   const grouped = await prisma.brochureDownloadEvent.groupBy({
     by: ["localityId"],
-    where: { eventType: DOWNLOAD, localityId: { not: null } },
+    where: { eventType: DOWNLOAD, localityId: { not: null }, createdAt: { gte: period.since, lt: period.until } },
     _count: { _all: true },
     orderBy: { _count: { localityId: "desc" } },
     take: limit,
@@ -145,10 +145,10 @@ export async function getTopDownloadedLocalities(limit = 10): Promise<TopEntityD
     .filter((x): x is TopEntityDownloads => x !== null);
 }
 
-export async function getTopDownloadedMicroMarkets(limit = 10): Promise<TopEntityDownloads[]> {
+export async function getTopDownloadedMicroMarkets(period: AnalyticsPeriod, limit = 10): Promise<TopEntityDownloads[]> {
   const grouped = await prisma.brochureDownloadEvent.groupBy({
     by: ["microMarketId"],
-    where: { eventType: DOWNLOAD, microMarketId: { not: null } },
+    where: { eventType: DOWNLOAD, microMarketId: { not: null }, createdAt: { gte: period.since, lt: period.until } },
     _count: { _all: true },
     orderBy: { _count: { microMarketId: "desc" } },
     take: limit,
@@ -166,55 +166,18 @@ export async function getTopDownloadedMicroMarkets(limit = 10): Promise<TopEntit
     .filter((x): x is TopEntityDownloads => x !== null);
 }
 
-export interface DailyDownloadPoint {
-  date: string; // YYYY-MM-DD
+export interface DownloadTrendPoint {
+  label: string;
   count: number;
 }
 
-/** Daily download counts for the last `days` days — bucketed in JS since the Neon HTTP adapter has no efficient DATE_TRUNC groupBy path here. */
-export async function getDailyDownloadTrend(days = 30): Promise<DailyDownloadPoint[]> {
-  const since = daysAgo(days - 1);
+/** Download trend bucketed at the period's chosen granularity (Section 36) — replaces the old fixed 30-day-daily / 12-month-monthly pair with one period-aware function. */
+export async function getDownloadTrend(period: AnalyticsPeriod): Promise<DownloadTrendPoint[]> {
   const rows = await prisma.brochureDownloadEvent.findMany({
-    where: { eventType: DOWNLOAD, createdAt: { gte: since } },
+    where: { eventType: DOWNLOAD, createdAt: { gte: period.since, lt: period.until } },
     select: { createdAt: true },
   });
-  const buckets = new Map<string, number>();
-  for (let i = 0; i < days; i++) {
-    const d = new Date(since);
-    d.setDate(d.getDate() + i);
-    buckets.set(d.toISOString().slice(0, 10), 0);
-  }
-  for (const row of rows) {
-    const key = row.createdAt.toISOString().slice(0, 10);
-    buckets.set(key, (buckets.get(key) ?? 0) + 1);
-  }
-  return Array.from(buckets.entries()).map(([date, count]) => ({ date, count }));
-}
-
-export interface MonthlyDownloadPoint {
-  month: string; // YYYY-MM
-  count: number;
-}
-
-export async function getMonthlyDownloadTrend(months = 12): Promise<MonthlyDownloadPoint[]> {
-  const since = new Date();
-  since.setMonth(since.getMonth() - (months - 1), 1);
-  since.setHours(0, 0, 0, 0);
-  const rows = await prisma.brochureDownloadEvent.findMany({
-    where: { eventType: DOWNLOAD, createdAt: { gte: since } },
-    select: { createdAt: true },
-  });
-  const buckets = new Map<string, number>();
-  for (let i = 0; i < months; i++) {
-    const d = new Date(since);
-    d.setMonth(d.getMonth() + i);
-    buckets.set(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`, 0);
-  }
-  for (const row of rows) {
-    const key = `${row.createdAt.getFullYear()}-${String(row.createdAt.getMonth() + 1).padStart(2, "0")}`;
-    buckets.set(key, (buckets.get(key) ?? 0) + 1);
-  }
-  return Array.from(buckets.entries()).map(([month, count]) => ({ month, count }));
+  return countByBucket(rows.map((r) => r.createdAt), buildBuckets(period));
 }
 
 export interface BreakdownItem {
@@ -222,10 +185,10 @@ export interface BreakdownItem {
   count: number;
 }
 
-export async function getDownloadsByDevice(): Promise<BreakdownItem[]> {
+export async function getDownloadsByDevice(period: AnalyticsPeriod): Promise<BreakdownItem[]> {
   const grouped = await prisma.brochureDownloadEvent.groupBy({
     by: ["device"],
-    where: { eventType: DOWNLOAD },
+    where: { eventType: DOWNLOAD, createdAt: { gte: period.since, lt: period.until } },
     _count: { _all: true },
     orderBy: { _count: { device: "desc" } },
   });
@@ -233,9 +196,9 @@ export async function getDownloadsByDevice(): Promise<BreakdownItem[]> {
 }
 
 /** Groups by the referrer's registered domain ("Direct" when there is none) — a lightweight stand-in for full UTM-source reporting. */
-export async function getDownloadsBySource(limit = 10): Promise<BreakdownItem[]> {
+export async function getDownloadsBySource(period: AnalyticsPeriod, limit = 10): Promise<BreakdownItem[]> {
   const rows = await prisma.brochureDownloadEvent.findMany({
-    where: { eventType: DOWNLOAD },
+    where: { eventType: DOWNLOAD, createdAt: { gte: period.since, lt: period.until } },
     select: { referrer: true, utmSource: true },
   });
   const counts = new Map<string, number>();

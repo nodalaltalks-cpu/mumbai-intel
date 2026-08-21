@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import {
   getEventTrend,
   getEventTypeCounts,
@@ -10,7 +11,10 @@ import {
   type TopViewedEntity,
 } from "@/lib/analytics/research-queries";
 import { getResearchFunnel } from "@/lib/analytics/research-funnel-queries";
+import { ANALYTICS_PERIOD_COOKIE, computeChange, resolveAnalyticsPeriodFromRequest } from "@/lib/analytics/period";
 import BarChart from "@/app/admin/components/charts/BarChart";
+import AnalyticsPeriodFilter from "@/app/admin/components/AnalyticsPeriodFilter";
+import AnalyticsStatCard from "@/app/admin/components/AnalyticsStatCard";
 
 export const metadata: Metadata = { title: "Research Intent Analytics — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
@@ -29,6 +33,9 @@ const EVENT_TYPE_LABEL: Record<string, string> = {
   NEWSLETTER_VIEWED: "Newsletter Viewed",
   NEWSLETTER_SUBSCRIBED: "Newsletter Subscribed",
   NEWSLETTER_UNSUBSCRIBED: "Newsletter Unsubscribed",
+  LOCKED_FEATURE_CLICKED: "Locked Feature Clicked",
+  SIGNUP_COMPLETED: "Signup Completed",
+  LOGIN_COMPLETED: "Login Completed",
   TRANSACTION_VIEWED: "Transaction Viewed",
   MARKET_DATA_VIEWED: "Market Data Viewed",
   INSIGHTS_VIEWED: "Insights Viewed",
@@ -36,6 +43,13 @@ const EVENT_TYPE_LABEL: Record<string, string> = {
   TRANSACTION_LIST_VIEWED: "Transaction List Viewed",
   TRANSACTION_SEARCHED: "Transaction Searched",
   TRANSACTION_FILTER_APPLIED: "Transaction Filter Applied",
+  LANDING_PAGE_VIEWED: "Landing Page Viewed",
+  PROJECT_CARD_CLICKED: "Project Card Clicked",
+  NOTIFICATION_OPENED: "Notification Opened",
+  EMAIL_SENT: "Email Sent",
+  WHATSAPP_SHARE_CLICKED: "WhatsApp Share Clicked",
+  REFERRAL_SHARE_INITIATED: "Referral Share Initiated",
+  REFERRAL_LINK_CLICKED: "Referral Link Clicked",
 };
 
 function TopViewedList({ title, items }: { title: string; items: TopViewedEntity[] }) {
@@ -43,7 +57,7 @@ function TopViewedList({ title, items }: { title: string; items: TopViewedEntity
     <section className="rounded-sm border border-border bg-surface p-4">
       <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">{title}</h2>
       {items.length === 0 ? (
-        <p className="text-xs text-muted">No views recorded yet.</p>
+        <p className="text-xs text-muted">No data for this period.</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {items.map((item, i) => (
@@ -63,23 +77,29 @@ function TopViewedList({ title, items }: { title: string; items: TopViewedEntity
   );
 }
 
-export default async function ResearchAnalyticsPage() {
+export default async function ResearchAnalyticsPage({ searchParams }: { searchParams: Promise<{ period?: string; from?: string; to?: string }> }) {
+  const params = await searchParams;
+  const cookieStore = await cookies();
+  const period = resolveAnalyticsPeriodFromRequest(params, cookieStore.get(ANALYTICS_PERIOD_COOKIE)?.value);
+
   const [summary, trend, eventCounts, topProjects, topBuilders, topLocalities, funnel] = await Promise.all([
-    getResearchActivitySummary(),
-    getEventTrend(30),
-    getEventTypeCounts(),
-    getTopViewedProjects(10),
-    getTopViewedBuilders(10),
-    getTopViewedLocalities(10),
-    getResearchFunnel(),
+    getResearchActivitySummary(period),
+    getEventTrend(period),
+    getEventTypeCounts(period),
+    getTopViewedProjects(period, 10),
+    getTopViewedBuilders(period, 10),
+    getTopViewedLocalities(period, 10),
+    getResearchFunnel(period),
   ]);
 
   const maxEventCount = Math.max(...eventCounts.map((e) => e.count), 1);
   const funnelStart = funnel.stages[0]?.userCount ?? 0;
+  const eventsChange = computeChange(summary.totalEvents, summary.previousTotalEvents);
+  const searchesChange = computeChange(summary.searchesPerformed, summary.previousSearchesPerformed);
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-mono text-lg font-semibold text-foreground">Research Intent Analytics</h1>
           <p className="text-xs text-muted">
@@ -89,32 +109,26 @@ export default async function ResearchAnalyticsPage() {
             </Link>
           </p>
         </div>
+        <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} />
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        {[
-          ["Total Events", summary.totalEvents],
-          ["Today", summary.eventsToday],
-          ["Searches", summary.searchesPerformed],
-          ["Filters Used", summary.filtersUsed],
-          ["Compare Used", summary.compareUsed],
-          ["Wishlist Added", summary.wishlistAdded],
-        ].map(([label, value]) => (
-          <div key={label as string} className="rounded-sm border border-border bg-surface p-4">
-            <p className="text-[10px] uppercase tracking-wide text-muted">{label}</p>
-            <p className="mt-1.5 font-mono text-2xl font-semibold text-foreground">{value}</p>
-          </div>
-        ))}
+        <AnalyticsStatCard label="Total Events" value={summary.totalEvents} previousValue={summary.previousTotalEvents} change={eventsChange} />
+        <AnalyticsStatCard label="Searches" value={summary.searchesPerformed} previousValue={summary.previousSearchesPerformed} change={searchesChange} />
+        <AnalyticsStatCard label="Filters Used" value={summary.filtersUsed} />
+        <AnalyticsStatCard label="Compare Used" value={summary.compareUsed} />
+        <AnalyticsStatCard label="Wishlist Added" value={summary.wishlistAdded} />
+        <AnalyticsStatCard label="Project Card Clicks" value={summary.projectCardClicks} />
       </div>
 
       <section className="rounded-sm border border-border bg-surface p-4">
-        <h2 className="font-mono text-sm font-semibold text-foreground">Research funnel — signed-in users, last {funnel.windowDays} days</h2>
+        <h2 className="font-mono text-sm font-semibold text-foreground">Research funnel — signed-in users, {period.label}</h2>
         <p className="mb-3 text-[11px] text-muted">
           Distinct signed-in users reaching each stage independently (not strict path order) — anonymous/guest
           research isn&apos;t included here since it can&apos;t be attributed to one identity across stages.
         </p>
         {funnelStart === 0 ? (
-          <p className="text-xs text-muted">No signed-in research activity recorded in this window yet.</p>
+          <p className="text-xs text-muted">No data for this period.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {funnel.stages.map((stage, i) => {
@@ -139,14 +153,14 @@ export default async function ResearchAnalyticsPage() {
       </section>
 
       <section className="rounded-sm border border-border bg-surface p-4">
-        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Event volume — last 30 days</h2>
-        <BarChart data={trend.map((p) => ({ label: p.date.slice(5), count: p.count }))} emptyLabel="No research events recorded in this window yet" />
+        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Event volume — {period.label}</h2>
+        <BarChart data={trend.map((p) => ({ label: p.label, count: p.count }))} emptyLabel="No data for this period" />
       </section>
 
       <section className="rounded-sm border border-border bg-surface p-4">
-        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Events by type</h2>
+        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Events by type — {period.label}</h2>
         {eventCounts.length === 0 ? (
-          <p className="text-xs text-muted">No events recorded yet.</p>
+          <p className="text-xs text-muted">No data for this period.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {eventCounts.map((e) => (
@@ -169,7 +183,7 @@ export default async function ResearchAnalyticsPage() {
       </div>
 
       <p className="text-[11px] text-muted">
-        Continue Research Clicked: {summary.continueResearchClicks} total. Newsletter Viewed is not currently
+        Continue Research Clicked: {summary.continueResearchClicks} in {period.label.toLowerCase()}. Newsletter Viewed is not currently
         instrumented (the footer newsletter module renders on every page — logging a view there would just count page
         loads, not genuine intent — so it&apos;s intentionally left out; Subscribed/Unsubscribed are tracked above).
       </p>

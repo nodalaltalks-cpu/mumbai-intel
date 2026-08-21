@@ -1,22 +1,27 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { getLatestSubscribers, getNewsletterSummary, getSubscriptionTrend } from "@/lib/analytics/newsletter-queries";
 import { formatDate } from "@/lib/format";
+import { ANALYTICS_PERIOD_COOKIE, computeChange, resolveAnalyticsPeriodFromRequest } from "@/lib/analytics/period";
 import BarChart from "@/app/admin/components/charts/BarChart";
+import AnalyticsPeriodFilter from "@/app/admin/components/AnalyticsPeriodFilter";
+import AnalyticsStatCard from "@/app/admin/components/AnalyticsStatCard";
 
 export const metadata: Metadata = { title: "Newsletter Analytics — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
-export default async function NewsletterAnalyticsPage() {
-  const [summary, trend, latest] = await Promise.all([
-    getNewsletterSummary(),
-    getSubscriptionTrend(30),
-    getLatestSubscribers(10),
-  ]);
+export default async function NewsletterAnalyticsPage({ searchParams }: { searchParams: Promise<{ period?: string; from?: string; to?: string }> }) {
+  const params = await searchParams;
+  const cookieStore = await cookies();
+  const period = resolveAnalyticsPeriodFromRequest(params, cookieStore.get(ANALYTICS_PERIOD_COOKIE)?.value);
+
+  const [summary, trend, latest] = await Promise.all([getNewsletterSummary(period), getSubscriptionTrend(period), getLatestSubscribers(10)]);
+  const change = computeChange(summary.newSubscribersInPeriod, summary.previousNewSubscribersInPeriod);
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-mono text-lg font-semibold text-foreground">Newsletter Analytics</h1>
           <p className="text-xs text-muted">
@@ -26,25 +31,17 @@ export default async function NewsletterAnalyticsPage() {
             </Link>
           </p>
         </div>
+        <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} />
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          ["Total Subscribers", summary.totalSubscribers],
-          ["Today", summary.subscribersToday],
-          ["Weekly Growth", summary.weeklyGrowth],
-          ["Monthly Growth", summary.monthlyGrowth],
-        ].map(([label, value]) => (
-          <div key={label as string} className="rounded-sm border border-border bg-surface p-4">
-            <p className="text-[10px] uppercase tracking-wide text-muted">{label}</p>
-            <p className="mt-1.5 font-mono text-2xl font-semibold text-foreground">{value}</p>
-          </div>
-        ))}
+        <AnalyticsStatCard label="New Subscribers (period)" value={summary.newSubscribersInPeriod} previousValue={summary.previousNewSubscribersInPeriod} change={change} />
+        <AnalyticsStatCard label="Total Subscribers (all time)" value={summary.totalSubscribers} />
       </div>
 
       <section className="rounded-sm border border-border bg-surface p-4">
-        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Subscription trend — last 30 days</h2>
-        <BarChart data={trend.map((p) => ({ label: p.date.slice(5), count: p.count }))} emptyLabel="No subscriptions recorded in this window yet" />
+        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Subscriptions — {period.label}</h2>
+        <BarChart data={trend.map((p) => ({ label: p.label, count: p.count }))} emptyLabel="No data for this period" />
       </section>
 
       <section className="rounded-sm border border-border bg-surface p-4">

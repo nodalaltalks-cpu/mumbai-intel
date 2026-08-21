@@ -1,14 +1,20 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { getDashboardStats, getTransactionVelocityTrend } from "@/lib/admin-queries";
 import { formatMonth } from "@/lib/format";
+import { ANALYTICS_PERIOD_COOKIE, resolveAnalyticsPeriodFromRequest } from "@/lib/analytics/period";
+import AnalyticsPeriodFilter from "@/app/admin/components/AnalyticsPeriodFilter";
 import BarChart from "@/app/admin/components/charts/BarChart";
 
 export const metadata: Metadata = { title: "Analytics — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
-export default async function AdminAnalyticsPage() {
-  const [stats, velocity] = await Promise.all([getDashboardStats(), getTransactionVelocityTrend(12)]);
+export default async function AdminAnalyticsPage({ searchParams }: { searchParams: Promise<{ period?: string; from?: string; to?: string }> }) {
+  const params = await searchParams;
+  const cookieStore = await cookies();
+  const period = resolveAnalyticsPeriodFromRequest(params, cookieStore.get(ANALYTICS_PERIOD_COOKIE)?.value);
+  const [stats, velocity] = await Promise.all([getDashboardStats(), getTransactionVelocityTrend(12, { since: period.since, until: period.until })]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -39,8 +45,13 @@ export default async function AdminAnalyticsPage() {
           <Link href="/admin/analytics/referrals" className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
             Referrals →
           </Link>
+          <Link href="/admin/analytics/registered-users" className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
+            Registered Users →
+          </Link>
         </div>
       </div>
+
+      <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
@@ -57,10 +68,10 @@ export default async function AdminAnalyticsPage() {
       </div>
 
       <section className="rounded-sm border border-border bg-surface p-4">
-        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Transaction velocity — monthly registrations</h2>
+        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Transaction velocity — monthly registrations, {period.label}</h2>
         <BarChart
           data={velocity.map((p) => ({ label: formatMonth(p.month), count: p.count }))}
-          emptyLabel="No transactions recorded in this window yet"
+          emptyLabel="No data for this period"
         />
       </section>
     </div>
