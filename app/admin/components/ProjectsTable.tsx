@@ -21,8 +21,8 @@ export interface ProjectRow {
   id: string;
   name: string;
   status: string;
-  priceMinPaise: bigint | null;
-  priceMaxPaise: bigint | null;
+  priceMinPaise: number | null;
+  priceMaxPaise: number | null;
   updatedAt: Date;
   isPublished: boolean;
   isFeatured: boolean;

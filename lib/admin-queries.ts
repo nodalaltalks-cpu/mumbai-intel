@@ -464,7 +464,17 @@ async function fetchProjectsPage(filters: ProjectListFilters) {
     prisma.project.count({ where }),
   ]);
 
-  return { items, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
+  // priceMinPaise/priceMaxPaise are BigInt columns -- raw BigInt can't cross
+  // the Server->Client boundary into ProjectsTable ("use client"). Same fix
+  // as getProjectForEdit, same reason it was missed until now: no project's
+  // list row had ever carried non-null pricing before.
+  const convertedItems = items.map((p) => ({
+    ...p,
+    priceMinPaise: p.priceMinPaise !== null ? Number(p.priceMinPaise) : null,
+    priceMaxPaise: p.priceMaxPaise !== null ? Number(p.priceMaxPaise) : null,
+  }));
+
+  return { items: convertedItems, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
 }
 
 export async function getProjectsAdminPaged(filters: ProjectListFilters) {
@@ -498,15 +508,28 @@ export async function getProjectForEdit(id: string) {
     return {
       ...project,
       landAreaAcres: project.landAreaAcres !== null ? Number(project.landAreaAcres) : null,
+      // priceMinPaise/priceMaxPaise are BigInt columns -- raw BigInt values
+      // can't cross the Server->Client Component boundary (ProjectForm and
+      // ConfigurationsManager are both "use client"), the same reason every
+      // other BigInt/Decimal field on this object is converted to Number
+      // right here rather than passed through raw. This was previously
+      // missed because no project had ever had a non-null priceMinPaise on
+      // an individual configuration row until now -- every prior test
+      // project left it null, so the crash was never exercised.
+      priceMinPaise: project.priceMinPaise !== null ? Number(project.priceMinPaise) : null,
+      priceMaxPaise: project.priceMaxPaise !== null ? Number(project.priceMaxPaise) : null,
       configurations: project.configurations.map((c) => ({
         ...c,
         bedrooms: Number(c.bedrooms),
         carpetSqft: c.carpetSqft !== null ? Number(c.carpetSqft) : null,
         builtUpSqft: c.builtUpSqft !== null ? Number(c.builtUpSqft) : null,
+        priceMinPaise: c.priceMinPaise !== null ? Number(c.priceMinPaise) : null,
+        priceMaxPaise: c.priceMaxPaise !== null ? Number(c.priceMaxPaise) : null,
       })),
       paymentMilestones: project.paymentMilestones.map((m) => ({
         ...m,
         percentage: m.percentage !== null ? Number(m.percentage) : null,
+        amountPaise: m.amountPaise !== null ? Number(m.amountPaise) : null,
       })),
       amenityIds: project.amenities.map((a) => a.amenityId),
     };
@@ -702,6 +725,9 @@ export async function getLocalityForEdit(id: string) {
       endUserScore: locality.endUserScore !== null ? Number(locality.endUserScore) : null,
       luxuryScore: locality.luxuryScore !== null ? Number(locality.luxuryScore) : null,
       familyScore: locality.familyScore !== null ? Number(locality.familyScore) : null,
+      // avgPricePerSqftPaise is a BigInt column -- same Server->Client
+      // boundary fix as getProjectForEdit/fetchProjectsPage.
+      avgPricePerSqftPaise: locality.avgPricePerSqftPaise !== null ? Number(locality.avgPricePerSqftPaise) : null,
       amenityIds: locality.amenities.map((a) => a.amenityId),
     };
   });
@@ -849,6 +875,10 @@ export async function getTransactionForEdit(id: string) {
       carpetSqft: transaction.carpetSqft !== null ? Number(transaction.carpetSqft) : null,
       builtUpSqft: transaction.builtUpSqft !== null ? Number(transaction.builtUpSqft) : null,
       bedrooms: transaction.bedrooms !== null ? Number(transaction.bedrooms) : null,
+      // valuePaise/pricePerSqftPaise are BigInt columns -- same Server->Client
+      // boundary fix as getProjectForEdit/fetchProjectsPage/getLocalityForEdit.
+      valuePaise: Number(transaction.valuePaise),
+      pricePerSqftPaise: transaction.pricePerSqftPaise !== null ? Number(transaction.pricePerSqftPaise) : null,
     };
   });
 }
@@ -862,10 +892,22 @@ export async function getZones() {
   );
 }
 
+/**
+ * The one shared locality dropdown/filter source reused by both admin
+ * selectors (project/transaction edit forms, email recipient targeting) and
+ * every public-facing locality filter (Transactions, Projects, account
+ * preferences) -- confirmed via a full call-site grep, not duplicated
+ * per-page. Excludes archived/soft-deleted rows (a "Test Locality" seed
+ * record or any other retired locality) so those can never leak into a
+ * public filter dropdown; deliberately does NOT filter by isPublished,
+ * since both audiences legitimately need to see/select a real locality
+ * whose own catalog page isn't published yet (e.g. a live project already
+ * points at it).
+ */
 export async function getLocalitiesForSelect() {
   return safeQuery("getLocalitiesForSelect", [], () =>
     prisma.locality.findMany({
-      where: { city: { slug: PRIMARY_CITY_SLUG } },
+      where: { city: { slug: PRIMARY_CITY_SLUG }, isArchived: false, deletedAt: null },
       orderBy: { name: "asc" },
       select: {
         id: true,

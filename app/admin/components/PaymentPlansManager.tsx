@@ -19,7 +19,7 @@ export interface PaymentMilestoneRow {
   id: string;
   label: string;
   percentage: number | null;
-  amountPaise: bigint | null;
+  amountPaise: number | null;
   isCustom: boolean;
 }
 

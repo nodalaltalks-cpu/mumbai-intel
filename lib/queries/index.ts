@@ -51,7 +51,7 @@ export async function getPrimaryCity() {
 
 export async function getLocalities() {
   return prisma.locality.findMany({
-    where: { city: { slug: PRIMARY_CITY_SLUG }, isPublished: true, isArchived: false },
+    where: { city: { slug: PRIMARY_CITY_SLUG }, isPublished: true, isArchived: false, deletedAt: null },
     include: { zone: true },
     orderBy: { name: "asc" },
   });
@@ -109,22 +109,37 @@ export async function getMarketSnapshot(filters: MarketSnapshotFilters = {}): Pr
       ? { state: { code: filters.stateCode } }
       : { slug: PRIMARY_CITY_SLUG };
 
-  const [liveProjectsCount, localitiesCount, transactionRows, buildersCount] = await Promise.all([
+  // Project.localityId is a required (non-nullable) field -- every project
+  // has a locality by definition, so eligibility only needs to exclude a
+  // locality row that's itself archived/soft-deleted (a retired "test
+  // locality" or similar), not a missing localityId.
+  const liveProjectLocalityWhere: Prisma.ProjectWhereInput = {
+    city: cityWhere,
+    isPublished: true,
+    isArchived: false,
+    locality: { is: { isArchived: false, deletedAt: null } },
+  };
+
+  const [liveProjectsCount, liveProjectLocalityNames, transactionRows, buildersCount] = await Promise.all([
     prisma.project.count({
       where: { city: cityWhere, isPublished: true, isArchived: false },
     }),
-    // isPublished/isArchived/deletedAt match every other public locality
-    // query's convention (see getLocalities() above) -- the old version had
-    // none of these, so it counted unpublished and soft-deleted rows too.
-    // `distinct` on name is a safety net against duplicate-name data entry,
-    // not the primary fix (the primary fix is these three filters).
-    prisma.locality
+    // "Localities Covered" must count distinct localities actually IN USE by
+    // a live project, not distinct rows in the separately-published Locality
+    // catalog -- those are two different things (a locality catalog page can
+    // be unpublished while a real live project still points at it, e.g. a
+    // locality page still being written). The old version queried
+    // prisma.locality with isPublished:true, which undercounts (or shows 0)
+    // whenever a live project's own locality hasn't gotten its catalog page
+    // published yet -- exactly the bug this replaces. Excludes a live
+    // project's soft-deleted/archived locality row (a "test locality" or
+    // otherwise retired record) even if the project itself still resolves.
+    prisma.project
       .findMany({
-        where: { city: cityWhere, isPublished: true, isArchived: false, deletedAt: null },
-        select: { name: true },
-        distinct: ["name"],
+        where: liveProjectLocalityWhere,
+        select: { locality: { select: { name: true } } },
       })
-      .then((rows) => rows.length),
+      .then((rows) => rows.map((r) => r.locality?.name).filter((name): name is string => Boolean(name && name.trim()))),
     prisma.transaction.findMany({
       where: { locality: { city: cityWhere }, deletedAt: null },
       select: { valuePaise: true, carpetSqft: true },
@@ -137,9 +152,13 @@ export async function getMarketSnapshot(filters: MarketSnapshotFilters = {}): Pr
     }),
   ]);
 
+  // Normalize casing/spacing so "Chembur" / "chembur" / "CHEMBUR" (duplicate
+  // data-entry variants, not genuinely different localities) collapse to one.
+  const distinctNormalizedLocalities = new Set(liveProjectLocalityNames.map((name) => name.trim().toLowerCase()));
+
   return {
     liveProjectsCount,
-    localitiesCount,
+    localitiesCount: distinctNormalizedLocalities.size,
     avgPricePerSqftPaise: TransactionAnalyticsService.calculateAveragePricePerSqft(transactionRows),
     buildersCount,
   };

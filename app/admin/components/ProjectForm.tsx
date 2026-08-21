@@ -82,8 +82,8 @@ export interface ProjectFormData {
   totalUnits: number | null;
   totalTowers: number | null;
   landAreaAcres: number | null;
-  priceMinPaise: bigint | null;
-  priceMaxPaise: bigint | null;
+  priceMinPaise: number | null;
+  priceMaxPaise: number | null;
   paymentPlanType: string | null;
   paymentPlanDescription: string | null;
   dataSource: string;

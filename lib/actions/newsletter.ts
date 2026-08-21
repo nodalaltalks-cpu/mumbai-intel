@@ -7,6 +7,7 @@ import { sendNewsletterSignupEmail } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
 import { getPublicSession } from "@/lib/public-auth/session";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
+import { friendlyPrismaError } from "@/lib/actions/errors";
 
 const newsletterSchema = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email address"),
@@ -31,25 +32,41 @@ export async function subscribeNewsletterAction(_prevState: NewsletterFormState,
   // Find-then-create-or-update, not upsert() — the Neon HTTP adapter has no
   // interactive-transaction support upsert() needs internally (see
   // lib/prisma.ts), same pattern used throughout this codebase (e.g.
-  // lib/actions/brochure.ts).
-  const existing = await prisma.newsletterSubscriber.findUnique({ where: { email } });
+  // lib/actions/brochure.ts). Wrapped in try/catch (previously missing) so a
+  // race-condition unique-constraint violation (two concurrent submits of a
+  // brand-new email, or a logged-in user whose account already has a
+  // NewsletterSubscriber row via a different email — both `email` and
+  // `publicUserId` are @unique) surfaces as a normal inline error instead of
+  // crashing the whole page the form was submitted from.
+  try {
+    const existing = await prisma.newsletterSubscriber.findUnique({ where: { email } });
 
-  if (existing?.status === "SUBSCRIBED") {
-    return { success: "You're already subscribed — thanks for sticking around." };
+    if (existing?.status === "SUBSCRIBED") {
+      return { success: "You're already subscribed — thanks for sticking around." };
+    }
+
+    if (existing) {
+      await prisma.newsletterSubscriber.update({
+        where: { id: existing.id },
+        data: { status: "SUBSCRIBED", subscribedAt: new Date(), unsubscribedAt: null, publicUserId: session?.userId ?? existing.publicUserId },
+      });
+    } else {
+      await prisma.newsletterSubscriber.create({
+        data: { email, source: "footer", publicUserId: session?.userId ?? null },
+      });
+    }
+  } catch (error) {
+    return { error: friendlyPrismaError(error) };
   }
 
-  if (existing) {
-    await prisma.newsletterSubscriber.update({
-      where: { id: existing.id },
-      data: { status: "SUBSCRIBED", subscribedAt: new Date(), unsubscribedAt: null, publicUserId: session?.userId ?? existing.publicUserId },
-    });
-  } else {
-    await prisma.newsletterSubscriber.create({
-      data: { email, source: "footer", publicUserId: session?.userId ?? null },
-    });
+  // Best-effort admin notification email — the subscription itself already
+  // committed above, so a failure here (e.g. Resend misconfigured) must not
+  // make the action report failure for a subscribe that actually succeeded.
+  try {
+    await sendNewsletterSignupEmail(email);
+  } catch (error) {
+    console.error("[newsletter] admin notification email failed:", error);
   }
-
-  await sendNewsletterSignupEmail(email);
   await recordResearchEvent("NEWSLETTER_SUBSCRIBED", { metadata: { source: "footer" } });
 
   return { success: "Thanks — you're on the list." };

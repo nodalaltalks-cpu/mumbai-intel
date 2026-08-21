@@ -17,8 +17,8 @@ export interface ConfigurationRow {
   bedrooms: number;
   carpetSqft: number | null;
   builtUpSqft: number | null;
-  priceMinPaise: bigint | null;
-  priceMaxPaise: bigint | null;
+  priceMinPaise: number | null;
+  priceMaxPaise: number | null;
 }
 
 const initialState: ConfigurationActionState = {};

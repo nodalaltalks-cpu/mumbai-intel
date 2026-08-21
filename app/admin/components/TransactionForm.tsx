@@ -24,10 +24,10 @@ export interface TransactionFormData {
   localityId: string;
   type: string;
   registrationDate: Date;
-  valuePaise: bigint;
+  valuePaise: number;
   carpetSqft: number | null;
   builtUpSqft: number | null;
-  pricePerSqftPaise: bigint | null;
+  pricePerSqftPaise: number | null;
   bedrooms: number | null;
   floor: number | null;
   tower: string | null;

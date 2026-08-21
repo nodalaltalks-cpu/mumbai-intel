@@ -19,7 +19,7 @@ export interface LocalityFormData {
   coverImageUrl: string | null;
   centroidLat: number | null;
   centroidLng: number | null;
-  avgPricePerSqftPaise: bigint | null;
+  avgPricePerSqftPaise: number | null;
   rentalYieldPercent: number | string | null;
   growthPercentYoy: number | string | null;
   connectivityNotes: string | null;
