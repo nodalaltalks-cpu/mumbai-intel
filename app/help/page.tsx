@@ -32,7 +32,7 @@ export default function HelpCenterPage() {
       <h2>Reading data-source tags</h2>
       <p>
         Every figure on the platform is labeled with a small uppercase tag — GOVT VERIFIED, BUILDER DATA, ANALYST
-        VERIFIED, AI ESTIMATE, or COMMUNITY — plus a confidence level. Hover or check nearby text for context on how a
+        VERIFIED, ESTIMATED, or COMMUNITY — plus a confidence level. Hover or check nearby text for context on how a
         number was derived before relying on it for a decision.
       </p>
 

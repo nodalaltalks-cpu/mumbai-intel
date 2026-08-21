@@ -4,7 +4,6 @@ import { formatPricePerSqft } from "@/lib/format";
 import { getPublicSession } from "@/lib/public-auth/session";
 import { gated, maskPricePerSqft } from "@/lib/premium/mask";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
-import { SOURCE_LABEL } from "@/lib/project-meta";
 import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 import SectionHeading from "@/app/components/ui/SectionHeading";
@@ -16,26 +15,26 @@ export const metadata: Metadata = {
 };
 export const dynamic = "force-dynamic";
 
-const PROVENANCE_NOTES = [
+const DATA_CHECK_NOTES = [
   {
-    tag: SOURCE_LABEL.OFFICIAL_GOVERNMENT,
-    body: "Directly from IGR / MahaRERA and other official registries — the highest confidence tier.",
+    tag: "Verified Data",
+    body: "Information checked against reliable public and official government RERA records.",
   },
   {
-    tag: SOURCE_LABEL.BUILDER_INFORMATION,
-    body: "Sourced from developer brochures, price lists and official project material.",
+    tag: "Cross-Checked",
+    body: "Important figures are reviewed against more than one source whenever possible.",
   },
   {
-    tag: SOURCE_LABEL.MANUALLY_VERIFIED,
-    body: "Curated and cross-checked by our analysts against public sources.",
+    tag: "Reviewed",
+    body: "Our team checks the information for accuracy and consistency before it is published.",
   },
   {
-    tag: SOURCE_LABEL.AI_GENERATED,
-    body: "Model-computed estimates and scores — clearly labelled, never presented as fact.",
+    tag: "Estimated",
+    body: "Some figures are calculated from available data. These are always clearly marked as estimates.",
   },
   {
-    tag: SOURCE_LABEL.USER_SUBMITTED,
-    body: "Community-contributed, shown as unverified until corroborated.",
+    tag: "User Reported",
+    body: "Information shared by users is treated as unverified until it can be independently confirmed.",
   },
 ];
 
@@ -86,9 +85,12 @@ export default async function InsightsPage() {
         </section>
 
         <section>
-          <SectionHeading title="How We Tag Provenance" subtitle="Every project, builder and locality fact carries one of these five source tags" />
+          <SectionHeading
+            title="How We Check Our Data"
+            subtitle="We use multiple reliable sources and cross-check important information before publishing it."
+          />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {PROVENANCE_NOTES.map((note) => (
+            {DATA_CHECK_NOTES.map((note) => (
               <div key={note.tag} className="rounded-sm border border-border bg-surface p-4">
                 <span className="rounded-sm border border-accent/30 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-accent">
                   {note.tag}

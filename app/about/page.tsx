@@ -40,12 +40,10 @@ export default function AboutPage() {
         <li>Market Data and Insights views summarizing city- and locality-level trends</li>
       </ul>
 
-      <h2>Where the data comes from today, and where it&apos;s headed</h2>
+      <h2>Where the data comes from today</h2>
       <p>
-        Transaction and market data is currently curated manually by our analysts. The underlying schema is built so
-        that automated ingestion from official sources — such as the Maharashtra Inspector General of Registration
-        (IGR) — can be added later without changing how any existing figure is displayed or interpreted; only the
-        recorded data source changes.
+        Transaction and market data is currently curated manually by our analysts from available public records and
+        deal information. We&apos;re continuously working to expand our coverage and add more sources over time.
       </p>
 
       <h2>Mumbai first</h2>

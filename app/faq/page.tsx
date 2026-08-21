@@ -17,12 +17,12 @@ const FAQS: { question: string; answer: string }[] = [
   {
     question: "What do the data-source tags mean?",
     answer:
-      "Every fact carries one of five sources: Govt Verified (official records), Builder Data (developer-supplied), Analyst Verified (manually checked by our team), AI Estimate (model-generated), or Community (user-submitted). A confidence level (High/Medium/Low) is attached alongside it.",
+      "Every fact carries one of five sources: Govt Verified (official records), Builder Data (developer-supplied), Analyst Verified (checked by our team), Estimated (calculated from available data), or Community (shared by users). A confidence level (High/Medium/Low) is attached alongside it.",
   },
   {
     question: "Where does the transaction data come from?",
     answer:
-      "Today, transaction records are curated manually by our analysts from available public records and deal information. The platform is built to later ingest data automatically from official government registries without changing how existing records look or work.",
+      "Today, transaction records are curated manually by our analysts from available public records and deal information. We're continuously working to expand and verify this data over time.",
   },
   {
     question: "Is NoDalalTalks a brokerage or does it facilitate transactions?",

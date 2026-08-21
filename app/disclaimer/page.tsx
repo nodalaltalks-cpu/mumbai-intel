@@ -28,8 +28,8 @@ export default function DisclaimerPage() {
 
       <h2>Data accuracy and sources</h2>
       <p>
-        Every figure on the platform is tagged with a data source (Govt Verified, Builder Data, Analyst Verified, AI
-        Estimate, or Community) and a confidence level, so you can judge how much weight to give it. AI-estimated and
+        Every figure on the platform is tagged with a data source (Govt Verified, Builder Data, Analyst Verified,
+        Estimated, or Community) and a confidence level, so you can judge how much weight to give it. Estimated and
         community-submitted figures in particular may be inaccurate or outdated. Always independently verify RERA
         registration, title, pricing, and possession details directly with the developer or relevant authority before
         acting.
