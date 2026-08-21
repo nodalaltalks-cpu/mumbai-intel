@@ -5,10 +5,9 @@ import { z } from "zod";
 import { requireMutateSession } from "@/lib/auth/guard";
 import { prisma } from "@/lib/prisma";
 import { friendlyPrismaError } from "./errors";
+import { PAYMENT_MILESTONE_PRESETS } from "@/lib/project-meta";
 
 const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefined ? undefined : v);
-
-export const PAYMENT_MILESTONE_PRESETS = ["Booking", "Agreement", "Plinth", "Slab Completion", "Possession"] as const;
 
 const milestoneSchema = z.object({
   label: z.string().trim().min(1, "Label is required"),

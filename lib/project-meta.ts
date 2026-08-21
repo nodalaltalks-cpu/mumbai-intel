@@ -29,6 +29,17 @@ export const POSSESSION_MONTH_LABEL: readonly string[] = [
   "December",
 ];
 
+/**
+ * Common milestone labels offered as quick-add presets on the Payment Plan
+ * manager. Lives here (not in lib/actions/payment-milestones.ts, where this
+ * was previously exported from) because that file has a top-level
+ * "use server" directive -- Next.js only supports exporting async functions
+ * from a "use server" module, so a plain constant export from it silently
+ * resolved to `undefined` for the Client Component importing it, throwing
+ * "n.map is not a function" on every visit to a project's edit page.
+ */
+export const PAYMENT_MILESTONE_PRESETS = ["Booking", "Agreement", "Plinth", "Slab Completion", "Possession"] as const;
+
 export const PAYMENT_PLAN_TYPES = [
   "CONSTRUCTION_LINKED",
   "BUILDER_SUBVENTION",

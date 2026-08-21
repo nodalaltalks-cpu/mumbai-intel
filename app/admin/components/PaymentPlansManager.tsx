@@ -5,9 +5,9 @@ import {
   addPaymentMilestoneAction,
   deletePaymentMilestoneAction,
   updatePaymentMilestoneAction,
-  PAYMENT_MILESTONE_PRESETS,
   type PaymentMilestoneActionState,
 } from "@/lib/actions/payment-milestones";
+import { PAYMENT_MILESTONE_PRESETS } from "@/lib/project-meta";
 import ConfirmButton from "./ConfirmButton";
 import SubmitButton from "./SubmitButton";
 import { Field } from "./FormField";
