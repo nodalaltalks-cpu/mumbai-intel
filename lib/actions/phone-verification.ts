@@ -32,5 +32,5 @@ export async function requestPhoneVerificationAction(): Promise<PhoneVerificatio
     entityId: session.userId,
   });
 
-  return { success: "Thanks — we'll confirm your number and verify it shortly." };
+  return { success: "Thanks, we'll confirm your number and verify it shortly." };
 }

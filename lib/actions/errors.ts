@@ -29,7 +29,7 @@ export function friendlyPrismaError(error: unknown): string {
       return "This record is still referenced by other data and can't be deleted or changed.";
     }
     if (error.code === "P2025") {
-      return "Record not found — it may have already been deleted.";
+      return "Record not found, it may have already been deleted.";
     }
   }
   return error instanceof Error ? error.message : "Something went wrong";

@@ -72,5 +72,5 @@ export async function submitContactMessageAction(_prevState: ContactFormState, f
     console.error("[contact] admin notification email failed:", error);
   }
 
-  return { success: "Thanks — your message has been sent. We'll get back to you soon." };
+  return { success: "Thanks, your message has been sent. We'll get back to you soon." };
 }

@@ -65,6 +65,7 @@ export default function ContactEnquiryRow({ enquiry }: { enquiry: ContactEnquiry
         <form action={formAction} className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
           <div className="flex flex-wrap items-center gap-2">
             <select
+              key={enquiry.status}
               name="status"
               defaultValue={enquiry.status}
               className="rounded-sm border border-border bg-surface px-2 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none"

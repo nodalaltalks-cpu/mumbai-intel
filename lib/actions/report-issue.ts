@@ -75,7 +75,7 @@ export async function submitReportIssueAction(_prevState: ReportIssueFormState, 
       await createNotification({
         type: "REPORT_RECEIVED",
         title: "We received your report",
-        body: "Thanks for reporting this — we'll review it shortly.",
+        body: "Thanks for reporting this. We'll review it shortly.",
         recipientPublicUserId: session.userId,
         entityType: "Report",
         entityId: report.id,
@@ -91,5 +91,5 @@ export async function submitReportIssueAction(_prevState: ReportIssueFormState, 
   } catch (error) {
     console.error("[report-issue] failed to persist report:", error);
   }
-  return { success: "Thanks — we've received your report and will review it." };
+  return { success: "Thanks, we've received your report and will review it." };
 }

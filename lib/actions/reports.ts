@@ -40,7 +40,7 @@ async function appendReviewRequest(body: string): Promise<string> {
   if (google) links.push(`Google: ${google}`);
   if (appstore) links.push(`App Store: ${appstore}`);
   if (links.length === 0) return body;
-  return `${body} Enjoying NoDalalTalks? We'd love a quick review — ${links.join(" · ")}`;
+  return `${body} Enjoying NoDalalTalks? We'd love a quick review: ${links.join(" · ")}`;
 }
 
 async function setStatus(reportId: string, status: ReportStatus, resolutionNote?: string): Promise<{ error?: string }> {

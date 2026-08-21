@@ -113,7 +113,7 @@ export async function unsubscribeNewsletterAction(_prevState: UnsubscribeState, 
   try {
     const existing = await prisma.newsletterSubscriber.findUnique({ where: { email: parsed.data.email } });
     if (!existing || existing.status === "UNSUBSCRIBED") {
-      return { success: "You're not on the list — nothing to do." };
+      return { success: "You're not on the list, nothing to do." };
     }
 
     await prisma.newsletterSubscriber.update({

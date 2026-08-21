@@ -123,13 +123,13 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string, expir
               <a href="${safeUrl}" style="color:#4f46e5;word-break:break-all;">${safeUrl}</a>
             </p>
             <p style="margin:0;font-size:13px;line-height:1.6;color:#71717a;border-top:1px solid #e4e4e7;padding-top:20px;">
-              If you didn't request a password reset, you can safely ignore this email — your password will not be changed.
+              If you didn't request a password reset, you can safely ignore this email. Your password will not be changed.
             </p>
           </td>
         </tr>
         <tr>
           <td style="text-align:center;padding-top:24px;font-size:12px;color:#a1a1aa;">
-            NoDalalTalks — Real Estate Intelligence
+            NoDalalTalks: Real Estate Intelligence
           </td>
         </tr>
       </table>
@@ -249,7 +249,7 @@ function emailShell(bodyHtml: string): string {
         </tr>
         <tr>
           <td style="text-align:center;padding-top:24px;font-size:12px;color:#a1a1aa;">
-            NoDalalTalks — Real Estate Intelligence
+            NoDalalTalks: Real Estate Intelligence
           </td>
         </tr>
       </table>
@@ -264,7 +264,7 @@ export async function sendWelcomeEmail(to: string, name: string | null): Promise
   const html = emailShell(`
     <h1 style="margin:0 0 12px;font-size:20px;line-height:1.3;font-weight:600;color:#18181b;">${greeting}</h1>
     <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#52525b;">
-      Your free NoDalalTalks account is ready. Research Mumbai real estate on verified data — no phone number, no spam calls, ever.
+      Your free NoDalalTalks account is ready. Research Mumbai real estate on verified data, with no phone number and no spam calls, ever.
     </p>
     ${emailButton("Start researching", `${process.env.NEXT_PUBLIC_APP_URL ?? "https://nodalaltalks.com"}/projects`)}
     <p style="margin:0;font-size:13px;line-height:1.6;color:#71717a;border-top:1px solid #e4e4e7;padding-top:20px;">
@@ -300,18 +300,18 @@ export async function sendBrochureDownloadEmail(
   to: string,
   params: { projectName: string; projectUrl: string; brochureUrl: string }
 ): Promise<void> {
-  if (TRANSACTIONAL_EMAILS_PAUSED) return logPausedEmail(`Brochure — ${params.projectName}`, to);
+  if (TRANSACTIONAL_EMAILS_PAUSED) return logPausedEmail(`Brochure: ${params.projectName}`, to);
   const html = emailShell(`
     <h1 style="margin:0 0 12px;font-size:20px;line-height:1.3;font-weight:600;color:#18181b;">Your brochure is ready</h1>
     <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#52525b;">
-      Here's your copy of the official brochure for <strong>${escapeHtml(params.projectName)}</strong> — download it again anytime from the links below.
+      Here's your copy of the official brochure for <strong>${escapeHtml(params.projectName)}</strong>. Download it again anytime from the links below.
     </p>
     ${emailButton("Download brochure", params.brochureUrl)}
     <p style="margin:0;font-size:13px;line-height:1.6;color:#71717a;border-top:1px solid #e4e4e7;padding-top:20px;">
       <a href="${escapeHtml(params.projectUrl)}" style="color:#4f46e5;">View ${escapeHtml(params.projectName)} on NoDalalTalks →</a>
     </p>
   `);
-  await sendEmail({ to, subject: `Brochure — ${params.projectName}`, html });
+  await sendEmail({ to, subject: `Brochure: ${params.projectName}`, html });
 }
 
 export interface WeeklyMarketIntelligenceLocality {
@@ -330,7 +330,7 @@ export async function sendWeeklyMarketIntelligenceEmail(
   to: string,
   params: { weekLabel: string; topLocalities: WeeklyMarketIntelligenceLocality[]; topProjects: WeeklyMarketIntelligenceProject[] }
 ): Promise<void> {
-  if (TRANSACTIONAL_EMAILS_PAUSED) return logPausedEmail(`Weekly Market Intelligence — ${params.weekLabel}`, to);
+  if (TRANSACTIONAL_EMAILS_PAUSED) return logPausedEmail(`Weekly Market Intelligence: ${params.weekLabel}`, to);
   const localityRows = params.topLocalities
     .map(
       (l) => `
@@ -371,7 +371,7 @@ export async function sendWeeklyMarketIntelligenceEmail(
       You're receiving this because you subscribed to NoDalalTalks market updates.
     </p>
   `);
-  await sendEmail({ to, subject: `Weekly Market Intelligence — ${params.weekLabel}`, html });
+  await sendEmail({ to, subject: `Weekly Market Intelligence: ${params.weekLabel}`, html });
 }
 
 /** Ready-to-call — pairing this with real automated delivery needs a saved-search-vs-new-listings matcher, out of scope here; this only builds and sends one alert given already-computed matches. */
@@ -380,7 +380,7 @@ export async function sendSavedSearchAlertEmail(
   params: { searchName: string; searchUrl: string; newMatchesCount: number; sampleProjects: WeeklyMarketIntelligenceProject[] }
 ): Promise<void> {
   if (TRANSACTIONAL_EMAILS_PAUSED) {
-    return logPausedEmail(`${params.newMatchesCount} new match${params.newMatchesCount === 1 ? "" : "es"} — ${params.searchName}`, to);
+    return logPausedEmail(`${params.newMatchesCount} new match${params.newMatchesCount === 1 ? "" : "es"}: ${params.searchName}`, to);
   }
   const projectLinks = params.sampleProjects
     .map((p) => `<li style="margin:0 0 6px;"><a href="${escapeHtml(p.url)}" style="color:#4f46e5;font-size:13px;">${escapeHtml(p.name)}</a></li>`)
@@ -398,7 +398,7 @@ export async function sendSavedSearchAlertEmail(
       You're receiving this because you saved this search on NoDalalTalks.
     </p>
   `);
-  await sendEmail({ to, subject: `${params.newMatchesCount} new match${params.newMatchesCount === 1 ? "" : "es"} — ${params.searchName}`, html });
+  await sendEmail({ to, subject: `${params.newMatchesCount} new match${params.newMatchesCount === 1 ? "" : "es"}: ${params.searchName}`, html });
 }
 
 /** Ready-to-call — pairing this with real automated delivery needs a price-change watcher on saved/wishlisted projects, out of scope here; this only builds and sends one alert given an already-detected change. */
@@ -406,9 +406,9 @@ export async function sendPriceAlertEmail(
   to: string,
   params: { projectName: string; projectUrl: string; oldPriceLabel: string; newPriceLabel: string; changeLabel: string }
 ): Promise<void> {
-  if (TRANSACTIONAL_EMAILS_PAUSED) return logPausedEmail(`Price update — ${params.projectName}`, to);
+  if (TRANSACTIONAL_EMAILS_PAUSED) return logPausedEmail(`Price update: ${params.projectName}`, to);
   const html = emailShell(`
-    <h1 style="margin:0 0 12px;font-size:20px;line-height:1.3;font-weight:600;color:#18181b;">Price update — ${escapeHtml(params.projectName)}</h1>
+    <h1 style="margin:0 0 12px;font-size:20px;line-height:1.3;font-weight:600;color:#18181b;">Price update: ${escapeHtml(params.projectName)}</h1>
     <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#52525b;">
       A project on your wishlist has a new price.
     </p>
@@ -429,5 +429,5 @@ export async function sendPriceAlertEmail(
       You're receiving this because this project is on your NoDalalTalks wishlist.
     </p>
   `);
-  await sendEmail({ to, subject: `Price update — ${params.projectName}`, html });
+  await sendEmail({ to, subject: `Price update: ${params.projectName}`, html });
 }
