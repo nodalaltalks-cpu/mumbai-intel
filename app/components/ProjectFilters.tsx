@@ -41,6 +41,14 @@ export default function ProjectFilters({ localities, builders }: { localities: F
   const searchParams = useSearchParams();
   const [q, setQ] = useState(searchParams.get("q") ?? "");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // Everything inside the Filters panel edits this draft, not the URL --
+  // nothing is "applied" until Show Results commits it. Opening the panel
+  // snapshots the currently-applied params as the starting draft (so it
+  // shows what's already applied); closing any other way (×, backdrop tap,
+  // Android/browser back — all funnel through Dialog's one onClose prop)
+  // just discards it. Fields outside the panel (the search box, Recent
+  // chips) are unaffected and keep applying immediately, same as before.
+  const [draftParams, setDraftParams] = useState<URLSearchParams | null>(null);
   const recentSearches = useRecentSearches();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -103,6 +111,57 @@ export default function ProjectFilters({ localities, builders }: { localities: F
     }
   }
 
+  /** Opens the Filters panel with a snapshot of the currently-applied params as the starting draft. */
+  function openFilters() {
+    setDraftParams(new URLSearchParams(searchParams.toString()));
+    setFiltersOpen(true);
+  }
+
+  /** The one non-committing close path — × button, backdrop tap, and back button (Dialog's shared onClose) all route here, so all three discard the draft identically. */
+  function closeFiltersWithoutApplying() {
+    setFiltersOpen(false);
+    setDraftParams(null);
+  }
+
+  function updateDraft(key: string, value: string) {
+    setDraftParams((prev) => {
+      const next = new URLSearchParams((prev ?? searchParams).toString());
+      if (value) next.set(key, value);
+      else next.delete(key);
+      return next;
+    });
+  }
+
+  function updateDraftMulti(entries: Record<string, string>) {
+    setDraftParams((prev) => {
+      const next = new URLSearchParams((prev ?? searchParams).toString());
+      for (const [key, value] of Object.entries(entries)) {
+        if (value) next.set(key, value);
+        else next.delete(key);
+      }
+      return next;
+    });
+  }
+
+  /** Commits the draft to the URL in one push (Show Results) — the only thing that changed from before is *when* a field's edit reaches the router, not the push mechanism itself. A no-op if nothing actually changed. */
+  function applyFilters() {
+    if (draftParams) {
+      const next = new URLSearchParams(draftParams.toString());
+      next.delete("page");
+      const before = new URLSearchParams(searchParams.toString());
+      before.delete("page");
+      if (next.toString() !== before.toString()) {
+        pushParams(next);
+        for (const key of FILTER_KEYS) {
+          const value = next.get(key);
+          if (value && value !== (searchParams.get(key) ?? "")) trackFilterApplied("projects", { [key]: value });
+        }
+      }
+    }
+    setFiltersOpen(false);
+    setDraftParams(null);
+  }
+
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
@@ -159,7 +218,7 @@ export default function ProjectFilters({ localities, builders }: { localities: F
           placeholder="Search projects, localities, builders…"
           className="min-w-0 flex-1 rounded-2xl border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
         />
-        <button type="button" onClick={() => setFiltersOpen(true)} className={chipClass(activeFilterCount > 0)}>
+        <button type="button" onClick={openFilters} className={chipClass(activeFilterCount > 0)}>
           Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
         </button>
       </div>
@@ -186,114 +245,117 @@ export default function ProjectFilters({ localities, builders }: { localities: F
       ) : null}
 
       {filtersOpen
-        ? createPortal(
-            <Dialog
-              title="Filters"
-              onClose={() => setFiltersOpen(false)}
-          footer={
-            <div className="flex items-center justify-between gap-2">
-              <SaveSearchButton />
-              <button
-                type="button"
-                onClick={() => setFiltersOpen(false)}
-                className="rounded-sm bg-accent px-4 py-2 text-xs font-mono font-semibold uppercase tracking-wide text-white hover:bg-accent-dim"
+        ? (() => {
+            const draftStatus = draftParams?.get("status") ?? "";
+            const draftLuxury = draftParams?.get("luxury") === "1";
+            const draftAffordable = draftParams?.get("affordable") === "1";
+            return createPortal(
+              <Dialog title="Filters" onClose={closeFiltersWithoutApplying} largeCloseButton
+                footer={
+                  <div className="flex items-center justify-between gap-2">
+                    <SaveSearchButton />
+                    <button
+                      type="button"
+                      onClick={applyFilters}
+                      className="rounded-sm bg-accent px-4 py-2 text-xs font-mono font-semibold uppercase tracking-wide text-white hover:bg-accent-dim"
+                    >
+                      Show results
+                    </button>
+                  </div>
+                }
               >
-                Show results
-              </button>
-            </div>
-          }
-        >
-          <div className="flex flex-col gap-3">
-            <select value={searchParams.get("locality") ?? ""} onChange={(e) => updateParam("locality", e.target.value)} className={selectClass} style={selectStyle}>
-              <option value="">All localities</option>
-              {localities.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                </option>
-              ))}
-            </select>
-            <select value={currentStatus} onChange={(e) => updateParam("status", e.target.value)} className={selectClass} style={selectStyle}>
-              <option value="">All statuses</option>
-              {PROJECT_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {STATUS_LABEL[s]}
-                </option>
-              ))}
-            </select>
-            <PriceRangeFilter
-              minRupees={searchParams.get("priceMin") ? Number(searchParams.get("priceMin")) : null}
-              maxRupees={searchParams.get("priceMax") ? Number(searchParams.get("priceMax")) : null}
-              onCommit={(min, max) =>
-                updateParams({ priceMin: min !== null ? String(min) : "", priceMax: max !== null ? String(max) : "" })
-              }
-            />
-            <select value={searchParams.get("sort") ?? "updated_desc"} onChange={(e) => updateParam("sort", e.target.value)} className={selectClass} style={selectStyle}>
-              {PROJECT_SORT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            <select value={searchParams.get("builder") ?? ""} onChange={(e) => updateParam("builder", e.target.value)} className={selectClass} style={selectStyle}>
-              <option value="">All builders</option>
-              {builders.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-            <select value={searchParams.get("category") ?? ""} onChange={(e) => updateParam("category", e.target.value)} className={selectClass} style={selectStyle}>
-              <option value="">All categories</option>
-              {PROPERTY_CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {CATEGORY_LABEL[c]}
-                </option>
-              ))}
-            </select>
-            <select value={searchParams.get("bedrooms") ?? ""} onChange={(e) => updateParam("bedrooms", e.target.value)} className={selectClass} style={selectStyle}>
-              <option value="">Any configuration</option>
-              {CONFIGURATION_FILTER_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            <select value={searchParams.get("possession") ?? ""} onChange={(e) => updateParam("possession", e.target.value)} className={selectClass} style={selectStyle}>
-              <option value="">Any possession</option>
-              {POSSESSION_FILTER_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            <select value={searchParams.get("rera") ?? ""} onChange={(e) => updateParam("rera", e.target.value)} className={selectClass} style={selectStyle}>
-              <option value="">RERA: any</option>
-              <option value="1">Has RERA</option>
-              <option value="0">No RERA</option>
-            </select>
+                <div className="flex flex-col gap-3">
+                  <select value={draftParams?.get("locality") ?? ""} onChange={(e) => updateDraft("locality", e.target.value)} className={selectClass} style={selectStyle}>
+                    <option value="">All localities</option>
+                    {localities.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name}
+                      </option>
+                    ))}
+                  </select>
+                  <select value={draftStatus} onChange={(e) => updateDraft("status", e.target.value)} className={selectClass} style={selectStyle}>
+                    <option value="">All statuses</option>
+                    {PROJECT_STATUSES.map((s) => (
+                      <option key={s} value={s}>
+                        {STATUS_LABEL[s]}
+                      </option>
+                    ))}
+                  </select>
+                  <PriceRangeFilter
+                    minRupees={draftParams?.get("priceMin") ? Number(draftParams.get("priceMin")) : null}
+                    maxRupees={draftParams?.get("priceMax") ? Number(draftParams.get("priceMax")) : null}
+                    onCommit={(min, max) =>
+                      updateDraftMulti({ priceMin: min !== null ? String(min) : "", priceMax: max !== null ? String(max) : "" })
+                    }
+                  />
+                  <select value={draftParams?.get("sort") ?? "updated_desc"} onChange={(e) => updateDraft("sort", e.target.value)} className={selectClass} style={selectStyle}>
+                    {PROJECT_SORT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <select value={draftParams?.get("builder") ?? ""} onChange={(e) => updateDraft("builder", e.target.value)} className={selectClass} style={selectStyle}>
+                    <option value="">All builders</option>
+                    {builders.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                  <select value={draftParams?.get("category") ?? ""} onChange={(e) => updateDraft("category", e.target.value)} className={selectClass} style={selectStyle}>
+                    <option value="">All categories</option>
+                    {PROPERTY_CATEGORIES.map((c) => (
+                      <option key={c} value={c}>
+                        {CATEGORY_LABEL[c]}
+                      </option>
+                    ))}
+                  </select>
+                  <select value={draftParams?.get("bedrooms") ?? ""} onChange={(e) => updateDraft("bedrooms", e.target.value)} className={selectClass} style={selectStyle}>
+                    <option value="">Any configuration</option>
+                    {CONFIGURATION_FILTER_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <select value={draftParams?.get("possession") ?? ""} onChange={(e) => updateDraft("possession", e.target.value)} className={selectClass} style={selectStyle}>
+                    <option value="">Any possession</option>
+                    {POSSESSION_FILTER_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <select value={draftParams?.get("rera") ?? ""} onChange={(e) => updateDraft("rera", e.target.value)} className={selectClass} style={selectStyle}>
+                    <option value="">RERA: any</option>
+                    <option value="1">Has RERA</option>
+                    <option value="0">No RERA</option>
+                  </select>
 
-            <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
-              {QUICK_STATUS_CHIPS.map((chip) => (
-                <button
-                  key={chip.status}
-                  type="button"
-                  onClick={() => updateParam("status", currentStatus === chip.status ? "" : chip.status)}
-                  className={chipClass(currentStatus === chip.status)}
-                >
-                  {chip.label}
-                </button>
-              ))}
-              <button type="button" onClick={() => updateParam("luxury", isLuxury ? "" : "1")} className={chipClass(isLuxury)}>
-                Luxury
-              </button>
-              <button type="button" onClick={() => updateParam("affordable", isAffordable ? "" : "1")} className={chipClass(isAffordable)}>
-                Affordable
-              </button>
-            </div>
-          </div>
-            </Dialog>,
-            document.body
-          )
+                  <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+                    {QUICK_STATUS_CHIPS.map((chip) => (
+                      <button
+                        key={chip.status}
+                        type="button"
+                        onClick={() => updateDraft("status", draftStatus === chip.status ? "" : chip.status)}
+                        className={chipClass(draftStatus === chip.status)}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                    <button type="button" onClick={() => updateDraft("luxury", draftLuxury ? "" : "1")} className={chipClass(draftLuxury)}>
+                      Luxury
+                    </button>
+                    <button type="button" onClick={() => updateDraft("affordable", draftAffordable ? "" : "1")} className={chipClass(draftAffordable)}>
+                      Affordable
+                    </button>
+                  </div>
+                </div>
+              </Dialog>,
+              document.body
+            );
+          })()
         : null}
     </div>
   );

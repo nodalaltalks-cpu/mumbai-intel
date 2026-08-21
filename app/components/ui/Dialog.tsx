@@ -13,6 +13,7 @@ export default function Dialog({
   children,
   footer,
   maxWidth = "max-w-md",
+  largeCloseButton = false,
 }: {
   title: string;
   onClose: () => void;
@@ -21,6 +22,8 @@ export default function Dialog({
   footer?: ReactNode;
   /** Tailwind max-width class — defaults to the original compact size; wider content (e.g. a PDF preview) can pass "max-w-3xl". */
   maxWidth?: string;
+  /** Enlarges the × button's touch target to ~44x44px without changing its visual size everywhere else — opt in per call site (the mobile filter drawers) rather than site-wide, so other Dialog consumers (admin, Report/Contact) keep their original compact close button. */
+  largeCloseButton?: boolean;
 }) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   useModalBackClose(true, onClose);
@@ -57,12 +60,20 @@ export default function Dialog({
       >
         <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
           <h2 className="font-mono text-sm font-semibold text-foreground">{title}</h2>
-          <Button ref={closeButtonRef} type="button" variant="secondary" size="sm" onClick={onClose} aria-label="Close">
+          <Button
+            ref={closeButtonRef}
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={onClose}
+            aria-label="Close"
+            className={largeCloseButton ? "min-h-11 min-w-11" : undefined}
+          >
             <IconClose className="h-3 w-3" />
           </Button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
-        {footer ? <div className="shrink-0 border-t border-border p-4">{footer}</div> : null}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">{children}</div>
+        {footer ? <div className="shrink-0 border-t border-border p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">{footer}</div> : null}
       </div>
     </div>
   );

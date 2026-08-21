@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { publicSearchAction } from "@/lib/actions/public-search";
 import { trackFilterApplied, trackSearchPerformed } from "@/lib/analytics/ga";
 import type { PublicSearchResult } from "@/lib/queries";
@@ -71,6 +72,14 @@ export default function TransactionFilters({
   const searchParams = useSearchParams();
   const [q, setQ] = useState(searchParams.get("q") ?? "");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // Everything inside the Filters panel edits this draft, not the URL --
+  // nothing is "applied" until Show Results commits it. Opening the panel
+  // snapshots the currently-applied params as the starting draft (so it
+  // shows what's already applied); closing any other way (×, backdrop tap,
+  // Android/browser back — all funnel through Dialog's one onClose prop)
+  // just discards it. The search box above the Filters button is unaffected
+  // and keeps applying immediately, same as before.
+  const [draftParams, setDraftParams] = useState<URLSearchParams | null>(null);
   const [results, setResults] = useState<PublicSearchResult | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -113,6 +122,58 @@ export default function TransactionFilters({
 
   function updateParam(key: string, value: string) {
     updateParams({ [key]: value });
+  }
+
+  /** Opens the Filters panel with a snapshot of the currently-applied params as the starting draft. */
+  function openFilters() {
+    setDraftParams(new URLSearchParams(searchParams.toString()));
+    setFiltersOpen(true);
+  }
+
+  /** The one non-committing close path — × button, backdrop tap, and back button (Dialog's shared onClose) all route here, so all three discard the draft identically. */
+  function closeFiltersWithoutApplying() {
+    setFiltersOpen(false);
+    setDraftParams(null);
+  }
+
+  function updateDraft(key: string, value: string) {
+    setDraftParams((prev) => {
+      const next = new URLSearchParams((prev ?? searchParams).toString());
+      if (value) next.set(key, value);
+      else next.delete(key);
+      return next;
+    });
+  }
+
+  function updateDraftMulti(entries: Record<string, string>) {
+    setDraftParams((prev) => {
+      const next = new URLSearchParams((prev ?? searchParams).toString());
+      for (const [key, value] of Object.entries(entries)) {
+        if (value) next.set(key, value);
+        else next.delete(key);
+      }
+      return next;
+    });
+  }
+
+  /** Commits the draft to the URL in one push (Show Results) — a no-op if nothing actually changed. */
+  function applyFilters() {
+    if (draftParams) {
+      const next = new URLSearchParams(draftParams.toString());
+      next.delete("page");
+      const before = new URLSearchParams(searchParams.toString());
+      before.delete("page");
+      if (next.toString() !== before.toString()) {
+        pendingParamsRef.current = next;
+        router.push(`${pathname}?${next.toString()}`);
+        const changed = FILTER_KEYS.filter((key) => next.get(key) && next.get(key) !== (searchParams.get(key) ?? ""));
+        if (changed.length > 0) {
+          trackFilterApplied("transactions", Object.fromEntries(changed.map((key) => [key, next.get(key) as string])));
+        }
+      }
+    }
+    setFiltersOpen(false);
+    setDraftParams(null);
   }
 
   useEffect(() => {
@@ -308,146 +369,154 @@ export default function TransactionFilters({
           ) : null}
         </div>
 
-        <button type="button" onClick={() => setFiltersOpen(true)} className={chipClass(activeFilterCount > 0)}>
+        <button type="button" onClick={openFilters} className={chipClass(activeFilterCount > 0)}>
           Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
         </button>
       </div>
 
       {chips.length > 0 ? <ActiveFilters chips={chips} /> : null}
 
-      {filtersOpen ? (
-        <Dialog
-          title="Filters"
-          onClose={() => setFiltersOpen(false)}
-          footer={
-            <button
-              type="button"
-              onClick={() => setFiltersOpen(false)}
-              className="w-full rounded-sm bg-accent px-4 py-2 text-xs font-mono font-semibold uppercase tracking-wide text-white hover:bg-accent-dim"
-            >
-              Show results
-            </button>
-          }
-        >
-          <div className="flex flex-col gap-3">
-            {/* Primary filters — Location, Price, Date — first, per the simplified-filter spec. */}
-            <select value={searchParams.get("locality") ?? ""} onChange={(e) => updateParam("locality", e.target.value)} className={selectClass} style={selectStyle}>
-              <option value="">All localities</option>
-              {localities.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                </option>
-              ))}
-            </select>
+      {filtersOpen
+        ? (() => {
+            const draftReadiness = draftParams?.get("readiness") ?? "";
+            const draftSaleType = draftParams?.get("type") ?? "";
+            return createPortal(
+              <Dialog
+                title="Filters"
+                onClose={closeFiltersWithoutApplying}
+                largeCloseButton
+                footer={
+                  <button
+                    type="button"
+                    onClick={applyFilters}
+                    className="w-full rounded-sm bg-accent px-4 py-2 text-xs font-mono font-semibold uppercase tracking-wide text-white hover:bg-accent-dim"
+                  >
+                    Show results
+                  </button>
+                }
+              >
+                <div className="flex flex-col gap-3">
+                  {/* Primary filters — Location, Price, Date — first, per the simplified-filter spec. */}
+                  <select value={draftParams?.get("locality") ?? ""} onChange={(e) => updateDraft("locality", e.target.value)} className={selectClass} style={selectStyle}>
+                    <option value="">All localities</option>
+                    {localities.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name}
+                      </option>
+                    ))}
+                  </select>
 
-            <PriceRangeFilter
-              minRupees={searchParams.get("priceMin") ? Number(searchParams.get("priceMin")) : null}
-              maxRupees={searchParams.get("priceMax") ? Number(searchParams.get("priceMax")) : null}
-              onCommit={(min, max) => updateParams({ priceMin: min !== null ? String(min) : "", priceMax: max !== null ? String(max) : "" })}
-            />
+                  <PriceRangeFilter
+                    minRupees={draftParams?.get("priceMin") ? Number(draftParams.get("priceMin")) : null}
+                    maxRupees={draftParams?.get("priceMax") ? Number(draftParams.get("priceMax")) : null}
+                    onCommit={(min, max) => updateDraftMulti({ priceMin: min !== null ? String(min) : "", priceMax: max !== null ? String(max) : "" })}
+                  />
 
-            <div className="flex gap-3">
-              <input
-                type="date"
-                defaultValue={searchParams.get("dateFrom") ?? ""}
-                onChange={(e) => updateParam("dateFrom", e.target.value)}
-                className={`w-full ${dateInputClass}`}
-                aria-label="From date"
-              />
-              <input
-                type="date"
-                defaultValue={searchParams.get("dateTo") ?? ""}
-                onChange={(e) => updateParam("dateTo", e.target.value)}
-                className={`w-full ${dateInputClass}`}
-                aria-label="To date"
-              />
-            </div>
+                  <div className="flex gap-3">
+                    <input
+                      type="date"
+                      value={draftParams?.get("dateFrom") ?? ""}
+                      onChange={(e) => updateDraft("dateFrom", e.target.value)}
+                      className={`w-full ${dateInputClass}`}
+                      aria-label="From date"
+                    />
+                    <input
+                      type="date"
+                      value={draftParams?.get("dateTo") ?? ""}
+                      onChange={(e) => updateDraft("dateTo", e.target.value)}
+                      className={`w-full ${dateInputClass}`}
+                      aria-label="To date"
+                    />
+                  </div>
 
-            <div className="flex flex-wrap items-center gap-1.5 border-t border-border pt-3">
-              {SALE_TYPE_CHIPS.map((chip) => (
-                <button
-                  key={chip.value}
-                  type="button"
-                  onClick={() => updateParam("type", currentSaleType === chip.value ? "" : chip.value)}
-                  className={chipClass(currentSaleType === chip.value)}
-                >
-                  {chip.label}
-                </button>
-              ))}
-              <span className="mx-1 h-4 w-px bg-border" />
-              {READINESS_CHIPS.map((chip) => (
-                <button
-                  key={chip.value}
-                  type="button"
-                  onClick={() => updateParam("readiness", currentReadiness === chip.value ? "" : chip.value)}
-                  className={chipClass(currentReadiness === chip.value)}
-                >
-                  {chip.label}
-                </button>
-              ))}
-            </div>
+                  <div className="flex flex-wrap items-center gap-1.5 border-t border-border pt-3">
+                    {SALE_TYPE_CHIPS.map((chip) => (
+                      <button
+                        key={chip.value}
+                        type="button"
+                        onClick={() => updateDraft("type", draftSaleType === chip.value ? "" : chip.value)}
+                        className={chipClass(draftSaleType === chip.value)}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                    <span className="mx-1 h-4 w-px bg-border" />
+                    {READINESS_CHIPS.map((chip) => (
+                      <button
+                        key={chip.value}
+                        type="button"
+                        onClick={() => updateDraft("readiness", draftReadiness === chip.value ? "" : chip.value)}
+                        className={chipClass(draftReadiness === chip.value)}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
 
-            {/* Secondary filters. */}
-            <select value={searchParams.get("builder") ?? ""} onChange={(e) => updateParam("builder", e.target.value)} className={selectClass} style={selectStyle}>
-              <option value="">All builders</option>
-              {builders.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-            <select value={searchParams.get("project") ?? ""} onChange={(e) => updateParam("project", e.target.value)} className={selectClass} style={selectStyle}>
-              <option value="">All projects</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-            <select value={searchParams.get("category") ?? ""} onChange={(e) => updateParam("category", e.target.value)} className={selectClass} style={selectStyle}>
-              <option value="">All property types</option>
-              {PROPERTY_CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {CATEGORY_LABEL[c]}
-                </option>
-              ))}
-            </select>
-            <select value={searchParams.get("bedrooms") ?? ""} onChange={(e) => updateParam("bedrooms", e.target.value)} className={selectClass} style={selectStyle}>
-              <option value="">Any configuration</option>
-              {CONFIGURATION_FILTER_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            <div className="flex gap-3">
-              <input
-                type="number"
-                min={0}
-                defaultValue={searchParams.get("areaMin") ?? ""}
-                onBlur={(e) => updateParam("areaMin", e.target.value)}
-                placeholder="Min sqft"
-                className="w-full rounded-sm border border-border bg-surface px-2.5 py-2 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
-              />
-              <input
-                type="number"
-                min={0}
-                defaultValue={searchParams.get("areaMax") ?? ""}
-                onBlur={(e) => updateParam("areaMax", e.target.value)}
-                placeholder="Max sqft"
-                className="w-full rounded-sm border border-border bg-surface px-2.5 py-2 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
-              />
-            </div>
-            <select value={searchParams.get("sort") ?? "date_desc"} onChange={(e) => updateParam("sort", e.target.value)} className={selectClass} style={selectStyle}>
-              {TRANSACTION_SORT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </Dialog>
-      ) : null}
+                  {/* Secondary filters. */}
+                  <select value={draftParams?.get("builder") ?? ""} onChange={(e) => updateDraft("builder", e.target.value)} className={selectClass} style={selectStyle}>
+                    <option value="">All builders</option>
+                    {builders.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                  <select value={draftParams?.get("project") ?? ""} onChange={(e) => updateDraft("project", e.target.value)} className={selectClass} style={selectStyle}>
+                    <option value="">All projects</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  <select value={draftParams?.get("category") ?? ""} onChange={(e) => updateDraft("category", e.target.value)} className={selectClass} style={selectStyle}>
+                    <option value="">All property types</option>
+                    {PROPERTY_CATEGORIES.map((c) => (
+                      <option key={c} value={c}>
+                        {CATEGORY_LABEL[c]}
+                      </option>
+                    ))}
+                  </select>
+                  <select value={draftParams?.get("bedrooms") ?? ""} onChange={(e) => updateDraft("bedrooms", e.target.value)} className={selectClass} style={selectStyle}>
+                    <option value="">Any configuration</option>
+                    {CONFIGURATION_FILTER_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="flex gap-3">
+                    <input
+                      type="number"
+                      min={0}
+                      value={draftParams?.get("areaMin") ?? ""}
+                      onChange={(e) => updateDraft("areaMin", e.target.value)}
+                      placeholder="Min sqft"
+                      className="w-full rounded-sm border border-border bg-surface px-2.5 py-2 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      value={draftParams?.get("areaMax") ?? ""}
+                      onChange={(e) => updateDraft("areaMax", e.target.value)}
+                      placeholder="Max sqft"
+                      className="w-full rounded-sm border border-border bg-surface px-2.5 py-2 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+                    />
+                  </div>
+                  <select value={draftParams?.get("sort") ?? "date_desc"} onChange={(e) => updateDraft("sort", e.target.value)} className={selectClass} style={selectStyle}>
+                    {TRANSACTION_SORT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </Dialog>,
+              document.body
+            );
+          })()
+        : null}
     </div>
   );
 }
