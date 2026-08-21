@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import {
   CATEGORY_LABEL,
@@ -184,10 +185,11 @@ export default function ProjectFilters({ localities, builders }: { localities: F
         </div>
       ) : null}
 
-      {filtersOpen ? (
-        <Dialog
-          title="Filters"
-          onClose={() => setFiltersOpen(false)}
+      {filtersOpen
+        ? createPortal(
+            <Dialog
+              title="Filters"
+              onClose={() => setFiltersOpen(false)}
           footer={
             <div className="flex items-center justify-between gap-2">
               <SaveSearchButton />
@@ -289,8 +291,10 @@ export default function ProjectFilters({ localities, builders }: { localities: F
               </button>
             </div>
           </div>
-        </Dialog>
-      ) : null}
+            </Dialog>,
+            document.body
+          )
+        : null}
     </div>
   );
 }
