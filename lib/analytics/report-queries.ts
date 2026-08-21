@@ -16,6 +16,8 @@ export interface ReportRow {
   status: ReportStatus;
   createdAt: Date;
   reviewedAt: Date | null;
+  /** The rejection remark (Section 5) when status is REJECTED — also doubles as the general resolution note for other terminal states. */
+  resolutionNote: string | null;
 }
 
 export async function getReportsQueue(status?: ReportStatus): Promise<ReportRow[]> {

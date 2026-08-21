@@ -31,7 +31,7 @@ export default function ShareReferralCard({ referralCode }: { referralCode: stri
 
   function handleWhatsApp() {
     const url = buildLink("whatsapp");
-    const message = `Know someone researching property in Mumbai? Check out NoDalalTalks — independent real estate intelligence, no forced phone number, no spam calls. ${url}`;
+    const message = `Know someone researching property in Mumbai? Check out NoDalalTalks: independent real estate intelligence, no forced phone number, no spam calls. ${url}`;
     fireShareInitiated("whatsapp");
     window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
   }

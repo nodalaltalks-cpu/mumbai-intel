@@ -225,11 +225,25 @@ export async function createLocalityAction(
   redirect("/admin/localities?created=1");
 }
 
-/** Minimal create for the Project form's inline "+ New Locality" — same shared creation path as the full form, everything but name omitted/defaulted, no redirect. */
+/**
+ * Minimal create for the Project/Transaction forms' inline "+ New Locality"
+ * — same shared creation path as the full form, everything but name omitted/
+ * defaulted, no redirect. Case-insensitive existing-name check first: typing
+ * a name that (trimmed, case-insensitively) already matches a Locality
+ * returns that existing row instead of creating a duplicate — the slug
+ * uniquer only prevents slug collisions, not duplicate names, so without
+ * this an admin retyping "Chembur" would silently create "chembur-2".
+ */
 export async function createLocalityInlineAction(name: string): Promise<InlineCreateResult> {
   const session = await requireMutateSession();
   const trimmed = name.trim();
   if (!trimmed) return { error: "Name is required" };
+
+  const existing = await prisma.locality.findFirst({
+    where: { name: { equals: trimmed, mode: "insensitive" }, deletedAt: null },
+    select: { id: true, name: true },
+  });
+  if (existing) return { id: existing.id, name: existing.name };
 
   try {
     const { id } = await createLocalityRecord({ name: trimmed, isPublished: false, isFeatured: false }, [], session.userId);

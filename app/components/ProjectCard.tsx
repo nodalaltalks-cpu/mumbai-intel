@@ -148,7 +148,7 @@ export default function ProjectCard({ project }: { project: ProjectCardData }) {
               <p className="text-[10px] uppercase tracking-wide text-muted">Payment Plan</p>
               {project.paymentPlanDescription ? (
                 <span className="pointer-events-auto">
-                  <InfoTooltip label={`${paymentPlanLabel} — payment plan details`}>{project.paymentPlanDescription}</InfoTooltip>
+                  <InfoTooltip label={`${paymentPlanLabel}: payment plan details`}>{project.paymentPlanDescription}</InfoTooltip>
                 </span>
               ) : null}
             </div>

@@ -1,13 +1,14 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { getUserDemandSummary } from "@/lib/analytics/user-demand-queries";
+import { getUserDemandSummary, getLocalityDemandSignals } from "@/lib/analytics/user-demand-queries";
+import { formatDate } from "@/lib/format";
 import BarChart from "@/app/admin/components/charts/BarChart";
 
 export const metadata: Metadata = { title: "User Demand — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function UserDemandPage() {
-  const demand = await getUserDemandSummary();
+  const [demand, localitySignals] = await Promise.all([getUserDemandSummary(), getLocalityDemandSignals(30)]);
   const localityData = demand.byLocality.slice(0, 15);
 
   return (
@@ -76,6 +77,40 @@ export default async function UserDemandPage() {
               </li>
             ))}
           </ul>
+        )}
+      </section>
+
+      <section className="rounded-sm border border-border bg-surface p-4">
+        <h2 className="mb-1 font-mono text-sm font-semibold text-foreground">Locality demand signals</h2>
+        <p className="mb-3 text-[11px] text-muted">
+          Every time a user types a new locality/landmark into their Research Profile — first seen, most recent activity, and how many times
+          it&apos;s come up. A repeated term here is a real signal to add coverage.
+        </p>
+        {localitySignals.length === 0 ? (
+          <p className="text-xs text-muted">No signals recorded yet.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-sm border border-border">
+            <table className="w-full min-w-[480px] border-collapse text-left text-xs">
+              <thead>
+                <tr className="border-b border-border bg-background text-[10px] uppercase tracking-wide text-muted">
+                  <th className="px-3 py-2 font-medium">Locality</th>
+                  <th className="px-3 py-2 font-medium text-right">Signals</th>
+                  <th className="px-3 py-2 font-medium">First seen</th>
+                  <th className="px-3 py-2 font-medium">Latest activity</th>
+                </tr>
+              </thead>
+              <tbody>
+                {localitySignals.map((s) => (
+                  <tr key={s.locality} className="border-b border-border last:border-b-0 hover:bg-surface-raised">
+                    <td className="px-3 py-2 font-mono text-foreground">{s.locality}</td>
+                    <td className="px-3 py-2 text-right font-mono text-accent">{s.signalCount}</td>
+                    <td className="px-3 py-2 text-muted">{formatDate(s.firstSeen)}</td>
+                    <td className="px-3 py-2 text-muted">{formatDate(s.lastActivity)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 

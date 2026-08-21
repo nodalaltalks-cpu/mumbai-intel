@@ -17,7 +17,7 @@ export default async function HeroSearch() {
         <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted">
           Compare projects, download <span className="font-semibold text-foreground">official brochures</span>,
           explore <span className="font-semibold text-foreground">verified information</span> and make smarter
-          property decisions — <span className="font-semibold text-foreground">without sharing your phone number</span>.
+          property decisions, <span className="font-semibold text-foreground">without sharing your phone number</span>.
         </p>
         <div className="mt-8 max-w-2xl">
           <SearchBar

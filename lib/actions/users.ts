@@ -7,6 +7,7 @@ import { requireAdminSession } from "@/lib/auth/guard";
 import { hashPassword } from "@/lib/auth/password";
 import { prisma } from "@/lib/prisma";
 import { USER_ROLES } from "@/lib/project-meta";
+import { isValidPermissionKey } from "@/lib/auth/permissions";
 import { logAudit } from "@/lib/audit";
 import { friendlyPrismaError } from "./errors";
 
@@ -85,6 +86,12 @@ export async function updateUserAction(
     return { error: "You cannot demote or deactivate your own account." };
   }
 
+  // Only meaningful for EDITOR/VIEWER -- ADMIN always bypasses permission checks
+  // (see lib/auth/permissions.ts's hasPermission), so an ADMIN's own permissions
+  // array is stored but never consulted. Filtered against the known key list so
+  // a stray/renamed checkbox name can never write an unrecognized string.
+  const permissions = formData.getAll("permissions").map(String).filter(isValidPermissionKey);
+
   try {
     await prisma.user.update({
       where: { id: userId },
@@ -92,6 +99,7 @@ export async function updateUserAction(
         name: data.name ?? null,
         role: data.role,
         isActive: data.isActive,
+        permissions,
         ...(data.newPassword ? { passwordHash: await hashPassword(data.newPassword) } : {}),
       },
     });

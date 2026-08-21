@@ -7,7 +7,7 @@ import Footer from "@/app/components/Footer";
 import SectionHeading from "@/app/components/ui/SectionHeading";
 
 export const metadata: Metadata = {
-  title: "Reports — NoDalalTalks",
+  title: "Reports - NoDalalTalks",
   description: "Market and transaction reports covering Mumbai real estate activity, pricing and trends.",
 };
 export const dynamic = "force-dynamic";
@@ -32,7 +32,7 @@ export default async function ReportsHubPage() {
         <div>
           <h1 className="font-mono text-2xl font-bold text-foreground">Reports</h1>
           <p className="mt-1 text-sm text-muted">
-            Premium market-intelligence reports — market summary, KPIs, charts, trends, comparisons and related entities, all generated from live data.
+            Premium market-intelligence reports: market summary, KPIs, charts, trends, comparisons and related entities, all generated from live data.
           </p>
         </div>
 

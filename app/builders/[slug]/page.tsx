@@ -37,8 +37,8 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const builder = await getPublicBuilderBySlug(slug);
-  if (!builder) return { title: "Developer not found — NoDalalTalks" };
-  const title = builder.metaTitle || `${builder.name} — NoDalalTalks`;
+  if (!builder) return { title: "Developer not found - NoDalalTalks" };
+  const title = builder.metaTitle || `${builder.name} - NoDalalTalks`;
   const description = builder.metaDescription || undefined;
   const image = builder.ogImageUrl || builder.coverImageUrl || undefined;
   return {
@@ -221,7 +221,7 @@ export default async function BuilderDetailPage({ params }: { params: Promise<{ 
               {builder.timeline.map((event) => (
                 <li key={event.id}>
                   <p className="font-mono text-xs text-foreground">
-                    <span className="text-accent">{event.year}</span> — {event.title}
+                    <span className="text-accent">{event.year}:</span> {event.title}
                   </p>
                   {event.description ? <p className="text-xs text-muted">{event.description}</p> : null}
                 </li>
@@ -358,7 +358,7 @@ export default async function BuilderDetailPage({ params }: { params: Promise<{ 
                   {timelineProjects.map((p) => (
                     <li key={p.id}>
                       <p className="font-mono text-xs text-foreground">
-                        <span className="text-accent">{p.launchDate ? formatDate(p.launchDate) : "Date TBD"}</span> — {p.name}
+                        <span className="text-accent">{p.launchDate ? formatDate(p.launchDate) : "Date TBD"}:</span> {p.name}
                         <span className="ml-2 text-muted">({STATUS_LABEL[p.status as ProjectStatus]})</span>
                       </p>
                     </li>

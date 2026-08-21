@@ -1,11 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import {
   createTransactionAction,
   updateTransactionAction,
   type TransactionFormState,
 } from "@/lib/actions/transactions";
+import { createLocalityInlineAction } from "@/lib/actions/localities";
 import {
   BUYER_TYPE_LABEL,
   BUYER_TYPES,
@@ -16,6 +17,7 @@ import {
   TRANSACTION_TYPES,
 } from "@/lib/project-meta";
 import { Field, FieldGroup, FormError, SelectField } from "./FormField";
+import InlineEntityCreate from "./InlineEntityCreate";
 import SubmitButton from "./SubmitButton";
 
 export interface TransactionFormData {
@@ -63,22 +65,40 @@ export default function TransactionForm({
     ? updateTransactionAction.bind(null, transaction.id)
     : createTransactionAction;
   const [state, formAction] = useActionState(action, initialState);
+  const [localityOptions, setLocalityOptions] = useState(localities);
+  const [selectedLocalityId, setSelectedLocalityId] = useState(transaction?.localityId ?? "");
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
       <FormError message={state.error} />
 
       <FieldGroup>
-        <SelectField label="Locality" name="localityId" required defaultValue={transaction?.localityId ?? ""}>
-          <option value="" disabled>
-            Select a locality
-          </option>
-          {localities.map((locality) => (
-            <option key={locality.id} value={locality.id}>
-              {locality.name}
+        <div>
+          <SelectField
+            label="Locality"
+            name="localityId"
+            required
+            value={selectedLocalityId}
+            onChange={(e) => setSelectedLocalityId(e.target.value)}
+          >
+            <option value="" disabled>
+              Select a locality
             </option>
-          ))}
-        </SelectField>
+            {localityOptions.map((locality) => (
+              <option key={locality.id} value={locality.id}>
+                {locality.name}
+              </option>
+            ))}
+          </SelectField>
+          <InlineEntityCreate
+            label="Locality"
+            action={createLocalityInlineAction}
+            onCreated={({ id, name }) => {
+              setLocalityOptions((prev) => (prev.some((l) => l.id === id) ? prev : [...prev, { id, name }]));
+              setSelectedLocalityId(id);
+            }}
+          />
+        </div>
         <SelectField label="Project (optional)" name="projectId" defaultValue={transaction?.projectId ?? ""}>
           <option value="">Not linked to a project</option>
           {projects.map((project) => (

@@ -43,6 +43,48 @@ export interface UserDemandSummary {
   lastUpdated: Date;
 }
 
+export interface LocalityDemandSignal {
+  locality: string;
+  signalCount: number;
+  firstSeen: Date;
+  lastActivity: Date;
+}
+
+/**
+ * Section 13 — "many users are requesting a locality we don't cover yet."
+ * Reads LOCALITY_INTEREST_ADDED (fired once per newly-typed free-text
+ * locality in a user's Research Profile, see lib/actions/user-preferences.ts)
+ * and aggregates in JS, same reasoning as the rest of this file: the signal
+ * lives in a JSON metadata column, which Prisma can't group by directly.
+ * Founder-only — never surfaced to users.
+ */
+export async function getLocalityDemandSignals(limit = 30): Promise<LocalityDemandSignal[]> {
+  return safeQuery("getLocalityDemandSignals", [], async () => {
+    const rows = await prisma.researchEvent.findMany({
+      where: { eventType: "LOCALITY_INTEREST_ADDED" },
+      select: { metadata: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+    });
+    const byLocality = new Map<string, { label: string; count: number; firstSeen: Date; lastActivity: Date }>();
+    for (const row of rows) {
+      const raw = (row.metadata as { locality?: unknown } | null)?.locality;
+      if (typeof raw !== "string" || !raw.trim()) continue;
+      const key = raw.trim().toLowerCase();
+      const entry = byLocality.get(key);
+      if (entry) {
+        entry.count += 1;
+        entry.lastActivity = row.createdAt;
+      } else {
+        byLocality.set(key, { label: raw.trim(), count: 1, firstSeen: row.createdAt, lastActivity: row.createdAt });
+      }
+    }
+    return Array.from(byLocality.values())
+      .map((v) => ({ locality: v.label, signalCount: v.count, firstSeen: v.firstSeen, lastActivity: v.lastActivity }))
+      .sort((a, b) => b.signalCount - a.signalCount)
+      .slice(0, limit);
+  });
+}
+
 export async function getUserDemandSummary(): Promise<UserDemandSummary> {
   return safeQuery(
     "getUserDemandSummary",

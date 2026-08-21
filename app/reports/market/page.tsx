@@ -33,7 +33,7 @@ import { getPublicSession } from "@/lib/public-auth/session";
 import { gated, maskPricePerSqft, maskProjectBrochure } from "@/lib/premium/mask";
 
 export const metadata: Metadata = {
-  title: "Market Report — NoDalalTalks",
+  title: "Market Report - NoDalalTalks",
   description: "City-wide Mumbai real estate KPIs, price trends, and trending-area rankings.",
 };
 export const dynamic = "force-dynamic";

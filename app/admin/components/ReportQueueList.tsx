@@ -13,6 +13,7 @@ import {
 } from "@/lib/actions/reports";
 import { formatDateTime } from "@/lib/format";
 import type { ReportRow } from "@/lib/analytics/report-queries";
+import Dialog from "@/app/components/ui/Dialog";
 import AuditHistory from "./AuditHistory";
 
 type HistoryLog = Awaited<ReturnType<typeof getReportHistoryAction>>[number];
@@ -51,6 +52,9 @@ export default function ReportQueueList({ reports, canDelete = false }: { report
   const [openHistoryId, setOpenHistoryId] = useState<string | null>(null);
   const [historyByReport, setHistoryByReport] = useState<Record<string, HistoryLog[]>>({});
   const [historyLoading, setHistoryLoading] = useState<string | null>(null);
+  const [rejectingReport, setRejectingReport] = useState<{ id: string; entityName: string } | null>(null);
+  const [rejectRemark, setRejectRemark] = useState("");
+  const [rejectError, setRejectError] = useState<string | null>(null);
 
   function run(action: (id: string) => Promise<{ error?: string }>, id: string) {
     startTransition(async () => {
@@ -60,6 +64,26 @@ export default function ReportQueueList({ reports, canDelete = false }: { report
         alert(result.error);
         return;
       }
+      router.refresh();
+    });
+  }
+
+  function submitRejection() {
+    if (!rejectingReport) return;
+    const remark = rejectRemark.trim();
+    if (!remark) {
+      setRejectError("A rejection reason is required.");
+      return;
+    }
+    setRejectError(null);
+    startTransition(async () => {
+      const result = await rejectReportAction(rejectingReport.id, remark);
+      if (result.error) {
+        setRejectError(result.error);
+        return;
+      }
+      setRejectingReport(null);
+      setRejectRemark("");
       router.refresh();
     });
   }
@@ -120,6 +144,11 @@ export default function ReportQueueList({ reports, canDelete = false }: { report
                   </p>
                 ) : null}
                 {report.reporterEmail ? <p className="mt-1 text-[10px] text-muted">Reported by {report.reporterEmail}</p> : null}
+                {report.status === "REJECTED" && report.resolutionNote ? (
+                  <p className="mt-1.5 text-xs text-muted">
+                    <span className="text-negative">Rejection reason sent to user:</span> {report.resolutionNote}
+                  </p>
+                ) : null}
               </div>
 
               <div className="flex shrink-0 flex-wrap gap-1.5">
@@ -147,7 +176,11 @@ export default function ReportQueueList({ reports, canDelete = false }: { report
                   <button
                     type="button"
                     disabled={isPending}
-                    onClick={() => run(rejectReportAction, report.id)}
+                    onClick={() => {
+                      setRejectingReport({ id: report.id, entityName: report.entityName });
+                      setRejectRemark("");
+                      setRejectError(null);
+                    }}
                     className="rounded-sm border border-negative/40 bg-negative/10 px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-negative hover:bg-negative/20 disabled:opacity-60"
                   >
                     Reject
@@ -211,6 +244,54 @@ export default function ReportQueueList({ reports, canDelete = false }: { report
           </div>
         );
       })}
+
+      {rejectingReport ? (
+        <Dialog
+          title={`Reject report — ${rejectingReport.entityName}`}
+          onClose={() => {
+            setRejectingReport(null);
+            setRejectRemark("");
+            setRejectError(null);
+          }}
+          footer={
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setRejectingReport(null);
+                  setRejectRemark("");
+                  setRejectError(null);
+                }}
+                className="rounded-sm border border-border px-3 py-2 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={submitRejection}
+                className="rounded-sm border border-negative/40 bg-negative/10 px-3 py-2 text-xs font-mono uppercase tracking-wide text-negative hover:bg-negative/20 disabled:opacity-60"
+              >
+                {isPending ? "Sending…" : "Reject & Send Remark"}
+              </button>
+            </div>
+          }
+        >
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-foreground">Rejection reason</span>
+            <p className="text-[11px] text-muted">The reporter will see this explanation — keep it clear and specific. This field is required.</p>
+            <textarea
+              autoFocus
+              value={rejectRemark}
+              onChange={(e) => setRejectRemark(e.target.value)}
+              rows={4}
+              placeholder="e.g. We checked MahaRERA and the current possession date shown is correct."
+              className="w-full resize-none rounded-sm border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+            />
+          </label>
+          {rejectError ? <p className="mt-2 text-xs text-negative">{rejectError}</p> : null}
+        </Dialog>
+      ) : null}
     </div>
   );
 }

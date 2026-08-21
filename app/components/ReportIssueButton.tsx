@@ -48,7 +48,7 @@ export default function ReportIssueButton({
       </button>
 
       {open ? (
-        <Dialog title={`Report an issue — ${entityName}`} onClose={() => setOpen(false)}>
+        <Dialog title={`Report an issue: ${entityName}`} onClose={() => setOpen(false)}>
           <form action={formAction} className="flex flex-col gap-3">
             <input type="hidden" name="entityType" value={entityType} />
             {entityId ? <input type="hidden" name="entityId" value={entityId} /> : null}

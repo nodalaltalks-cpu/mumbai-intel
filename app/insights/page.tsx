@@ -8,9 +8,10 @@ import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 import SectionHeading from "@/app/components/ui/SectionHeading";
 import EmptyState from "@/app/components/ui/EmptyState";
+import BackLink from "@/app/components/ui/BackLink";
 
 export const metadata: Metadata = {
-  title: "Insights — NoDalalTalks",
+  title: "Insights - NoDalalTalks",
   description: "How NoDalalTalks sources and verifies its data, plus the top-performing localities by market activity.",
 };
 export const dynamic = "force-dynamic";
@@ -49,7 +50,8 @@ export default async function InsightsPage() {
 
       <main id="main-content" className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-10 px-4 py-8 sm:px-6">
         <div>
-          <h1 className="font-mono text-2xl font-bold text-foreground">Real Estate Insights</h1>
+          <BackLink fallbackHref="/" />
+          <h1 className="mt-2 font-mono text-2xl font-bold text-foreground">Real Estate Insights</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted">
             Every fact on NoDalalTalks is tagged with where it came from. No number is presented without a source you
             can check.
@@ -80,7 +82,7 @@ export default async function InsightsPage() {
               ))}
             </div>
           ) : (
-            <EmptyState title="No insights yet" message="Insights are computed from recorded transactions — they will appear as data is added." />
+            <EmptyState title="No insights yet" message="Insights are computed from recorded transactions. They will appear as data is added." />
           )}
         </section>
 

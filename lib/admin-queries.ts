@@ -1449,6 +1449,63 @@ export async function getBrochureVersions(projectId: string): Promise<BrochureVe
 
 export async function getUserForEdit(id: string) {
   return safeQuery("getUserForEdit", null, () =>
-    prisma.user.findUnique({ where: { id }, select: { id: true, email: true, name: true, role: true, isActive: true } })
+    prisma.user.findUnique({ where: { id }, select: { id: true, email: true, name: true, role: true, isActive: true, permissions: true } })
+  );
+}
+
+/** Recent admin activity for one user (Section 7's "View employee activity") — reuses AuditLog, the same table every other admin activity view already reads. */
+export async function getUserActivity(userId: string, limit = 50) {
+  return safeQuery("getUserActivity", [], () =>
+    prisma.auditLog.findMany({
+      where: { actorId: userId },
+      orderBy: { at: "desc" },
+      take: limit,
+      select: { id: true, action: true, entityType: true, entityId: true, at: true },
+    })
+  );
+}
+
+/**
+ * Who's opted in to saved-search match alerts (Section 15) — SavedSearch.notifyOnMatch
+ * is the one real opt-in flag; this just makes it visible. lastNotifiedAt is shown
+ * as-is (null = never sent) rather than inventing a status, since no automated
+ * matcher exists yet to actually send these (see lib/email.ts's sendSavedSearchAlertEmail
+ * doc comment) -- this view is honest about that, not a claim the feature is live.
+ */
+export async function getSavedSearchNotificationEligibility(limit = 200) {
+  return safeQuery("getSavedSearchNotificationEligibility", [], () =>
+    prisma.savedSearch.findMany({
+      where: { notifyOnMatch: true },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      include: { publicUser: { select: { id: true, email: true, name: true } } },
+    })
+  );
+}
+
+/** Contact Us submissions for the admin queue (Section 9) — newest first, optionally filtered by status. */
+export async function getContactEnquiries(status?: "NEW" | "IN_PROGRESS" | "RESOLVED", limit = 100) {
+  return safeQuery("getContactEnquiries", [], () =>
+    prisma.contactEnquiry.findMany({
+      where: status ? { status } : undefined,
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      include: { publicUser: { select: { id: true, email: true, name: true } } },
+    })
+  );
+}
+
+/** The employee-change approval queue (Section 7) — pending by default so the founder always lands on what needs a decision, with reviewed history available via `status`. */
+export async function getPendingChanges(status: "PENDING" | "APPROVED" | "REJECTED" = "PENDING", limit = 100) {
+  return safeQuery("getPendingChanges", [], () =>
+    prisma.pendingChange.findMany({
+      where: { status },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      include: {
+        actor: { select: { id: true, name: true, email: true } },
+        reviewer: { select: { id: true, name: true, email: true } },
+      },
+    })
   );
 }

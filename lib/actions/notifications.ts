@@ -5,6 +5,7 @@ import { requireSession } from "@/lib/auth/guard";
 import { getPublicSession } from "@/lib/public-auth/session";
 import { prisma } from "@/lib/prisma";
 import { updateManyByRow } from "@/lib/actions/errors";
+import { getPublicNotifications, type PublicNotificationItem } from "@/lib/queries/dashboard";
 
 /**
  * Marks every unread notification for the signed-in admin as read. Per-row
@@ -54,4 +55,19 @@ export async function markPublicNotificationReadAction(notificationId: string): 
   if (!notification) return;
   await prisma.notification.update({ where: { id: notification.id }, data: { readAt: new Date() } });
   revalidatePath("/", "layout");
+}
+
+/**
+ * Lets NotificationBell (a client component, mounted once in the root
+ * layout and server-rendered with whatever was true at that page load)
+ * poll for new notifications without a full page refresh — Section 8's
+ * "important notifications appear quickly." Plain interval polling, not a
+ * websocket/SSE channel: this is a low-frequency, low-stakes UI refresh for
+ * the signed-in visitor's own notifications, not session/behavior
+ * surveillance, so the simplest correct mechanism is the right one.
+ */
+export async function fetchPublicNotificationsAction(): Promise<PublicNotificationItem[]> {
+  const session = await getPublicSession();
+  if (!session) return [];
+  return getPublicNotifications(session.userId);
 }

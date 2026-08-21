@@ -4,7 +4,7 @@ import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 
 export const metadata: Metadata = {
-  title: "FAQ — NoDalalTalks",
+  title: "FAQ - NoDalalTalks",
   description: "Answers to common questions about NoDalalTalks's data sources, accounts, and how to use the platform.",
 };
 
@@ -12,7 +12,7 @@ const FAQS: { question: string; answer: string }[] = [
   {
     question: "What is NoDalalTalks?",
     answer:
-      "A real estate market intelligence platform for Mumbai — project, builder and locality profiles, a registered-transaction database, and market analytics — where every figure is tagged with where it came from.",
+      "A real estate market intelligence platform for Mumbai: project, builder and locality profiles, a registered-transaction database, and market analytics, where every figure is tagged with where it came from.",
   },
   {
     question: "What do the data-source tags mean?",
@@ -32,7 +32,7 @@ const FAQS: { question: string; answer: string }[] = [
   {
     question: "Do I need an account to browse the site?",
     answer:
-      "No — projects, builders, localities, transactions, market data, insights and the map are all browsable without signing in. An account lets you save projects and access your profile.",
+      "No, projects, builders, localities, transactions, market data, insights and the map are all browsable without signing in. An account lets you save projects and access your profile.",
   },
   {
     question: "How do I save a project?",
@@ -45,7 +45,7 @@ const FAQS: { question: string; answer: string }[] = [
       "Update frequency varies by data type and is being actively expanded. Check the data-source tag and confidence level on any figure for context on how it was derived and how recently it was verified.",
   },
   {
-    question: "I found an error in the data — how do I report it?",
+    question: "I found an error in the data. How do I report it?",
     answer: "Please reach out via the Contact page with the project/locality/transaction in question and what looks wrong.",
   },
 ];

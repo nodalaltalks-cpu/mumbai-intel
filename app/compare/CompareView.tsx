@@ -74,7 +74,7 @@ export default function CompareView() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-mono text-2xl font-bold text-foreground">Compare Projects</h1>
-          <p className="text-sm text-muted">Side-by-side comparison of up to 4 projects — nothing here needs an account.</p>
+          <p className="text-sm text-muted">Side-by-side comparison of up to 4 projects. Nothing here needs an account.</p>
         </div>
         {slugs.length > 0 ? (
           <Button variant="secondary" size="sm" onClick={() => clearCompareList()}>

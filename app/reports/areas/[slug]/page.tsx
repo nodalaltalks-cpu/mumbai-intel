@@ -39,9 +39,9 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const locality = await getPublicLocalityBySlug(slug);
-  if (!locality) return { title: "Area report not found — NoDalalTalks" };
+  if (!locality) return { title: "Area report not found - NoDalalTalks" };
   return {
-    title: `${locality.name} Area Report — NoDalalTalks`,
+    title: `${locality.name} Area Report - NoDalalTalks`,
     description: `Demand, supply and price-trend analysis for ${locality.name}.`,
     alternates: { canonical: `/localities/${locality.slug}` },
   };

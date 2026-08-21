@@ -9,7 +9,7 @@ import EmptyState from "@/app/components/ui/EmptyState";
 import { getPublicSession } from "@/lib/public-auth/session";
 
 export const metadata: Metadata = {
-  title: "Localities — NoDalalTalks",
+  title: "Localities - NoDalalTalks",
   description: "Explore Mumbai localities with market snapshots, price trends and investment scores.",
   alternates: { canonical: "/localities" },
 };

@@ -3,7 +3,7 @@ import Link from "next/link";
 import AuthCard from "@/app/components/auth/AuthCard";
 import ResetPasswordForm from "./ResetPasswordForm";
 
-export const metadata: Metadata = { title: "Set a new password — NoDalalTalks" };
+export const metadata: Metadata = { title: "Set a new password - NoDalalTalks" };
 export const dynamic = "force-dynamic";
 
 export default async function ResetPasswordPage({ searchParams }: { searchParams: Promise<{ token?: string }> }) {

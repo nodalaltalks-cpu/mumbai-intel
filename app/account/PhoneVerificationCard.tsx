@@ -20,9 +20,10 @@ export default function PhoneVerificationCard({ verified }: { verified: boolean 
 
   return (
     <div className="mt-3 rounded-sm border border-border bg-background p-3">
-      <p className="text-xs text-foreground">Want alerts when this project or locality changes? Verify your mobile number.</p>
+      <p className="text-xs text-foreground">Want faster updates on new launches, offers and availability?</p>
       <p className="mt-1 text-[11px] text-muted">
-        Optional. We&apos;ll never share your number with brokers or developers, and we won&apos;t send marketing messages without your consent.
+        You can optionally verify your phone number to receive relevant updates from us. Your number is optional and will not be required to
+        research properties. We&apos;ll never share it with brokers or developers.
       </p>
       <form action={formAction} className="mt-2">
         <AuthError message={state.error} />

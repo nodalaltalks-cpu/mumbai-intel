@@ -3,7 +3,7 @@ import LegalPageShell from "@/app/components/LegalPageShell";
 import { formatDate } from "@/lib/format";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — NoDalalTalks",
+  title: "Privacy Policy - NoDalalTalks",
   description: "How NoDalalTalks collects, uses, and protects your account data.",
 };
 
@@ -14,7 +14,7 @@ export default function PrivacyPage() {
       <p>If you create an account, we collect:</p>
       <ul>
         <li>Name, email address, and (optionally) phone number</li>
-        <li>A securely hashed password (if you sign up with email/password) — we never store your password in plain text</li>
+        <li>A securely hashed password (if you sign up with email/password); we never store your password in plain text</li>
         <li>Basic profile info from Google (name, email, profile photo) if you sign in with Google</li>
         <li>Sign-in timestamps, for account security</li>
       </ul>
@@ -41,7 +41,7 @@ export default function PrivacyPage() {
       <h2>4. Data sharing</h2>
       <p>
         We share account data with infrastructure providers strictly necessary to run the Service (database hosting,
-        image hosting, and — if configured — an email delivery provider for transactional email). We do not share
+        image hosting, and, if configured, an email delivery provider for transactional email). We do not share
         your personal information with third parties for their own marketing purposes.
       </p>
 

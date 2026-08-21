@@ -159,8 +159,8 @@ export default async function Footer() {
             No Spam Calls. No Phone Number Required. Research First.
           </p>
           <p className="mt-2 max-w-[22rem] text-xs leading-relaxed text-muted">
-            Research a property before anyone tries to sell you one. Verified project, transaction and market data —
-            no phone number required to explore it.
+            Research a property before anyone tries to sell you one. Verified project, transaction and market data,
+            with no phone number required to explore it.
           </p>
 
           <div className="mt-4 flex items-center gap-2">

@@ -14,7 +14,7 @@ import { getPublicSession } from "@/lib/public-auth/session";
 import { maskProjectBrochure } from "@/lib/premium/mask";
 
 export const metadata: Metadata = {
-  title: "Projects — NoDalalTalks",
+  title: "Projects - NoDalalTalks",
   description: "Browse residential and commercial real estate projects across Mumbai with source-tagged pricing, status and configuration data.",
   alternates: { canonical: "/projects" },
 };

@@ -1,17 +1,19 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireMutateSession, requireAdminSession } from "@/lib/auth/guard";
+import { requireMutateSession, requireAdminSession, isAdmin } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { emit } from "@/lib/events";
 import { createNotification } from "@/lib/notifications";
 import { getAuditHistory } from "@/lib/admin-queries";
 import { getSiteSettings } from "@/lib/site-settings";
 import { logAudit } from "@/lib/audit";
+import { createPendingChange } from "./pending-changes";
 import { friendlyPrismaError } from "./errors";
 import type { ReportStatus } from "@prisma/client";
 
-const REPORT_NOTIFICATION_COPY: Partial<Record<ReportStatus, { title: string; body: (entityName: string) => string }>> = {
+const REPORT_NOTIFICATION_COPY: Partial<Record<ReportStatus, { title: string; body: (entityName: string, remark?: string) => string }>> = {
   UNDER_REVIEW: {
     title: "We're reviewing your report",
     body: () => "Thank you for reporting this. We are reviewing your query and aim to resolve it within 48 working hours.",
@@ -21,12 +23,13 @@ const REPORT_NOTIFICATION_COPY: Partial<Record<ReportStatus, { title: string; bo
     body: (entityName) => `Your report about ${entityName} has been accepted. We are reviewing the information and will work on the correction.`,
   },
   REJECTED: {
-    title: "Your report has been reviewed",
-    body: (entityName) => `Your report about ${entityName} has been reviewed but we could not verify the suggested correction.`,
+    title: "Your report was reviewed",
+    body: (entityName, remark) =>
+      `Your report about ${entityName} was reviewed but could not be accepted.${remark ? `\n\nReason:\n${remark}` : ""}`,
   },
   RESOLVED: {
     title: "Your report has been resolved",
-    body: (entityName) => `Your report about ${entityName} has been resolved. Thank you for helping us keep Mumbai Intel accurate.`,
+    body: (entityName) => `Your report about ${entityName} has been resolved. Thank you for helping us keep NoDalalTalks accurate.`,
   },
 };
 
@@ -60,7 +63,7 @@ async function setStatus(reportId: string, status: ReportStatus, resolutionNote?
 
     const copy = REPORT_NOTIFICATION_COPY[status];
     if (copy && report.reporterUserId) {
-      const rawBody = copy.body(report.entityName);
+      const rawBody = copy.body(report.entityName, resolutionNote);
       const body = status === "RESOLVED" ? await appendReviewRequest(rawBody) : rawBody;
       const notificationType =
         status === "RESOLVED" ? "REPORT_RESOLVED" : status === "ACCEPTED" ? "REPORT_ACCEPTED" : status === "REJECTED" ? "REPORT_REJECTED" : "REPORT_UNDER_REVIEW";
@@ -92,8 +95,53 @@ export async function acceptReportAction(reportId: string): Promise<{ error?: st
   return setStatus(reportId, "ACCEPTED");
 }
 
-export async function rejectReportAction(reportId: string): Promise<{ error?: string }> {
-  return setStatus(reportId, "REJECTED");
+/** The actual "mark rejected + notify the reporter with the remark" logic — called directly for an ADMIN's own rejection, and by pending-changes.ts's approval handler once a founder approves an EDITOR-queued rejection. */
+export async function applyReportRejection(reportId: string, remark: string): Promise<{ error?: string }> {
+  return setStatus(reportId, "REJECTED", remark);
+}
+
+/**
+ * A rejection remark is required (Section 5) — the user always sees why.
+ * An ADMIN's rejection applies immediately, same as every other status
+ * action. An EDITOR with the reports.reject permission instead queues the
+ * rejection as a PendingChange for the founder to approve (Section 7's
+ * approval workflow, using this as the one wired reference integration) —
+ * nothing changes for the report or notifies the reporter until approved.
+ */
+export async function rejectReportAction(reportId: string, remark: string): Promise<{ error?: string; success?: string }> {
+  const trimmedRemark = remark?.trim();
+  if (!trimmedRemark) return { error: "A rejection reason is required." };
+
+  let session;
+  try {
+    session = await requireMutateSession();
+  } catch (error) {
+    return { error: friendlyPrismaError(error) };
+  }
+
+  if (isAdmin(session.role)) {
+    return applyReportRejection(reportId, trimmedRemark);
+  }
+
+  if (!(await hasPermission(session, "reports.reject"))) {
+    return { error: "You don't have permission to reject reports." };
+  }
+
+  try {
+    const report = await prisma.report.findUnique({ where: { id: reportId }, select: { entityName: true } });
+    if (!report) return { error: "Report not found — it may have already been deleted." };
+    await createPendingChange({
+      actorId: session.userId,
+      action: "report.reject",
+      entityType: "Report",
+      entityId: reportId,
+      after: { remark: trimmedRemark },
+    });
+  } catch (error) {
+    return { error: friendlyPrismaError(error) };
+  }
+  revalidatePath("/admin/reports");
+  return { success: "Sent to the founder for approval — the reporter will be notified once approved." };
 }
 
 export async function resolveReportAction(reportId: string): Promise<{ error?: string }> {

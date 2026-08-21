@@ -44,7 +44,7 @@ import { recordResearchEvent } from "@/lib/analytics/research-events";
 import { generateUniqueReferralCode } from "@/lib/referral";
 import ShareReferralCard from "@/app/components/ShareReferralCard";
 
-export const metadata: Metadata = { title: "My Dashboard — NoDalalTalks" };
+export const metadata: Metadata = { title: "My Dashboard - NoDalalTalks" };
 export const dynamic = "force-dynamic";
 
 const TABS = [
@@ -54,6 +54,10 @@ const TABS = [
   { key: "history", label: "Search History" },
   { key: "profile", label: "Profile" },
 ] as const;
+
+/** Two-row layout: research/wishlist/searches together, then history alongside Profile — which gets its own visually-stronger pill style below (Section 11) rather than blending into the plain tab row, to nudge profile completion without reading as an ad. */
+const PRIMARY_TAB_KEYS = ["research", "wishlist", "searches"] as const;
+const SECONDARY_TAB_KEYS = ["history"] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
 
@@ -151,18 +155,46 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
 
         <ShareReferralCard referralCode={user.referralCode as string} />
 
-        <div className="flex flex-wrap gap-1 overflow-x-auto border-b border-border pb-px">
-          {TABS.map((t) => (
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap gap-1 overflow-x-auto border-b border-border pb-px">
+            {TABS.filter((t) => (PRIMARY_TAB_KEYS as readonly string[]).includes(t.key)).map((t) => (
+              <Link
+                key={t.key}
+                href={tabHref(t.key)}
+                className={`shrink-0 rounded-t-sm border-b-2 px-3 py-2 text-xs font-mono uppercase tracking-wide transition-colors ${
+                  tab === t.key ? "border-accent text-accent" : "border-transparent text-muted hover:text-foreground"
+                }`}
+              >
+                {t.label}
+              </Link>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            {TABS.filter((t) => (SECONDARY_TAB_KEYS as readonly string[]).includes(t.key)).map((t) => (
+              <Link
+                key={t.key}
+                href={tabHref(t.key)}
+                className={`shrink-0 rounded-sm px-3 py-1.5 text-xs font-mono uppercase tracking-wide transition-colors ${
+                  tab === t.key ? "bg-accent/10 text-accent" : "text-muted hover:text-foreground"
+                }`}
+              >
+                {t.label}
+              </Link>
+            ))}
             <Link
-              key={t.key}
-              href={tabHref(t.key)}
-              className={`shrink-0 rounded-t-sm border-b-2 px-3 py-2 text-xs font-mono uppercase tracking-wide transition-colors ${
-                tab === t.key ? "border-accent text-accent" : "border-transparent text-muted hover:text-foreground"
+              href={tabHref("profile")}
+              className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-mono font-semibold uppercase tracking-wide transition-colors ${
+                tab === "profile" ? "bg-accent text-white" : "bg-accent/10 text-accent hover:bg-accent/20"
               }`}
             >
-              {t.label}
+              Profile
+              {user.profileCompletionPercent < 100 ? (
+                <span className={`rounded-full px-1.5 py-0.5 text-[9px] ${tab === "profile" ? "bg-white/20" : "bg-accent/15"}`}>
+                  {user.profileCompletionPercent}%
+                </span>
+              ) : null}
             </Link>
-          ))}
+          </div>
         </div>
 
         {tab === "research" ? (
@@ -170,7 +202,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="font-mono text-sm font-semibold text-foreground">Continue Research</h2>
-                <p className="text-xs text-muted">Everything you&apos;ve opened, newest first — pick up right where you left off.</p>
+                <p className="text-xs text-muted">Everything you&apos;ve opened, newest first. Pick up right where you left off.</p>
               </div>
               {recentViews.length > 0 ? (
                 <ClearAllButton action={clearRecentViewsAction} confirmText="Clear your entire Continue Research history?" label="Clear History" />
@@ -376,7 +408,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
         {tab === "profile" ? (
           <section className="flex flex-col gap-6">
             <p className="text-[11px] text-muted">
-              Research freely — no phone number required, no spam calls. Everything below is private, optional, and never shared with brokers or developers.
+              Research freely, with no phone number required and no spam calls. Everything below is private, optional, and never shared with brokers or developers.
             </p>
 
             <div className="rounded-sm border border-border bg-surface p-4">
@@ -409,8 +441,8 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
             <div>
               <h2 className="font-mono text-sm font-semibold text-foreground">Research Profile</h2>
               <p className="mt-1 text-xs text-muted">
-                Tell us what you&apos;re looking for and we&apos;ll make your property research more relevant. Answer what&apos;s useful to you — skip
-                the rest, come back anytime.
+                Tell us what you&apos;re looking for and we&apos;ll make your property research more relevant. Answer what&apos;s useful to you, skip
+                the rest, and come back anytime.
               </p>
             </div>
 
@@ -431,7 +463,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
 
             <div id="budget" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
               <h3 className="font-mono text-xs uppercase tracking-wide text-muted">Budget</h3>
-              <p className="mt-1 text-[11px] text-muted">Drag the range or type an amount — 20 seconds.</p>
+              <p className="mt-1 text-[11px] text-muted">Drag the range or type an amount. Takes about 20 seconds.</p>
               <div className="mt-3">
                 <BudgetPreferenceForm minRupees={preferences?.preferredBudgetMinRupees ?? null} maxRupees={preferences?.preferredBudgetMaxRupees ?? null} />
               </div>
@@ -439,7 +471,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
 
             <div id="property-type" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
               <h3 className="font-mono text-xs uppercase tracking-wide text-muted">Property Type &amp; Configuration</h3>
-              <p className="mt-1 text-[11px] text-muted">Tap what applies — 20 seconds.</p>
+              <p className="mt-1 text-[11px] text-muted">Tap what applies. Takes about 20 seconds.</p>
               <div className="mt-3">
                 <PropertyPreferencesForm
                   preferredCategories={preferences?.preferredCategories ?? []}
@@ -451,7 +483,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
 
             <div id="purpose" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
               <h3 className="font-mono text-xs uppercase tracking-wide text-muted">What are you looking for?</h3>
-              <p className="mt-1 text-[11px] text-muted">Select any that apply — you can be both.</p>
+              <p className="mt-1 text-[11px] text-muted">Select any that apply. You can be both.</p>
               <div className="mt-3">
                 <PurposeForm purposes={preferences?.purposes ?? []} />
               </div>
@@ -459,7 +491,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
 
             <div id="locations" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
               <h3 className="font-mono text-xs uppercase tracking-wide text-muted">Preferred Locations</h3>
-              <p className="mt-1 text-[11px] text-muted">Add a location or landmark — 30 seconds.</p>
+              <p className="mt-1 text-[11px] text-muted">Add a location or landmark. Takes about 30 seconds.</p>
               <div className="mt-3">
                 <LocationsPreferenceForm
                   preferredLocalityIds={preferences?.preferredLocalityIds ?? []}

@@ -3,26 +3,26 @@ import LegalPageShell from "@/app/components/LegalPageShell";
 import { formatDate } from "@/lib/format";
 
 export const metadata: Metadata = {
-  title: "Cookie Policy — NoDalalTalks",
-  description: "The essential cookies NoDalalTalks uses to keep you signed in — no third-party tracking or advertising cookies.",
+  title: "Cookie Policy - NoDalalTalks",
+  description: "The essential cookies NoDalalTalks uses to keep you signed in. No third-party tracking or advertising cookies.",
 };
 
 export default function CookiePolicyPage() {
   return (
     <LegalPageShell title="Cookie Policy" subtitle={`Last updated ${formatDate(new Date("2026-07-01"))}`}>
       <p>
-        NoDalalTalks uses a minimal set of cookies — no third-party tracking or advertising cookies are used anywhere
+        NoDalalTalks uses a minimal set of cookies. No third-party tracking or advertising cookies are used anywhere
         on the Service.
       </p>
 
       <h2>Essential cookies</h2>
       <ul>
         <li>
-          <strong>Session cookie</strong> — set when you sign in, keeps you authenticated. It&apos;s httpOnly (not
+          <strong>Session cookie</strong>: set when you sign in, keeps you authenticated. It&apos;s httpOnly (not
           readable by page scripts) and expires automatically.
         </li>
         <li>
-          <strong>OAuth state cookie</strong> — set briefly during &quot;Continue with Google&quot; sign-in to prevent
+          <strong>OAuth state cookie</strong>: set briefly during &quot;Continue with Google&quot; sign-in to prevent
           cross-site request forgery, and cleared immediately after the sign-in flow completes.
         </li>
       </ul>

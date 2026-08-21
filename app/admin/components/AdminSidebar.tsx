@@ -28,15 +28,25 @@ const NAV_SECTIONS: { label: string; links: { label: string; href: string }[] }[
   },
   {
     label: "Analytics",
-    links: [{ label: "Analytics", href: "/admin/analytics" }],
+    links: [
+      { label: "Analytics", href: "/admin/analytics" },
+      { label: "Search Analytics", href: "/admin/analytics/search" },
+    ],
   },
   {
     label: "Reports",
     links: [{ label: "Report Inaccurate", href: "/admin/reports" }],
   },
   {
+    label: "Support",
+    links: [{ label: "Contact Enquiries", href: "/admin/contact-enquiries" }],
+  },
+  {
     label: "Email",
-    links: [{ label: "Campaigns", href: "/admin/email" }],
+    links: [
+      { label: "Campaigns", href: "/admin/email" },
+      { label: "Saved-Search Alerts", href: "/admin/analytics/saved-search-alerts" },
+    ],
   },
   {
     label: "Data Sync",
@@ -52,6 +62,7 @@ const NAV_SECTIONS: { label: string; links: { label: string; href: string }[] }[
       { label: "System Health", href: "/admin/system-health" },
       { label: "Trash", href: "/admin/trash" },
       { label: "Users", href: "/admin/users" },
+      { label: "Approvals", href: "/admin/approvals" },
       { label: "Settings", href: "/admin/settings" },
     ],
   },

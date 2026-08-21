@@ -3,7 +3,7 @@ import Link from "next/link";
 import AuthCard from "@/app/components/auth/AuthCard";
 import SignupForm from "./SignupForm";
 
-export const metadata: Metadata = { title: "Create your account — NoDalalTalks" };
+export const metadata: Metadata = { title: "Create your account - NoDalalTalks" };
 export const dynamic = "force-dynamic";
 
 export default async function SignupPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
@@ -13,7 +13,7 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
     <AuthCard
       eyebrow="Get started"
       title="Create your account"
-      subtitle="Free — track projects, developers and areas across Mumbai."
+      subtitle="Free. Track projects, developers and areas across Mumbai."
       footer={
         <>
           Already have an account?{" "}

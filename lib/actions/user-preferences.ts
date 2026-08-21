@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getPublicSession } from "@/lib/public-auth/session";
 import { PROPERTY_CATEGORIES } from "@/lib/project-meta";
 import { recalculatePublicUserCompletion } from "@/lib/profile-completion";
+import { recordResearchEvent } from "@/lib/analytics/research-events";
 import { friendlyPrismaError } from "./errors";
 
 const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefined ? undefined : v);
@@ -84,6 +85,7 @@ export async function updatePreferencesAction(_prevState: PreferencesFormState, 
       .filter(Boolean);
   }
 
+  let newlyAddedLocalities: string[] = [];
   try {
     const existing = await prisma.userPreferences.findUnique({ where: { publicUserId: session.userId } });
     if (existing) {
@@ -91,8 +93,19 @@ export async function updatePreferencesAction(_prevState: PreferencesFormState, 
     } else {
       await prisma.userPreferences.create({ data: { publicUserId: session.userId, ...data } });
     }
+    if (Array.isArray(data.localityFreeText)) {
+      const before = new Set((existing?.localityFreeText ?? []).map((t) => t.toLowerCase()));
+      newlyAddedLocalities = (data.localityFreeText as string[]).filter((t) => !before.has(t.toLowerCase()));
+    }
   } catch (error) {
     return { error: friendlyPrismaError(error) };
+  }
+
+  // Founder-only demand signal (Section 13) — "many users are typing a locality
+  // we don't cover" — never surfaced to the user themself. Fired per newly-added
+  // term only, not on every save, so re-saving unrelated cards doesn't inflate it.
+  for (const locality of newlyAddedLocalities) {
+    await recordResearchEvent("LOCALITY_INTEREST_ADDED", { metadata: { locality } });
   }
 
   const completionPercent = await recalculatePublicUserCompletion(session.userId);

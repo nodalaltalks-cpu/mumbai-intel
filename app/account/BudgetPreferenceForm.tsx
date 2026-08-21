@@ -31,7 +31,7 @@ export default function BudgetPreferenceForm({ minRupees, maxRupees }: { minRupe
         } for you.`
       : saved
         ? "Saved."
-        : "Type or drag — saved automatically.";
+        : "Type or drag, saved automatically.";
 
   return (
     <div className="flex flex-col gap-2">

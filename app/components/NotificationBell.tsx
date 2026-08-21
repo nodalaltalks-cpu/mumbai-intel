@@ -2,12 +2,16 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { markPublicNotificationReadAction } from "@/lib/actions/notifications";
+import { markPublicNotificationReadAction, fetchPublicNotificationsAction } from "@/lib/actions/notifications";
 import { formatDateTime } from "@/lib/format";
 import type { PublicNotificationItem } from "@/lib/queries/dashboard";
 
-/** Public-facing equivalent of AdminTopbar's "Reports" bell — same Notification table, same read/unread pattern, just scoped to the signed-in visitor's own report-lifecycle notifications (received / under review / resolved). */
-export default function NotificationBell({ notifications }: { notifications: PublicNotificationItem[] }) {
+/** How often to poll for new notifications while the visitor is on-page — frequent enough that a report-rejection remark or a saved-search alert feels prompt, far short of anything resembling live tracking. */
+const POLL_INTERVAL_MS = 30_000;
+
+/** Public-facing equivalent of AdminTopbar's "Reports" bell — same Notification table, same read/unread pattern, just scoped to the signed-in visitor's own report-lifecycle notifications (received / under review / resolved). Polls periodically (Section 8) so a new notification shows up without the visitor needing to refresh the page. */
+export default function NotificationBell({ notifications: initialNotifications }: { notifications: PublicNotificationItem[] }) {
+  const [notifications, setNotifications] = useState(initialNotifications);
   const [open, setOpen] = useState(false);
   const [, startMarkRead] = useTransition();
   const boxRef = useRef<HTMLDivElement>(null);
@@ -20,9 +24,23 @@ export default function NotificationBell({ notifications }: { notifications: Pub
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const interval = setInterval(() => {
+      fetchPublicNotificationsAction().then((fresh) => {
+        if (!cancelled) setNotifications(fresh);
+      });
+    }, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
   const unreadCount = notifications.filter((n) => !n.readAt).length;
 
   function readNotification(id: string) {
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, readAt: new Date() } : n)));
     startMarkRead(() => {
       void markPublicNotificationReadAction(id);
     });

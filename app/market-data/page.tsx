@@ -16,9 +16,10 @@ import MarketSnapshot from "@/app/components/MarketSnapshot";
 import MarketDataFilters from "@/app/components/MarketDataFilters";
 import { SkeletonStatRow } from "@/app/components/ui/Skeleton";
 import NewsletterForm from "@/app/components/NewsletterForm";
+import BackLink from "@/app/components/ui/BackLink";
 
 export const metadata: Metadata = {
-  title: "Market Data — NoDalalTalks",
+  title: "Market Data - NoDalalTalks",
   description: "Citywide price trends, locality market snapshots and builder activity across Mumbai's residential and commercial real estate.",
 };
 export const dynamic = "force-dynamic";
@@ -64,8 +65,9 @@ export default async function MarketDataPage({ searchParams }: { searchParams: P
 
       <main id="main-content" className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-10 px-4 py-8 sm:px-6">
         <div>
-          <h1 className="font-mono text-2xl font-bold text-foreground">Market Data</h1>
-          <p className="mt-1 text-sm text-muted">City-wide price trends, locality benchmarks and builder trust scores — every figure traceable to its source.</p>
+          <BackLink fallbackHref="/" />
+          <h1 className="mt-2 font-mono text-2xl font-bold text-foreground">Market Data</h1>
+          <p className="mt-1 text-sm text-muted">City-wide price trends, locality benchmarks and builder trust scores, every figure traceable to its source.</p>
         </div>
 
         <section className="-mx-4 -mt-4 sm:-mx-6">
@@ -181,7 +183,7 @@ export default async function MarketDataPage({ searchParams }: { searchParams: P
 
         <section className="rounded-sm border border-border bg-surface p-5">
           <h2 className="font-mono text-sm font-semibold text-foreground">Stay Ahead of the Market</h2>
-          <p className="mt-1 max-w-md text-xs text-muted">Weekly research on new launches, market trends and transaction insights — straight to your inbox.</p>
+          <p className="mt-1 max-w-md text-xs text-muted">Weekly research on new launches, market trends and transaction insights, straight to your inbox.</p>
           <div className="max-w-sm">
             <NewsletterForm source="market_data" />
           </div>

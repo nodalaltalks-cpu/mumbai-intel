@@ -18,7 +18,7 @@ export default function WhatsAppShareButton({
 }) {
   function handleShare() {
     const url = `${window.location.origin}/projects/${projectSlug}`;
-    const message = `Check out ${projectName} on NoDalalTalks — independent real estate intelligence, pricing, project details and market data. ${url}`;
+    const message = `Check out ${projectName} on NoDalalTalks: independent real estate intelligence, pricing, project details and market data. ${url}`;
     const shareId = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Date.now());
 
     trackResearchEvent("WHATSAPP_SHARE_CLICKED", "Project", projectId, {

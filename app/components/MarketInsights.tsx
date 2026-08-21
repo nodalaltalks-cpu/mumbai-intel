@@ -14,7 +14,7 @@ export default async function MarketInsights() {
       <SectionHeading title="Real Estate Insights" subtitle="Most active localities by recorded transaction volume" viewAllHref="/insights" />
 
       {insights.length === 0 ? (
-        <EmptyState title="No insights yet" message="Insights are computed from recorded transactions — they will appear as data is added." />
+        <EmptyState title="No insights yet" message="Insights are computed from recorded transactions. They will appear as data is added." />
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {insights.map((insight, i) => (

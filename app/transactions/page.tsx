@@ -22,7 +22,7 @@ import { recordResearchEvent } from "@/lib/analytics/research-events";
 import { SkeletonBlock, SkeletonStatRow } from "@/app/components/ui/Skeleton";
 
 export const metadata: Metadata = {
-  title: "Transactions — NoDalalTalks",
+  title: "Transactions - NoDalalTalks",
   description: "Registered Mumbai real estate sale, resale and lease transactions with price and configuration filters.",
   alternates: { canonical: "/transactions" },
 };

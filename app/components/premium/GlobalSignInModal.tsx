@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import GoogleButton from "@/app/components/auth/GoogleButton";
 import { trackResearchEvent } from "@/lib/track-research";
 import { useGateRequest } from "@/lib/premium/gate-context";
-import { PREMIUM_BENEFITS, PREMIUM_CARD_SUBTITLE, PREMIUM_CARD_TITLE } from "@/lib/premium/types";
+import { PREMIUM_BENEFITS, PREMIUM_CARD_SUBTITLE, PREMIUM_CARD_TITLE, PREMIUM_FEATURE_SUBTITLE } from "@/lib/premium/types";
 import { IconClose } from "@/app/components/ui/icons";
 import { useModalBackClose } from "@/lib/use-modal-back-close";
 
@@ -59,7 +59,7 @@ export default function GlobalSignInModal() {
         <div className="flex shrink-0 items-start justify-between gap-4 p-6 pb-0 sm:p-7 sm:pb-0">
           <div>
             <h2 className="text-lg font-semibold text-foreground">{PREMIUM_CARD_TITLE}</h2>
-            <p className="mt-1.5 text-sm leading-relaxed text-muted">{PREMIUM_CARD_SUBTITLE}</p>
+            <p className="mt-1.5 text-sm leading-relaxed text-muted">{PREMIUM_FEATURE_SUBTITLE[feature] ?? PREMIUM_CARD_SUBTITLE}</p>
           </div>
           <button
             type="button"

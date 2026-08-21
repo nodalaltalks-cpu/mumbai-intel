@@ -48,8 +48,8 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const project = await getPublicProjectBySlug(slug);
-  if (!project) return { title: "Project not found — NoDalalTalks" };
-  const title = project.metaTitle || `${project.name} — NoDalalTalks`;
+  if (!project) return { title: "Project not found - NoDalalTalks" };
+  const title = project.metaTitle || `${project.name} - NoDalalTalks`;
   const description = project.metaDescription || project.tagline || undefined;
   const image = (project.images.find((i) => i.kind === "hero") ?? project.images[0])?.url;
   return {
@@ -356,7 +356,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 <p className="text-[10px] uppercase tracking-wide text-muted">Payment Plan</p>
                 {project.paymentPlanDescription ? (
                   <InfoTooltip
-                    label={`${project.paymentPlanType ? PAYMENT_PLAN_TYPE_LABEL[project.paymentPlanType] : "Payment plan"} — payment plan details`}
+                    label={`${project.paymentPlanType ? PAYMENT_PLAN_TYPE_LABEL[project.paymentPlanType] : "Payment plan"}: payment plan details`}
                   >
                     {project.paymentPlanDescription}
                   </InfoTooltip>
@@ -620,7 +620,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             </>
           ) : (
             <div className="rounded-sm border border-dashed border-info/40 bg-info/5 p-4">
-              <p className="font-mono text-[11px] uppercase tracking-wide text-info">Investment Snapshot — Coming Soon</p>
+              <p className="font-mono text-[11px] uppercase tracking-wide text-info">Investment Snapshot: Coming Soon</p>
               <p className="mt-1 text-xs text-muted">
                 An investment summary for this project will appear here once one has been reviewed and published.
               </p>

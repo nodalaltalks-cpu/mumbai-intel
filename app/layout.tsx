@@ -25,28 +25,28 @@ const geistMono = Geist_Mono({
 
 const SITE_NAME = "NoDalalTalks";
 const SITE_DESCRIPTION =
-  "Research Mumbai real estate projects, transactions, and builder track records — no phone number required, every fact tagged by source.";
+  "Research Mumbai real estate projects, transactions, and builder track records, with no phone number required. Every fact is tagged by source.";
 const SITE_URL = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "http://localhost:3000";
 
 // A `title.template` would double up every page's title: the existing
 // convention (dozens of generateMetadata calls across the app, e.g.
-// `${project.name} — NoDalalTalks`) already writes the full title itself, so
+// `${project.name} - NoDalalTalks`) already writes the full title itself, so
 // this stays a plain default rather than a template that re-appends the suffix.
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: `${SITE_NAME} — Real Estate Intelligence`,
+  title: `${SITE_NAME} - Real Estate Intelligence`,
   description: SITE_DESCRIPTION,
   robots: { index: true, follow: true },
   openGraph: {
     type: "website",
     siteName: SITE_NAME,
-    title: `${SITE_NAME} — Real Estate Intelligence`,
+    title: `${SITE_NAME} - Real Estate Intelligence`,
     description: SITE_DESCRIPTION,
     locale: "en_IN",
   },
   twitter: {
     card: "summary_large_image",
-    title: `${SITE_NAME} — Real Estate Intelligence`,
+    title: `${SITE_NAME} - Real Estate Intelligence`,
     description: SITE_DESCRIPTION,
   },
 };

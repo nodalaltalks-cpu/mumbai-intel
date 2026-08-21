@@ -1009,14 +1009,55 @@ model User {
   name           String?
   passwordHash   String
   role           UserRole                  @default(EDITOR)
+  /// Fine-grained permission keys (e.g. "projects.edit", "reports.reject") layered
+  /// on top of `role` for an EDITOR/VIEWER — see lib/auth/permissions.ts for the
+  /// full key list and hasPermission()'s enforcement. ADMIN always bypasses this
+  /// (role check alone is sufficient), so the array is only ever consulted for
+  /// non-ADMIN accounts. Ignored entirely until a non-ADMIN user actually exists.
+  permissions    String[]                  @default([])
   isActive       Boolean                   @default(true)
   lastLoginAt    DateTime?
   auditLogs      AuditLog[]
   resetTokens    AdminPasswordResetToken[]
   notifications  Notification[]
   emailCampaigns EmailCampaign[]
+  pendingChanges PendingChange[]           @relation("PendingChangeActor")
+  reviewedChanges PendingChange[]          @relation("PendingChangeReviewer")
   createdAt      DateTime                  @default(now())
   updatedAt      DateTime                  @updatedAt
+}
+
+enum PendingChangeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// The employee-change approval queue (Section 7's "Employee makes change ->
+/// pending -> Founder reviews -> approves/rejects -> only then final"). Shape
+/// deliberately mirrors AuditLog (actor/action/entityType/entityId/before/after)
+/// since this IS an audit-trail row, just one that starts unapplied — on
+/// approval the queued change is applied AND a normal AuditLog row is written
+/// for the permanent record, so AuditLog never has to distinguish "did this
+/// actually happen" after the fact.
+model PendingChange {
+  id               String              @id @default(cuid())
+  actorId          String
+  actor            User                @relation("PendingChangeActor", fields: [actorId], references: [id])
+  action           String
+  entityType       String
+  entityId         String?
+  before           Json?
+  after            Json?
+  status           PendingChangeStatus @default(PENDING)
+  reviewedByUserId String?
+  reviewer         User?               @relation("PendingChangeReviewer", fields: [reviewedByUserId], references: [id])
+  reviewedAt       DateTime?
+  reviewNote       String?
+  createdAt        DateTime            @default(now())
+
+  @@index([status, createdAt])
+  @@index([actorId])
 }
 
 /// Every admin mutation is recorded — provenance discipline applies to the
@@ -1072,6 +1113,34 @@ enum ReportStatus {
   ACCEPTED
   REJECTED
   RESOLVED
+}
+
+enum ContactEnquiryStatus {
+  NEW
+  IN_PROGRESS
+  RESOLVED
+}
+
+/// A Contact Us submission -- previously fire-and-forget (an email to the
+/// founder's inbox, lib/email.ts's sendContactMessageEmail, nothing kept in
+/// the database). This is the persisted, admin-manageable record; the email
+/// notification stays as-is alongside it.
+model ContactEnquiry {
+  id             String               @id @default(cuid())
+  name           String
+  email          String
+  phone          String?
+  subject        String?
+  message        String
+  publicUserId   String?
+  publicUser     PublicUser?          @relation(fields: [publicUserId], references: [id], onDelete: SetNull)
+  sourcePage     String?
+  status         ContactEnquiryStatus @default(NEW)
+  adminNotes     String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([status, createdAt])
 }
 
 /// A visitor-submitted "this looks wrong" report — extends the existing
@@ -1217,6 +1286,7 @@ model PublicUser {
   researchEvents          ResearchEvent[]
   notifications           Notification[]
   emailCampaignRecipients EmailCampaignRecipient[]
+  contactEnquiries        ContactEnquiry[]
 
   @@index([provider])
   @@index([referredByUserId])
@@ -1622,6 +1692,10 @@ enum ResearchEventType {
   /// A visitor landed via someone's ?ref= link -- fired once per first touch
   /// (see the mi_ref_code cookie in app/page.tsx), before/without any signup.
   REFERRAL_LINK_CLICKED
+  /// A user typed a locality/landmark into their Research Profile that isn't
+  /// in the Locality catalog (LocationsPreferenceForm's free-text field) --
+  /// a founder-facing demand signal only (Section 13), never shown to users.
+  LOCALITY_INTEREST_ADDED
 }
 
 /// Site-wide "research intent" log — a deliberately generic single table

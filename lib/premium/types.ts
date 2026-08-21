@@ -27,6 +27,24 @@ export const PREMIUM_FEATURE_LABEL: Record<PremiumFeature, string> = {
 export const PREMIUM_CARD_TITLE = "Continue Your Research";
 export const PREMIUM_CARD_SUBTITLE = "Create your free account to unlock powerful real estate research tools.";
 
+/**
+ * What's actually locked, in plain language — shown instead of the generic
+ * subtitle whenever a specific feature triggered the gate (Section 3: "clearly
+ * explain what is locked"). "direct-signin"/"research-nudge" have no single
+ * locked feature behind them (nav sign-in button; a general guest nudge), so
+ * they keep the generic PREMIUM_CARD_SUBTITLE instead of getting an entry here.
+ */
+export const PREMIUM_FEATURE_SUBTITLE: Partial<Record<PremiumFeature, string>> = {
+  "transaction-history": "Sign in free to see full transaction history — every registered price, not just a preview.",
+  "builder-analytics": "Sign in free to see builder performance analytics — delivery track record, project history and trust scores.",
+  "market-analytics": "Sign in free to see full market intelligence — price trends, locality benchmarks and builder rankings.",
+  "locality-analytics": "Sign in free to see full locality intelligence — pricing, growth and rental yield data.",
+  brochure: "Sign in free to download the official project brochure.",
+  wishlist: "Sign in free to save this and revisit it anytime from your account.",
+  "save-search": "Sign in free to save this search and get notified about new matches.",
+  reports: "Sign in free to view the full market report.",
+};
+
 export const PREMIUM_BENEFITS: string[] = [
   "No Phone Number Required",
   "No Spam Calls Ever",

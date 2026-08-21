@@ -3,7 +3,7 @@ import LegalPageShell from "@/app/components/LegalPageShell";
 import { formatDate } from "@/lib/format";
 
 export const metadata: Metadata = {
-  title: "Terms of Service — NoDalalTalks",
+  title: "Terms of Service - NoDalalTalks",
   description: "The terms governing use of the NoDalalTalks real estate market intelligence platform.",
 };
 
@@ -35,7 +35,7 @@ export default function TermsPage() {
       <p>
         We tag every figure on the platform with a data source and confidence level so you can judge its reliability.
         Despite our verification efforts, data may be incomplete, delayed, or contain errors. The Service is provided
-        for informational purposes and should not be the sole basis for a financial, legal, or investment decision —
+        for informational purposes and should not be the sole basis for a financial, legal, or investment decision;
         see our{" "}
         <a href="/disclaimer" className="text-accent hover:underline">
           Disclaimer

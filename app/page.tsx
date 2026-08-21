@@ -31,7 +31,7 @@ const ORGANIZATION_SCHEMA = {
   "@context": "https://schema.org",
   "@type": "Organization",
   name: "NoDalalTalks",
-  description: "Real estate research intelligence for Mumbai — verified projects, developers, localities and registered transactions. No phone number required to research.",
+  description: "Real estate research intelligence for Mumbai: verified projects, developers, localities and registered transactions. No phone number required to research.",
   url: process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "http://localhost:3000",
 };
 

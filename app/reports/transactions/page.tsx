@@ -33,7 +33,7 @@ import { gated, maskPaise, maskPricePerSqft, maskProjectBrochure } from "@/lib/p
 import { recordResearchEvent } from "@/lib/analytics/research-events";
 
 export const metadata: Metadata = {
-  title: "Transaction Report — NoDalalTalks",
+  title: "Transaction Report - NoDalalTalks",
   description: "Aggregate registered-transaction activity, pricing distribution and configuration mix across Mumbai.",
 };
 export const dynamic = "force-dynamic";

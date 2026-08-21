@@ -38,7 +38,7 @@ export default function PurposeForm({ purposes }: { purposes: string[] }) {
           </label>
         ))}
       </div>
-      <p className="text-[10px] text-muted">{isPending ? "Saving…" : savedAt ? "Saved" : "Select any that apply — saved automatically."}</p>
+      <p className="text-[10px] text-muted">{isPending ? "Saving…" : savedAt ? "Saved" : "Select any that apply, saved automatically."}</p>
     </div>
   );
 }

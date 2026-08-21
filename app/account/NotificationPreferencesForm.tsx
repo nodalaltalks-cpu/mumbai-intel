@@ -17,7 +17,7 @@ export default function NotificationPreferencesForm({
   return (
     <form action={formAction} className="flex flex-col gap-4">
       <p className="text-xs text-muted">
-        These are stored for when saved-search alerts and email digests launch — no notification is sent by anything
+        These are stored for when saved-search alerts and email digests launch. No notification is sent by anything
         on the platform yet, so nothing will land in your inbox from toggling these today.
       </p>
       <div className="flex flex-col gap-2.5">

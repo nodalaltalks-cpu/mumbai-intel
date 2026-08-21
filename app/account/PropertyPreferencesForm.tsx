@@ -120,7 +120,7 @@ export default function PropertyPreferencesForm({
         </div>
       </div>
 
-      <p className="text-[10px] text-muted">{isPending ? "Saving…" : savedAt ? "Saved" : "Tap to select — saved automatically."}</p>
+      <p className="text-[10px] text-muted">{isPending ? "Saving…" : savedAt ? "Saved" : "Tap to select, saved automatically."}</p>
     </div>
   );
 }

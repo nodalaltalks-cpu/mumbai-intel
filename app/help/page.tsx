@@ -3,7 +3,7 @@ import Link from "next/link";
 import LegalPageShell from "@/app/components/LegalPageShell";
 
 export const metadata: Metadata = {
-  title: "Help Center — NoDalalTalks",
+  title: "Help Center - NoDalalTalks",
   description: "Guides for searching, filtering, reading data-source tags, and getting the most out of NoDalalTalks.",
 };
 
@@ -31,8 +31,8 @@ export default function HelpCenterPage() {
 
       <h2>Reading data-source tags</h2>
       <p>
-        Every figure on the platform is labeled with a small uppercase tag — GOVT VERIFIED, BUILDER DATA, ANALYST
-        VERIFIED, ESTIMATED, or COMMUNITY — plus a confidence level. Hover or check nearby text for context on how a
+        Every figure on the platform is labeled with a small uppercase tag: GOVT VERIFIED, BUILDER DATA, ANALYST
+        VERIFIED, ESTIMATED, or COMMUNITY, plus a confidence level. Hover or check nearby text for context on how a
         number was derived before relying on it for a decision.
       </p>
 
