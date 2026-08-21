@@ -2,7 +2,8 @@
 
 import { useActionState } from "react";
 import { usePathname } from "next/navigation";
-import { submitContactMessageAction, CONTACT_SUBJECTS, type ContactFormState } from "@/lib/actions/contact";
+import { submitContactMessageAction, type ContactFormState } from "@/lib/actions/contact";
+import { CONTACT_SUBJECTS } from "@/lib/contact-constants";
 import AuthField from "@/app/components/auth/AuthField";
 import AuthButton from "@/app/components/auth/AuthButton";
 import { AuthError, AuthSuccess } from "@/app/components/auth/AuthMessage";

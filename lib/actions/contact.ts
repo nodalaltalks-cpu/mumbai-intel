@@ -6,9 +6,8 @@ import { getClientIp } from "@/lib/request-ip";
 import { sendContactMessageEmail } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
 import { getPublicSession } from "@/lib/public-auth/session";
+import { CONTACT_SUBJECTS } from "@/lib/contact-constants";
 import { friendlyPrismaError } from "./errors";
-
-export const CONTACT_SUBJECTS = ["General Question", "Data Correction", "Partnership", "Report a Bug", "Other"] as const;
 
 const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefined ? undefined : v);
 
