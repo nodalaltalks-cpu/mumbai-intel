@@ -8,18 +8,30 @@ import { AuthError, AuthSuccess } from "@/app/components/auth/AuthMessage";
 
 const initialState: ProfileFormState = {};
 
-export default function ProfileForm({ name, phone }: { name: string | null; phone: string | null }) {
+export default function ProfileForm({
+  name,
+  phone,
+  city,
+  currentLocality,
+}: {
+  name: string | null;
+  phone: string | null;
+  city: string | null;
+  currentLocality: string | null;
+}) {
   const [state, formAction] = useActionState(updatePublicProfileAction, initialState);
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <AuthField label="Name" name="name" defaultValue={name ?? ""} placeholder="Your name" />
-        <AuthField label="Phone" name="phone" type="tel" defaultValue={phone ?? ""} placeholder="+91 98765 43210" />
+        <AuthField label="Phone (optional)" name="phone" type="tel" defaultValue={phone ?? ""} placeholder="+91 98765 43210" />
+        <AuthField label="City (optional)" name="city" defaultValue={city ?? ""} placeholder="Mumbai" />
+        <AuthField label="Current locality (optional)" name="currentLocality" defaultValue={currentLocality ?? ""} placeholder="Where you live now" />
       </div>
       <AuthError message={state.error} />
       <AuthSuccess message={state.success} />
-      <AuthButton pendingText="Saving...">Save profile</AuthButton>
+      <AuthButton pendingText="Saving...">Save</AuthButton>
     </form>
   );
 }

@@ -13,6 +13,8 @@ const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefi
 const profileSchema = z.object({
   name: z.preprocess(emptyToUndefined, z.string().trim().min(1).optional()),
   phone: z.preprocess(emptyToUndefined, z.string().trim().min(6, "Enter a valid phone number").optional()),
+  city: z.preprocess(emptyToUndefined, z.string().trim().min(1).optional()),
+  currentLocality: z.preprocess(emptyToUndefined, z.string().trim().min(1).optional()),
 });
 
 export interface ProfileFormState {
@@ -34,6 +36,8 @@ export async function updatePublicProfileAction(_prevState: ProfileFormState, fo
   const parsed = profileSchema.safeParse({
     name: formData.get("name"),
     phone: formData.get("phone"),
+    city: formData.get("city"),
+    currentLocality: formData.get("currentLocality"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 
@@ -43,6 +47,8 @@ export async function updatePublicProfileAction(_prevState: ProfileFormState, fo
       data: {
         name: parsed.data.name ?? null,
         phone: parsed.data.phone ?? null,
+        city: parsed.data.city ?? null,
+        currentLocality: parsed.data.currentLocality ?? null,
       },
     });
   } catch (error) {

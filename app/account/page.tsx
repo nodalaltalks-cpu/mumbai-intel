@@ -31,11 +31,15 @@ import EmptyState from "@/app/components/ui/EmptyState";
 import Button from "@/app/components/ui/Button";
 import RemoveItemButton from "@/app/components/RemoveItemButton";
 import ClearAllButton from "@/app/components/ClearAllButton";
-import PreferencesForm from "./PreferencesForm";
 import NotificationPreferencesForm from "./NotificationPreferencesForm";
 import ProfileForm from "./ProfileForm";
+import PropertyPreferencesForm from "./PropertyPreferencesForm";
+import BudgetPreferenceForm from "./BudgetPreferenceForm";
+import LocationsPreferenceForm from "./LocationsPreferenceForm";
+import PurposeForm from "./PurposeForm";
 import PhoneVerificationCard from "./PhoneVerificationCard";
 import ProfileCompletionBar from "@/app/components/ui/ProfileCompletionBar";
+import { getCompletionSections } from "@/lib/profile-completion";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
 import { generateUniqueReferralCode } from "@/lib/referral";
 import ShareReferralCard from "@/app/components/ShareReferralCard";
@@ -90,6 +94,21 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
   if (tab === "profile") {
     await recordResearchEvent("PROFILE_VIEWED", { entityType: "PublicUser", entityId: user.id });
   }
+
+  const completionSections =
+    tab === "profile"
+      ? getCompletionSections({
+          name: user.name,
+          phone: user.phone,
+          emailVerified: user.emailVerifiedAt !== null,
+          preferredBudgetMinRupees: preferences?.preferredBudgetMinRupees ?? null,
+          preferredBudgetMaxRupees: preferences?.preferredBudgetMaxRupees ?? null,
+          preferredLocalityIds: preferences?.preferredLocalityIds ?? [],
+          localityFreeText: preferences?.localityFreeText ?? [],
+          preferredCategory: preferences?.preferredCategory ?? null,
+          purposes: preferences?.purposes ?? [],
+        })
+      : [];
 
   function tabHref(key: TabKey) {
     return `/account?tab=${key}`;
@@ -341,12 +360,16 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
 
         {tab === "profile" ? (
           <section className="flex flex-col gap-6">
+            <p className="text-[11px] text-muted">
+              Research freely — no phone number required, no spam calls. Everything below is private, optional, and never shared with brokers or developers.
+            </p>
+
             <div className="rounded-sm border border-border bg-surface p-4">
-              <ProfileCompletionBar percent={user.profileCompletionPercent} />
+              <ProfileCompletionBar percent={user.profileCompletionPercent} sections={completionSections} />
             </div>
 
             <div className="rounded-sm border border-border bg-surface p-4">
-              <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Account Details</h2>
+              <h2 className="font-mono text-xs uppercase tracking-wide text-muted">About You</h2>
               <div className="mt-3 grid grid-cols-2 gap-3">
                 <Fact label="Email" value={user.email} />
                 <Fact
@@ -363,15 +386,45 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                 <Fact label="Last sign-in" value={user.lastLoginAt ? formatDate(user.lastLoginAt) : "--"} />
               </div>
               <div className="mt-4 border-t border-border pt-4">
-                <ProfileForm name={user.name} phone={user.phone} />
+                <ProfileForm name={user.name} phone={user.phone} city={user.city} currentLocality={user.currentLocality} />
                 <PhoneVerificationCard verified={user.phoneVerifiedAt !== null} />
               </div>
             </div>
 
             <div className="rounded-sm border border-border bg-surface p-4">
-              <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Preferences</h2>
+              <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Property Preferences</h2>
+              <p className="mt-1 text-[11px] text-muted">Optional — helps us surface more relevant projects. Nothing here is required to keep researching.</p>
               <div className="mt-3">
-                <PreferencesForm preferences={preferences} localities={localities} />
+                <PropertyPreferencesForm
+                  preferredCategory={preferences?.preferredCategory ?? null}
+                  preferredConfigurations={preferences?.preferredConfigurations ?? []}
+                  preferredReadiness={preferences?.preferredReadiness ?? []}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-sm border border-border bg-surface p-4">
+              <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Budget</h2>
+              <div className="mt-3">
+                <BudgetPreferenceForm minRupees={preferences?.preferredBudgetMinRupees ?? null} maxRupees={preferences?.preferredBudgetMaxRupees ?? null} />
+              </div>
+            </div>
+
+            <div className="rounded-sm border border-border bg-surface p-4">
+              <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Locations</h2>
+              <div className="mt-3">
+                <LocationsPreferenceForm
+                  preferredLocalityIds={preferences?.preferredLocalityIds ?? []}
+                  localityFreeText={preferences?.localityFreeText ?? []}
+                  localities={localities}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-sm border border-border bg-surface p-4">
+              <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Purpose</h2>
+              <div className="mt-3">
+                <PurposeForm purposes={preferences?.purposes ?? []} />
               </div>
             </div>
 

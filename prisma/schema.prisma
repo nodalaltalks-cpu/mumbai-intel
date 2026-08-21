@@ -1166,6 +1166,10 @@ model PublicUser {
   name                     String?
   email                    String       @unique
   phone                    String?      @unique
+  /// Where the user themself is based -- distinct from any Project's city,
+  /// and from preferences (what they're researching). Free text, optional.
+  city                     String?
+  currentLocality          String?
   /// Null for OAuth-only accounts (e.g. Google sign-up with no password set).
   passwordHash             String?
   provider                 AuthProvider @default(CREDENTIALS)
@@ -1426,8 +1430,21 @@ model UserPreferences {
   publicUser               PublicUser        @relation(fields: [publicUserId], references: [id], onDelete: Cascade)
   preferredBudgetMinRupees Int?
   preferredBudgetMaxRupees Int?
+  /// Structured picks from the existing Locality catalog (dropdown/checkbox selection).
   preferredLocalityIds     String[]          @default([])
   preferredCategory        PropertyCategory?
+  /// BHK bucket values ("1"|"2"|"3"|"4"), same value shape as
+  /// lib/project-meta.ts's CONFIGURATION_FILTER_OPTIONS -- multi-select, not
+  /// a single value, since a user can be open to more than one size.
+  preferredConfigurations  String[]          @default([])
+  /// "READY_TO_MOVE" | "UNDER_CONSTRUCTION" | "NEW_LAUNCH" -- multi-select.
+  preferredReadiness       String[]          @default([])
+  /// "SELF_USE" | "INVESTMENT" -- multi-select, a user can be both.
+  purposes                 String[]          @default([])
+  /// Free-text location interest ("Near Kurla station", "BKC") -- deliberately
+  /// separate from preferredLocalityIds (the structured catalog picks) so a
+  /// landmark/area with no Locality record yet is never forced into one.
+  localityFreeText         String[]          @default([])
   createdAt                DateTime          @default(now())
   updatedAt                DateTime          @updatedAt
 }

@@ -18,7 +18,9 @@ export interface ProfileCompletionInput {
   preferredBudgetMinRupees?: number | null;
   preferredBudgetMaxRupees?: number | null;
   preferredLocalityIds: string[];
+  localityFreeText: string[];
   preferredCategory?: string | null;
+  purposes: string[];
 }
 
 interface CompletionSection {
@@ -32,13 +34,25 @@ export const PROFILE_COMPLETION_SECTIONS: CompletionSection[] = [
   { key: "phone", label: "Phone number", isComplete: (i) => Boolean(i.phone) },
   { key: "emailVerified", label: "Verified email", isComplete: (i) => i.emailVerified },
   { key: "budget", label: "Budget range", isComplete: (i) => Boolean(i.preferredBudgetMinRupees) || Boolean(i.preferredBudgetMaxRupees) },
-  { key: "localities", label: "Preferred localities", isComplete: (i) => i.preferredLocalityIds.length > 0 },
+  { key: "localities", label: "Preferred locations", isComplete: (i) => i.preferredLocalityIds.length > 0 || i.localityFreeText.length > 0 },
   { key: "category", label: "Property type", isComplete: (i) => Boolean(i.preferredCategory) },
+  { key: "purpose", label: "Purpose", isComplete: (i) => i.purposes.length > 0 },
 ];
 
 export function computeProfileCompletionPercent(input: ProfileCompletionInput): number {
   const complete = PROFILE_COMPLETION_SECTIONS.filter((s) => s.isComplete(input)).length;
   return Math.round((complete / PROFILE_COMPLETION_SECTIONS.length) * 100);
+}
+
+export interface CompletionSectionStatus {
+  key: string;
+  label: string;
+  complete: boolean;
+}
+
+/** The per-section checklist ("✓ Name / ○ Budget / ...") behind the completion %, for the progressive-profile checklist UI. */
+export function getCompletionSections(input: ProfileCompletionInput): CompletionSectionStatus[] {
+  return PROFILE_COMPLETION_SECTIONS.map((s) => ({ key: s.key, label: s.label, complete: s.isComplete(input) }));
 }
 
 /**
@@ -59,7 +73,9 @@ export async function recalculatePublicUserCompletion(publicUserId: string): Pro
           preferredBudgetMinRupees: true,
           preferredBudgetMaxRupees: true,
           preferredLocalityIds: true,
+          localityFreeText: true,
           preferredCategory: true,
+          purposes: true,
         },
       },
     },
@@ -73,7 +89,9 @@ export async function recalculatePublicUserCompletion(publicUserId: string): Pro
     preferredBudgetMinRupees: user.preferences?.preferredBudgetMinRupees ?? null,
     preferredBudgetMaxRupees: user.preferences?.preferredBudgetMaxRupees ?? null,
     preferredLocalityIds: user.preferences?.preferredLocalityIds ?? [],
+    localityFreeText: user.preferences?.localityFreeText ?? [],
     preferredCategory: user.preferences?.preferredCategory ?? null,
+    purposes: user.preferences?.purposes ?? [],
   });
 
   await prisma.publicUser.update({ where: { id: publicUserId }, data: { profileCompletionPercent: percent } });

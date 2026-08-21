@@ -48,6 +48,9 @@ export default async function AdminAnalyticsPage({ searchParams }: { searchParam
           <Link href="/admin/analytics/registered-users" className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
             Registered Users →
           </Link>
+          <Link href="/admin/analytics/user-demand" className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
+            User Demand →
+          </Link>
         </div>
       </div>
 

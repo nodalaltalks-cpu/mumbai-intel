@@ -6,8 +6,13 @@ import { prisma } from "@/lib/prisma";
 import { getPublicSession } from "@/lib/public-auth/session";
 import { PROPERTY_CATEGORIES } from "@/lib/project-meta";
 import { recalculatePublicUserCompletion } from "@/lib/profile-completion";
+import { friendlyPrismaError } from "./errors";
 
 const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefined ? undefined : v);
+
+const CONFIGURATIONS = ["1", "2", "3", "4"] as const;
+const READINESS = ["READY_TO_MOVE", "UNDER_CONSTRUCTION", "NEW_LAUNCH"] as const;
+const PURPOSES = ["SELF_USE", "INVESTMENT"] as const;
 
 const preferencesSchema = z.object({
   preferredBudgetMinRupees: z.preprocess(emptyToUndefined, z.coerce.number().min(0).optional()),
@@ -18,13 +23,19 @@ const preferencesSchema = z.object({
 export interface PreferencesFormState {
   error?: string;
   success?: string;
+  completionPercent?: number;
 }
 
 /**
- * Saves budget/category/locality preferences — collected now for future
- * personalization (a personalized home feed, AI recommendations). Nothing
- * in this codebase reads these values to change what a user sees yet; this
- * is real, user-editable data, not a placeholder.
+ * Saves research/property preferences — collected for future personalization
+ * (a personalized home feed, tailored recommendations) and, today, for the
+ * founder's User Demand dashboard. This single action backs several
+ * independent progressive-profile cards (Property Preferences, Budget,
+ * Locations, Purpose) on /account, each submitting only the fields it owns —
+ * `formData.has(...)` gates every field so a card's own submission never
+ * blanks out preferences saved by a *different* card. Same find-then-
+ * create-or-update pattern as everywhere else in this codebase (the Neon
+ * HTTP adapter has no upsert()).
  */
 export async function updatePreferencesAction(_prevState: PreferencesFormState, formData: FormData): Promise<PreferencesFormState> {
   const session = await getPublicSession();
@@ -37,26 +48,54 @@ export async function updatePreferencesAction(_prevState: PreferencesFormState, 
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 
-  const preferredLocalityIds = formData.getAll("preferredLocalityIds").map(String).filter(Boolean);
+  const data: Record<string, unknown> = {};
 
-  const data = {
-    preferredBudgetMinRupees: parsed.data.preferredBudgetMinRupees ?? null,
-    preferredBudgetMaxRupees: parsed.data.preferredBudgetMaxRupees ?? null,
-    preferredCategory: parsed.data.preferredCategory ?? null,
-    preferredLocalityIds,
-  };
-
-  const existing = await prisma.userPreferences.findUnique({ where: { publicUserId: session.userId } });
-  if (existing) {
-    await prisma.userPreferences.update({ where: { id: existing.id }, data });
-  } else {
-    await prisma.userPreferences.create({ data: { publicUserId: session.userId, ...data } });
+  if (formData.has("preferredBudgetMinRupees")) data.preferredBudgetMinRupees = parsed.data.preferredBudgetMinRupees ?? null;
+  if (formData.has("preferredBudgetMaxRupees")) data.preferredBudgetMaxRupees = parsed.data.preferredBudgetMaxRupees ?? null;
+  if (formData.has("preferredCategory")) data.preferredCategory = parsed.data.preferredCategory ?? null;
+  if (formData.has("preferredLocalityIds") || formData.has("localityIdsSubmitted")) {
+    data.preferredLocalityIds = formData.getAll("preferredLocalityIds").map(String).filter(Boolean);
+  }
+  if (formData.has("preferredConfigurations") || formData.has("configurationsSubmitted")) {
+    data.preferredConfigurations = formData
+      .getAll("preferredConfigurations")
+      .map(String)
+      .filter((v): v is (typeof CONFIGURATIONS)[number] => (CONFIGURATIONS as readonly string[]).includes(v));
+  }
+  if (formData.has("preferredReadiness") || formData.has("readinessSubmitted")) {
+    data.preferredReadiness = formData
+      .getAll("preferredReadiness")
+      .map(String)
+      .filter((v): v is (typeof READINESS)[number] => (READINESS as readonly string[]).includes(v));
+  }
+  if (formData.has("purposes") || formData.has("purposesSubmitted")) {
+    data.purposes = formData
+      .getAll("purposes")
+      .map(String)
+      .filter((v): v is (typeof PURPOSES)[number] => (PURPOSES as readonly string[]).includes(v));
+  }
+  if (formData.has("localityFreeText") || formData.has("localityFreeTextSubmitted")) {
+    data.localityFreeText = formData
+      .getAll("localityFreeText")
+      .map((v) => String(v).trim())
+      .filter(Boolean);
   }
 
-  await recalculatePublicUserCompletion(session.userId);
+  try {
+    const existing = await prisma.userPreferences.findUnique({ where: { publicUserId: session.userId } });
+    if (existing) {
+      await prisma.userPreferences.update({ where: { id: existing.id }, data });
+    } else {
+      await prisma.userPreferences.create({ data: { publicUserId: session.userId, ...data } });
+    }
+  } catch (error) {
+    return { error: friendlyPrismaError(error) };
+  }
+
+  const completionPercent = await recalculatePublicUserCompletion(session.userId);
 
   revalidatePath("/account");
-  return { success: "Preferences saved." };
+  return { success: "Saved.", completionPercent };
 }
 
 export interface NotificationPreferencesFormState {
@@ -83,11 +122,15 @@ export async function updateNotificationPreferencesAction(
     productUpdates: formData.get("productUpdates") === "on",
   };
 
-  const existing = await prisma.notificationPreferences.findUnique({ where: { publicUserId: session.userId } });
-  if (existing) {
-    await prisma.notificationPreferences.update({ where: { id: existing.id }, data });
-  } else {
-    await prisma.notificationPreferences.create({ data: { publicUserId: session.userId, ...data } });
+  try {
+    const existing = await prisma.notificationPreferences.findUnique({ where: { publicUserId: session.userId } });
+    if (existing) {
+      await prisma.notificationPreferences.update({ where: { id: existing.id }, data });
+    } else {
+      await prisma.notificationPreferences.create({ data: { publicUserId: session.userId, ...data } });
+    }
+  } catch (error) {
+    return { error: friendlyPrismaError(error) };
   }
 
   revalidatePath("/account");
