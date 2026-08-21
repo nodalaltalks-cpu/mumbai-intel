@@ -1213,7 +1213,7 @@ model PublicUser {
   searchHistory           SearchHistory[]
   preferences             UserPreferences?
   notificationPreferences NotificationPreferences?
-  newsletterSubscription  NewsletterSubscriber?
+  newsletterSubscriptions NewsletterSubscriber[]
   researchEvents          ResearchEvent[]
   notifications           Notification[]
   emailCampaignRecipients EmailCampaignRecipient[]
@@ -1432,7 +1432,9 @@ model UserPreferences {
   preferredBudgetMaxRupees Int?
   /// Structured picks from the existing Locality catalog (dropdown/checkbox selection).
   preferredLocalityIds     String[]          @default([])
-  preferredCategory        PropertyCategory?
+  /// Multi-select, same reasoning as preferredConfigurations below — a user
+  /// researching can be open to more than one property type at once.
+  preferredCategories      String[]          @default([])
   /// BHK bucket values ("1"|"2"|"3"|"4"), same value shape as
   /// lib/project-meta.ts's CONFIGURATION_FILTER_OPTIONS -- multi-select, not
   /// a single value, since a user can be open to more than one size.
@@ -1476,12 +1478,16 @@ enum NewsletterStatus {
 /// also registered users" view, not a functional dependency.
 model NewsletterSubscriber {
   id             String           @id @default(cuid())
+  /// The uniqueness boundary — one row per distinct email address.
+  /// Deliberately NOT unique per publicUserId: a single account may hold
+  /// several subscriptions under different email addresses (e.g. a work and
+  /// a personal inbox), so publicUserId is a plain (nullable) foreign key.
   email          String           @unique
   status         NewsletterStatus @default(SUBSCRIBED)
-  publicUserId   String?          @unique
+  publicUserId   String?
   publicUser     PublicUser?      @relation(fields: [publicUserId], references: [id], onDelete: SetNull)
-  /// Which surface subscribed them — "footer" today; kept open for a future
-  /// dedicated placement without a schema change.
+  /// Which surface subscribed them — "footer" | "project_page" |
+  /// "market_data" | "dashboard" | "referral" | "other".
   source         String?
   subscribedAt   DateTime         @default(now())
   unsubscribedAt DateTime?
@@ -1490,6 +1496,7 @@ model NewsletterSubscriber {
 
   @@index([status])
   @@index([subscribedAt])
+  @@index([publicUserId])
 }
 
 enum EmailCampaignType {

@@ -68,7 +68,7 @@ export async function getUserDemandSummary(): Promise<UserDemandSummary> {
             preferredBudgetMaxRupees: true,
             preferredLocalityIds: true,
             localityFreeText: true,
-            preferredCategory: true,
+            preferredCategories: true,
             preferredConfigurations: true,
             preferredReadiness: true,
             purposes: true,
@@ -82,7 +82,7 @@ export async function getUserDemandSummary(): Promise<UserDemandSummary> {
           r.preferredBudgetMaxRupees !== null ||
           r.preferredLocalityIds.length > 0 ||
           r.localityFreeText.length > 0 ||
-          r.preferredCategory !== null ||
+          r.preferredCategories.length > 0 ||
           r.preferredConfigurations.length > 0 ||
           r.preferredReadiness.length > 0 ||
           r.purposes.length > 0
@@ -94,8 +94,11 @@ export async function getUserDemandSummary(): Promise<UserDemandSummary> {
       const structuredCounts = new Map<string, number>();
       for (const r of rows) for (const id of r.preferredLocalityIds) structuredCounts.set(id, (structuredCounts.get(id) ?? 0) + 1);
       const localityIds = Array.from(structuredCounts.keys());
+      // isArchived: false keeps a retired/test locality (e.g. the "Test Locality"
+      // seed record) out of this admin-facing report even if some old
+      // UserPreferences row still references its id.
       const localityNames = localityIds.length
-        ? await prisma.locality.findMany({ where: { id: { in: localityIds } }, select: { id: true, name: true } })
+        ? await prisma.locality.findMany({ where: { id: { in: localityIds }, isArchived: false, deletedAt: null }, select: { id: true, name: true } })
         : [];
       const nameById = new Map(localityNames.map((l) => [l.id, l.name]));
 
@@ -130,14 +133,11 @@ export async function getUserDemandSummary(): Promise<UserDemandSummary> {
         (c) => c.count > 0
       );
 
-      // Property type: single-select field, real Prisma groupBy is fine here.
-      const categoryGroups = await prisma.userPreferences.groupBy({
-        by: ["preferredCategory"],
-        where: { preferredCategory: { not: null } },
-        _count: { _all: true },
-      });
-      const byPropertyType = categoryGroups
-        .map((g) => ({ label: CATEGORY_LABEL[g.preferredCategory as PropertyCategory], count: g._count._all }))
+      // Property type: multi-select field, JS-aggregated like configuration/readiness below.
+      const categoryCounts = new Map<string, number>();
+      for (const r of rows) for (const c of r.preferredCategories) categoryCounts.set(c, (categoryCounts.get(c) ?? 0) + 1);
+      const byPropertyType = Array.from(categoryCounts.entries())
+        .map(([key, count]) => ({ label: CATEGORY_LABEL[key as PropertyCategory] ?? key, count }))
         .sort((a, b) => b.count - a.count);
 
       // Readiness: multi-select.

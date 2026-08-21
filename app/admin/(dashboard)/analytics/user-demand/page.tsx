@@ -19,6 +19,10 @@ export default async function UserDemandPage() {
             What researchers actually want, from real UserPreferences records only — no invented numbers —{" "}
             <Link href="/admin/analytics" className="text-accent hover:underline">
               Analytics
+            </Link>{" "}
+            ·{" "}
+            <Link href="/admin/analytics/profile-completion" className="text-accent hover:underline">
+              Profile Completion breakdown
             </Link>
           </p>
         </div>

@@ -17,7 +17,6 @@ const PURPOSES = ["SELF_USE", "INVESTMENT"] as const;
 const preferencesSchema = z.object({
   preferredBudgetMinRupees: z.preprocess(emptyToUndefined, z.coerce.number().min(0).optional()),
   preferredBudgetMaxRupees: z.preprocess(emptyToUndefined, z.coerce.number().min(0).optional()),
-  preferredCategory: z.preprocess(emptyToUndefined, z.enum(PROPERTY_CATEGORIES).optional()),
 });
 
 export interface PreferencesFormState {
@@ -44,7 +43,6 @@ export async function updatePreferencesAction(_prevState: PreferencesFormState, 
   const parsed = preferencesSchema.safeParse({
     preferredBudgetMinRupees: formData.get("preferredBudgetMinRupees"),
     preferredBudgetMaxRupees: formData.get("preferredBudgetMaxRupees"),
-    preferredCategory: formData.get("preferredCategory"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 
@@ -52,7 +50,12 @@ export async function updatePreferencesAction(_prevState: PreferencesFormState, 
 
   if (formData.has("preferredBudgetMinRupees")) data.preferredBudgetMinRupees = parsed.data.preferredBudgetMinRupees ?? null;
   if (formData.has("preferredBudgetMaxRupees")) data.preferredBudgetMaxRupees = parsed.data.preferredBudgetMaxRupees ?? null;
-  if (formData.has("preferredCategory")) data.preferredCategory = parsed.data.preferredCategory ?? null;
+  if (formData.has("preferredCategories") || formData.has("categoriesSubmitted")) {
+    data.preferredCategories = formData
+      .getAll("preferredCategories")
+      .map(String)
+      .filter((v): v is (typeof PROPERTY_CATEGORIES)[number] => (PROPERTY_CATEGORIES as readonly string[]).includes(v));
+  }
   if (formData.has("preferredLocalityIds") || formData.has("localityIdsSubmitted")) {
     data.preferredLocalityIds = formData.getAll("preferredLocalityIds").map(String).filter(Boolean);
   }

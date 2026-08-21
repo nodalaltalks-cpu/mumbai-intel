@@ -19,7 +19,7 @@ export interface ProfileCompletionInput {
   preferredBudgetMaxRupees?: number | null;
   preferredLocalityIds: string[];
   localityFreeText: string[];
-  preferredCategory?: string | null;
+  preferredCategories: string[];
   purposes: string[];
 }
 
@@ -35,7 +35,7 @@ export const PROFILE_COMPLETION_SECTIONS: CompletionSection[] = [
   { key: "emailVerified", label: "Verified email", isComplete: (i) => i.emailVerified },
   { key: "budget", label: "Budget range", isComplete: (i) => Boolean(i.preferredBudgetMinRupees) || Boolean(i.preferredBudgetMaxRupees) },
   { key: "localities", label: "Preferred locations", isComplete: (i) => i.preferredLocalityIds.length > 0 || i.localityFreeText.length > 0 },
-  { key: "category", label: "Property type", isComplete: (i) => Boolean(i.preferredCategory) },
+  { key: "category", label: "Property type", isComplete: (i) => i.preferredCategories.length > 0 },
   { key: "purpose", label: "Purpose", isComplete: (i) => i.purposes.length > 0 },
 ];
 
@@ -74,7 +74,7 @@ export async function recalculatePublicUserCompletion(publicUserId: string): Pro
           preferredBudgetMaxRupees: true,
           preferredLocalityIds: true,
           localityFreeText: true,
-          preferredCategory: true,
+          preferredCategories: true,
           purposes: true,
         },
       },
@@ -90,7 +90,7 @@ export async function recalculatePublicUserCompletion(publicUserId: string): Pro
     preferredBudgetMaxRupees: user.preferences?.preferredBudgetMaxRupees ?? null,
     preferredLocalityIds: user.preferences?.preferredLocalityIds ?? [],
     localityFreeText: user.preferences?.localityFreeText ?? [],
-    preferredCategory: user.preferences?.preferredCategory ?? null,
+    preferredCategories: user.preferences?.preferredCategories ?? [],
     purposes: user.preferences?.purposes ?? [],
   });
 

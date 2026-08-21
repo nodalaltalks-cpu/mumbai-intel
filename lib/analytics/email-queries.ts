@@ -24,7 +24,7 @@ export async function searchEmailRecipients(filters: EmailRecipientFilters, limi
     where.OR = [{ email: { contains: filters.q, mode: "insensitive" } }, { name: { contains: filters.q, mode: "insensitive" } }];
   }
   if (filters.segment === "newsletter") {
-    where.newsletterSubscription = { status: "SUBSCRIBED" };
+    where.newsletterSubscriptions = { some: { status: "SUBSCRIBED" } };
   } else if (filters.segment === "saved_projects") {
     where.savedProjects = { some: {} };
   }
@@ -36,10 +36,10 @@ export async function searchEmailRecipients(filters: EmailRecipientFilters, limi
     where,
     orderBy: { createdAt: "desc" },
     take: limit,
-    select: { id: true, name: true, email: true, newsletterSubscription: { select: { status: true } } },
+    select: { id: true, name: true, email: true, newsletterSubscriptions: { where: { status: "SUBSCRIBED" }, select: { status: true }, take: 1 } },
   });
 
-  return users.map((u) => ({ id: u.id, name: u.name, email: u.email, newsletterOptedIn: u.newsletterSubscription?.status === "SUBSCRIBED" }));
+  return users.map((u) => ({ id: u.id, name: u.name, email: u.email, newsletterOptedIn: u.newsletterSubscriptions.length > 0 }));
 }
 
 export interface EmailCampaignSummary {

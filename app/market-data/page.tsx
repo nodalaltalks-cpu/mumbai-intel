@@ -15,6 +15,7 @@ import { recordResearchEvent } from "@/lib/analytics/research-events";
 import MarketSnapshot from "@/app/components/MarketSnapshot";
 import MarketDataFilters from "@/app/components/MarketDataFilters";
 import { SkeletonStatRow } from "@/app/components/ui/Skeleton";
+import NewsletterForm from "@/app/components/NewsletterForm";
 
 export const metadata: Metadata = {
   title: "Market Data — NoDalalTalks",
@@ -176,6 +177,14 @@ export default async function MarketDataPage({ searchParams }: { searchParams: P
           ) : (
             <EmptyState title="No builder scores yet" />
           )}
+        </section>
+
+        <section className="rounded-sm border border-border bg-surface p-5">
+          <h2 className="font-mono text-sm font-semibold text-foreground">Stay Ahead of the Market</h2>
+          <p className="mt-1 max-w-md text-xs text-muted">Weekly research on new launches, market trends and transaction insights — straight to your inbox.</p>
+          <div className="max-w-sm">
+            <NewsletterForm source="market_data" />
+          </div>
         </section>
       </main>
 

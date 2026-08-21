@@ -26,6 +26,11 @@ export default function LocationsPreferenceForm({
   const [isPending, startTransition] = useTransition();
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
+  const nameById = new Map(localities.map((l) => [l.id, l.name]));
+  function selectedLabels(ids: Set<string>, freeTextList: string[]): string[] {
+    return [...Array.from(ids).map((id) => nameById.get(id) ?? id), ...freeTextList];
+  }
+
   function saveIds(next: Set<string>) {
     const fd = new FormData();
     fd.set("localityIdsSubmitted", "1");
@@ -125,7 +130,13 @@ export default function LocationsPreferenceForm({
         </div>
       ) : null}
 
-      <p className="text-[10px] text-muted">{isPending ? "Saving…" : savedAt ? "Saved" : "Saved automatically."}</p>
+      <p className="text-[10px] text-muted">
+        {isPending
+          ? "Saving…"
+          : savedAt && (checkedIds.size > 0 || freeText.length > 0)
+            ? `Your recommendations will now prioritize ${selectedLabels(checkedIds, freeText).join(", ")}.`
+            : "Saved automatically."}
+      </p>
     </div>
   );
 }

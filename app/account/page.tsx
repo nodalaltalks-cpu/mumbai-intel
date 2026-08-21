@@ -105,10 +105,25 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
           preferredBudgetMaxRupees: preferences?.preferredBudgetMaxRupees ?? null,
           preferredLocalityIds: preferences?.preferredLocalityIds ?? [],
           localityFreeText: preferences?.localityFreeText ?? [],
-          preferredCategory: preferences?.preferredCategory ?? null,
+          preferredCategories: preferences?.preferredCategories ?? [],
           purposes: preferences?.purposes ?? [],
         })
       : [];
+
+  // Drives the "Tell us what you're looking for" empty state (Section 17) —
+  // true once the user has set anything in the Research Profile section, so
+  // the prompt disappears the moment it's no longer useful.
+  const hasAnyResearchPreference = Boolean(
+    preferences &&
+      (preferences.preferredBudgetMinRupees !== null ||
+        preferences.preferredBudgetMaxRupees !== null ||
+        preferences.preferredLocalityIds.length > 0 ||
+        preferences.localityFreeText.length > 0 ||
+        preferences.preferredCategories.length > 0 ||
+        preferences.preferredConfigurations.length > 0 ||
+        preferences.preferredReadiness.length > 0 ||
+        preferences.purposes.length > 0)
+  );
 
   function tabHref(key: TabKey) {
     return `/account?tab=${key}`;
@@ -368,9 +383,9 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               <ProfileCompletionBar percent={user.profileCompletionPercent} sections={completionSections} />
             </div>
 
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <h2 className="font-mono text-xs uppercase tracking-wide text-muted">About You</h2>
-              <div className="mt-3 grid grid-cols-2 gap-3">
+            <div id="basic-profile" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
+              <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Basic Profile</h2>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Fact label="Email" value={user.email} />
                 <Fact
                   label="Sign-in method"
@@ -391,40 +406,66 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               </div>
             </div>
 
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Property Preferences</h2>
-              <p className="mt-1 text-[11px] text-muted">Optional — helps us surface more relevant projects. Nothing here is required to keep researching.</p>
+            <div>
+              <h2 className="font-mono text-sm font-semibold text-foreground">Research Profile</h2>
+              <p className="mt-1 text-xs text-muted">
+                Tell us what you&apos;re looking for and we&apos;ll make your property research more relevant. Answer what&apos;s useful to you — skip
+                the rest, come back anytime.
+              </p>
+            </div>
+
+            {!hasAnyResearchPreference ? (
+              <div className="rounded-sm border border-dashed border-accent/40 bg-accent/5 p-4">
+                <p className="font-mono text-sm font-semibold text-foreground">Tell us what you&apos;re looking for</p>
+                <p className="mt-1 text-xs text-muted">
+                  Set your budget, preferred locations and property type to make your research more relevant.
+                </p>
+                <a
+                  href="#budget"
+                  className="mt-3 inline-flex items-center rounded-sm border border-accent/40 bg-accent/10 px-3 py-2 text-xs font-mono uppercase tracking-wide text-accent hover:bg-accent/20"
+                >
+                  Complete Research Profile
+                </a>
+              </div>
+            ) : null}
+
+            <div id="budget" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
+              <h3 className="font-mono text-xs uppercase tracking-wide text-muted">Budget</h3>
+              <p className="mt-1 text-[11px] text-muted">Drag the range or type an amount — 20 seconds.</p>
+              <div className="mt-3">
+                <BudgetPreferenceForm minRupees={preferences?.preferredBudgetMinRupees ?? null} maxRupees={preferences?.preferredBudgetMaxRupees ?? null} />
+              </div>
+            </div>
+
+            <div id="property-type" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
+              <h3 className="font-mono text-xs uppercase tracking-wide text-muted">Property Type &amp; Configuration</h3>
+              <p className="mt-1 text-[11px] text-muted">Tap what applies — 20 seconds.</p>
               <div className="mt-3">
                 <PropertyPreferencesForm
-                  preferredCategory={preferences?.preferredCategory ?? null}
+                  preferredCategories={preferences?.preferredCategories ?? []}
                   preferredConfigurations={preferences?.preferredConfigurations ?? []}
                   preferredReadiness={preferences?.preferredReadiness ?? []}
                 />
               </div>
             </div>
 
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Budget</h2>
+            <div id="purpose" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
+              <h3 className="font-mono text-xs uppercase tracking-wide text-muted">What are you looking for?</h3>
+              <p className="mt-1 text-[11px] text-muted">Select any that apply — you can be both.</p>
               <div className="mt-3">
-                <BudgetPreferenceForm minRupees={preferences?.preferredBudgetMinRupees ?? null} maxRupees={preferences?.preferredBudgetMaxRupees ?? null} />
+                <PurposeForm purposes={preferences?.purposes ?? []} />
               </div>
             </div>
 
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Locations</h2>
+            <div id="locations" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
+              <h3 className="font-mono text-xs uppercase tracking-wide text-muted">Preferred Locations</h3>
+              <p className="mt-1 text-[11px] text-muted">Add a location or landmark — 30 seconds.</p>
               <div className="mt-3">
                 <LocationsPreferenceForm
                   preferredLocalityIds={preferences?.preferredLocalityIds ?? []}
                   localityFreeText={preferences?.localityFreeText ?? []}
                   localities={localities}
                 />
-              </div>
-            </div>
-
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Purpose</h2>
-              <div className="mt-3">
-                <PurposeForm purposes={preferences?.purposes ?? []} />
               </div>
             </div>
 

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { updatePreferencesAction } from "@/lib/actions/user-preferences";
-import { CATEGORY_LABEL, CONFIGURATION_FILTER_OPTIONS, PROPERTY_CATEGORIES, type PropertyCategory } from "@/lib/project-meta";
+import { CATEGORY_LABEL, CONFIGURATION_FILTER_OPTIONS, PROPERTY_CATEGORIES } from "@/lib/project-meta";
 
 const READINESS_OPTIONS = [
   { value: "READY_TO_MOVE", label: "Ready to Move" },
@@ -10,25 +10,26 @@ const READINESS_OPTIONS = [
   { value: "NEW_LAUNCH", label: "New Launch" },
 ] as const;
 
-/** Property type / configuration / status — all instant-save (no separate Save button) since these are simple toggles, matching the progressive-profile "save automatically where practical" goal. Each change posts only this card's own fields; lib/actions/user-preferences.ts's field-presence gating means the other cards' saved values are never touched. */
+/** Property type / configuration / status — all instant-save (no separate Save button) since these are simple toggles, matching the progressive-profile "save automatically where practical" goal. Each change posts only this card's own fields; lib/actions/user-preferences.ts's field-presence gating means the other cards' saved values are never touched. Property type is multi-select (a user researching can be open to more than one type at once), same shape as configuration/status below. */
 export default function PropertyPreferencesForm({
-  preferredCategory,
+  preferredCategories,
   preferredConfigurations,
   preferredReadiness,
 }: {
-  preferredCategory: PropertyCategory | null;
+  preferredCategories: string[];
   preferredConfigurations: string[];
   preferredReadiness: string[];
 }) {
-  const [category, setCategory] = useState(preferredCategory ?? "");
+  const [categories, setCategories] = useState(new Set<string>(preferredCategories));
   const [configurations, setConfigurations] = useState(new Set(preferredConfigurations));
   const [readiness, setReadiness] = useState(new Set(preferredReadiness));
   const [isPending, startTransition] = useTransition();
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
-  function save(next: { category?: string; configurations?: Set<string>; readiness?: Set<string> }) {
+  function save(next: { categories?: Set<string>; configurations?: Set<string>; readiness?: Set<string> }) {
     const fd = new FormData();
-    fd.set("preferredCategory", next.category ?? category);
+    fd.set("categoriesSubmitted", "1");
+    for (const c of next.categories ?? categories) fd.append("preferredCategories", c);
     fd.set("configurationsSubmitted", "1");
     for (const c of next.configurations ?? configurations) fd.append("preferredConfigurations", c);
     fd.set("readinessSubmitted", "1");
@@ -37,6 +38,14 @@ export default function PropertyPreferencesForm({
       await updatePreferencesAction({}, fd);
       setSavedAt(Date.now());
     });
+  }
+
+  function toggleCategory(value: string) {
+    const next = new Set(categories);
+    if (next.has(value)) next.delete(value);
+    else next.add(value);
+    setCategories(next);
+    save({ categories: next });
   }
 
   function toggleConfiguration(value: string) {
@@ -58,19 +67,15 @@ export default function PropertyPreferencesForm({
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <span className="mb-1.5 block text-[11px] uppercase tracking-wide text-muted">Property type</span>
+        <span className="mb-1.5 block text-[11px] uppercase tracking-wide text-muted">Property type (select any)</span>
         <div className="flex flex-wrap gap-1.5">
           {PROPERTY_CATEGORIES.map((c) => (
             <button
               key={c}
               type="button"
-              onClick={() => {
-                const next = category === c ? "" : c;
-                setCategory(next);
-                save({ category: next });
-              }}
+              onClick={() => toggleCategory(c)}
               className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                category === c ? "border-accent bg-accent/10 text-accent" : "border-border text-muted hover:border-accent/50"
+                categories.has(c) ? "border-accent bg-accent/10 text-accent" : "border-border text-muted hover:border-accent/50"
               }`}
             >
               {CATEGORY_LABEL[c]}
