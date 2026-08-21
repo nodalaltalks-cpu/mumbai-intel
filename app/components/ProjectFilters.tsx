@@ -151,6 +151,16 @@ export default function ProjectFilters({ localities, builders }: { localities: F
       const before = new URLSearchParams(searchParams.toString());
       before.delete("page");
       if (next.toString() !== before.toString()) {
+        // Neutralize the Filters dialog's own back-button history marker
+        // (pushed by useModalBackClose while it was open) before navigating.
+        // pushParams' router.push actually calls history.pushState
+        // asynchronously and can land after this handler returns, so
+        // without this, closing the dialog right below (setFiltersOpen(false)
+        // unmounts it) runs useModalBackClose's cleanup while history.state
+        // still looks like its own marker -- which makes it call
+        // history.back() to consume it, silently undoing this very push a
+        // moment later.
+        if ((history.state as { modal?: boolean } | null)?.modal) history.replaceState(null, "");
         pushParams(next);
         for (const key of FILTER_KEYS) {
           const value = next.get(key);

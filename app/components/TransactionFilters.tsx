@@ -165,6 +165,15 @@ export default function TransactionFilters({
       before.delete("page");
       if (next.toString() !== before.toString()) {
         pendingParamsRef.current = next;
+        // Neutralize the Filters dialog's own back-button history marker
+        // (pushed by useModalBackClose while it was open) before navigating.
+        // router.push's actual history.pushState call is async and can land
+        // after this handler returns, so without this, closing the dialog
+        // right below (setFiltersOpen(false) unmounts it) runs
+        // useModalBackClose's cleanup while history.state still looks like
+        // its own marker -- which makes it call history.back() to consume
+        // it, silently undoing this very push a moment later.
+        if ((history.state as { modal?: boolean } | null)?.modal) history.replaceState(null, "");
         router.push(`${pathname}?${next.toString()}`);
         const changed = FILTER_KEYS.filter((key) => next.get(key) && next.get(key) !== (searchParams.get(key) ?? ""));
         if (changed.length > 0) {
