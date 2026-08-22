@@ -24,7 +24,17 @@ export type AnalyticsGranularity = "hour" | "day" | "week" | "month";
 export interface AnalyticsPeriod {
   key: AnalyticsPeriodKey;
   label: string;
-  /** "1 Aug 2026 – 21 Aug 2026" — the exact since/until being queried, not a rounded-up "to end of period" range (a not-yet-finished month shows today as its end, honestly). */
+  /**
+   * "17 Aug 2026 – 23 Aug 2026" — the FULL calendar period being viewed, always
+   * the complete range regardless of how much of it has elapsed (a founder
+   * picking "Week" on a Wednesday still sees the whole Mon–Sun week, per
+   * Section 13/14's "the actual date range should always be visible" and "if
+   * the current period is still in progress, indicate that" — `label` already
+   * does the indicating, e.g. "This Week"). Deliberately built from
+   * `periodEnd`, NOT `until` — the query window still stops at "now" so no
+   * page ever queries for data that can't exist yet; only the human-facing
+   * range label shows the full period.
+   */
   dateRangeLabel: string;
   since: Date;
   until: Date;
@@ -37,34 +47,89 @@ function formatPeriodDate(d: Date): string {
   return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
 }
 
-/** IST throughout, matching the rest of this app's admin-facing date display (formatDate/formatDateTime in lib/format.ts). */
-function formatDateRangeLabel(since: Date, until: Date): string {
-  const untilInclusive = new Date(until.getTime() - 1);
-  return `${formatPeriodDate(since)} – ${formatPeriodDate(untilInclusive)}`;
+/** IST throughout, matching the rest of this app's admin-facing date display (formatDate/formatDateTime in lib/format.ts). `periodEnd` is the full calendar boundary (exclusive) — may be in the future for a still-in-progress period; the query window (`until`) is a separate, always-now-bounded value. */
+function formatDateRangeLabel(since: Date, periodEnd: Date): string {
+  const inclusiveEnd = new Date(periodEnd.getTime() - 1);
+  return `${formatPeriodDate(since)} – ${formatPeriodDate(inclusiveEnd)}`;
+}
+
+/**
+ * All calendar-boundary math below (startOfDay/Month/Quarter/... and their
+ * startOfNext* counterparts) must land on the correct IST calendar day
+ * regardless of the server process's own local timezone — this app has run
+ * on machines in Asia/Dubai (dev) and Vercel's UTC runtime (prod), and the
+ * previous implementation used plain `Date` getters/constructors, which read
+ * and write in whatever timezone the OS/runtime happens to be in. That was
+ * invisible while every period's displayed end was just "now", but became a
+ * visible wrong-calendar-day bug once dateRangeLabel started showing a full
+ * in-progress period's end (e.g. "This Month" showing "1 Sept" instead of
+ * "31 Aug" on a UTC or Dubai server). IST has no DST, so it's a fixed
+ * +5:30 offset — cheap to simulate without a date library: shift the UTC
+ * instant by that offset, then read/write its UTC-getter fields as if they
+ * were IST wall-clock fields.
+ */
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+/** A Date whose UTC-getter fields (getUTCFullYear/getUTCMonth/getUTCDate/getUTCDay/...) equal the IST wall-clock values for `instant`. Never call the plain (non-UTC) getters on the result. */
+function toIstWallClock(instant: Date): Date {
+  return new Date(instant.getTime() + IST_OFFSET_MS);
+}
+
+/** Inverse of toIstWallClock — `wallClock` must be built from IST wall-clock values via Date.UTC(...); returns the real UTC instant that wall-clock moment represents. */
+function fromIstWallClock(wallClock: Date): Date {
+  return new Date(wallClock.getTime() - IST_OFFSET_MS);
 }
 
 function startOfDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
+  const w = toIstWallClock(d);
+  return fromIstWallClock(new Date(Date.UTC(w.getUTCFullYear(), w.getUTCMonth(), w.getUTCDate())));
 }
-function startOfISOWeek(d: Date): Date {
-  const x = startOfDay(d);
-  const day = (x.getDay() + 6) % 7; // 0 = Monday
-  x.setDate(x.getDate() - day);
-  return x;
+/** Exported for the one other place in the codebase that needs an IST calendar-week boundary outside a "period relative to now" context — retention-queries.ts's signup-week cohort bucketing (Section 9). Everything else should keep going through resolveAnalyticsPeriod. */
+export function startOfISOWeek(d: Date): Date {
+  const w = toIstWallClock(d);
+  const dayOfWeek = (w.getUTCDay() + 6) % 7; // 0 = Monday
+  return fromIstWallClock(new Date(Date.UTC(w.getUTCFullYear(), w.getUTCMonth(), w.getUTCDate() - dayOfWeek)));
 }
 function startOfMonth(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), 1);
+  const w = toIstWallClock(d);
+  return fromIstWallClock(new Date(Date.UTC(w.getUTCFullYear(), w.getUTCMonth(), 1)));
 }
 function startOfQuarter(d: Date): Date {
-  return new Date(d.getFullYear(), Math.floor(d.getMonth() / 3) * 3, 1);
+  const w = toIstWallClock(d);
+  return fromIstWallClock(new Date(Date.UTC(w.getUTCFullYear(), Math.floor(w.getUTCMonth() / 3) * 3, 1)));
 }
 function startOfHalfYear(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth() < 6 ? 0 : 6, 1);
+  const w = toIstWallClock(d);
+  return fromIstWallClock(new Date(Date.UTC(w.getUTCFullYear(), w.getUTCMonth() < 6 ? 0 : 6, 1)));
 }
 function startOfYear(d: Date): Date {
-  return new Date(d.getFullYear(), 0, 1);
+  const w = toIstWallClock(d);
+  return fromIstWallClock(new Date(Date.UTC(w.getUTCFullYear(), 0, 1)));
+}
+
+function startOfNextDay(d: Date): Date {
+  const w = toIstWallClock(d);
+  return fromIstWallClock(new Date(Date.UTC(w.getUTCFullYear(), w.getUTCMonth(), w.getUTCDate() + 1)));
+}
+function startOfNextWeek(d: Date): Date {
+  // A week is always exactly 7*24h in a fixed-offset (no-DST) zone, so pure ms arithmetic on the already-IST-correct week start is safe.
+  return new Date(startOfISOWeek(d).getTime() + 7 * 24 * 60 * 60 * 1000);
+}
+function startOfNextMonth(d: Date): Date {
+  const w = toIstWallClock(d);
+  return fromIstWallClock(new Date(Date.UTC(w.getUTCFullYear(), w.getUTCMonth() + 1, 1)));
+}
+function startOfNextQuarter(d: Date): Date {
+  const w = toIstWallClock(d);
+  return fromIstWallClock(new Date(Date.UTC(w.getUTCFullYear(), Math.floor(w.getUTCMonth() / 3) * 3 + 3, 1)));
+}
+function startOfNextHalfYear(d: Date): Date {
+  const w = toIstWallClock(d);
+  return fromIstWallClock(new Date(Date.UTC(w.getUTCFullYear(), w.getUTCMonth() < 6 ? 6 : 12, 1)));
+}
+function startOfNextYear(d: Date): Date {
+  const w = toIstWallClock(d);
+  return fromIstWallClock(new Date(Date.UTC(w.getUTCFullYear() + 1, 0, 1)));
 }
 
 function pickGranularityForSpan(spanMs: number): AnalyticsGranularity {
@@ -126,42 +191,43 @@ export function resolveAnalyticsPeriod(params: { period?: string; from?: string;
     };
   }
 
-  const resolved = ((): Omit<AnalyticsPeriod, "dateRangeLabel"> => {
+  const resolved = ((): Omit<AnalyticsPeriod, "dateRangeLabel"> & { periodEnd: Date } => {
     switch (key) {
       case "day": {
         const since = startOfDay(now);
         const previousSince = new Date(since.getTime() - 24 * 60 * 60 * 1000);
-        return { key, label: "Today", since, until: now, previousSince, previousUntil: since, granularity: "hour" };
+        return { key, label: "Today", since, until: now, previousSince, previousUntil: since, granularity: "hour", periodEnd: startOfNextDay(now) };
       }
       case "week": {
         const since = startOfISOWeek(now);
         const previousSince = new Date(since.getTime() - 7 * 24 * 60 * 60 * 1000);
-        return { key, label: "This Week", since, until: now, previousSince, previousUntil: since, granularity: "day" };
+        return { key, label: "This Week", since, until: now, previousSince, previousUntil: since, granularity: "day", periodEnd: startOfNextWeek(now) };
       }
       case "quarter": {
         const since = startOfQuarter(now);
         const previousSince = startOfQuarter(new Date(since.getTime() - 24 * 60 * 60 * 1000));
-        return { key, label: "This Quarter", since, until: now, previousSince, previousUntil: since, granularity: "week" };
+        return { key, label: "This Quarter", since, until: now, previousSince, previousUntil: since, granularity: "week", periodEnd: startOfNextQuarter(now) };
       }
       case "half_year": {
         const since = startOfHalfYear(now);
         const previousSince = startOfHalfYear(new Date(since.getTime() - 24 * 60 * 60 * 1000));
-        return { key, label: "This Half Year", since, until: now, previousSince, previousUntil: since, granularity: "month" };
+        return { key, label: "This Half Year", since, until: now, previousSince, previousUntil: since, granularity: "month", periodEnd: startOfNextHalfYear(now) };
       }
       case "year": {
         const since = startOfYear(now);
-        const previousSince = new Date(since.getFullYear() - 1, 0, 1);
-        return { key, label: "This Year", since, until: now, previousSince, previousUntil: since, granularity: "month" };
+        const previousSince = startOfYear(new Date(since.getTime() - 1));
+        return { key, label: "This Year", since, until: now, previousSince, previousUntil: since, granularity: "month", periodEnd: startOfNextYear(now) };
       }
       case "month":
       default: {
         const since = startOfMonth(now);
-        const previousSince = new Date(since.getFullYear(), since.getMonth() - 1, 1);
-        return { key: "month", label: "This Month", since, until: now, previousSince, previousUntil: since, granularity: "day" };
+        const previousSince = startOfMonth(new Date(since.getTime() - 1));
+        return { key: "month", label: "This Month", since, until: now, previousSince, previousUntil: since, granularity: "day", periodEnd: startOfNextMonth(now) };
       }
     }
   })();
-  return { ...resolved, dateRangeLabel: formatDateRangeLabel(resolved.since, resolved.until) };
+  const { periodEnd, ...period } = resolved;
+  return { ...period, dateRangeLabel: formatDateRangeLabel(period.since, periodEnd) };
 }
 
 export interface PeriodChange {
@@ -186,28 +252,28 @@ export function buildBuckets(period: AnalyticsPeriod): { start: Date; end: Date;
   if (granularity === "hour") {
     for (let t = new Date(since); t < until; t = new Date(t.getTime() + 60 * 60 * 1000)) {
       const end = new Date(Math.min(t.getTime() + 60 * 60 * 1000, until.getTime()));
-      buckets.push({ start: new Date(t), end, label: t.toLocaleTimeString("en-IN", { hour: "2-digit", hour12: true }) });
+      buckets.push({ start: new Date(t), end, label: t.toLocaleTimeString("en-IN", { hour: "2-digit", hour12: true, timeZone: "Asia/Kolkata" }) });
     }
     return buckets;
   }
   if (granularity === "day") {
     for (let t = startOfDay(since); t < until; t = new Date(t.getTime() + 24 * 60 * 60 * 1000)) {
       const end = new Date(t.getTime() + 24 * 60 * 60 * 1000);
-      buckets.push({ start: new Date(t), end, label: t.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) });
+      buckets.push({ start: new Date(t), end, label: t.toLocaleDateString("en-IN", { day: "2-digit", month: "short", timeZone: "Asia/Kolkata" }) });
     }
     return buckets;
   }
   if (granularity === "week") {
     for (let t = startOfISOWeek(since); t < until; t = new Date(t.getTime() + 7 * 24 * 60 * 60 * 1000)) {
       const end = new Date(t.getTime() + 7 * 24 * 60 * 60 * 1000);
-      buckets.push({ start: new Date(t), end, label: t.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) });
+      buckets.push({ start: new Date(t), end, label: t.toLocaleDateString("en-IN", { day: "2-digit", month: "short", timeZone: "Asia/Kolkata" }) });
     }
     return buckets;
   }
   // month
-  for (let t = startOfMonth(since); t < until; t = new Date(t.getFullYear(), t.getMonth() + 1, 1)) {
-    const end = new Date(t.getFullYear(), t.getMonth() + 1, 1);
-    buckets.push({ start: new Date(t), end, label: t.toLocaleDateString("en-IN", { month: "short", year: "2-digit" }) });
+  for (let t = startOfMonth(since); t < until; t = startOfNextMonth(t)) {
+    const end = startOfNextMonth(t);
+    buckets.push({ start: new Date(t), end, label: t.toLocaleDateString("en-IN", { month: "short", year: "2-digit", timeZone: "Asia/Kolkata" }) });
   }
   return buckets;
 }

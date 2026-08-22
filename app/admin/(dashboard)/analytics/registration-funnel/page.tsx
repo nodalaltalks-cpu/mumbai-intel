@@ -59,7 +59,7 @@ export default async function RegistrationFunnelPage({ searchParams }: { searchP
             .
           </p>
         </div>
-        <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} />
+        <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} label={period.label} dateRangeLabel={period.dateRangeLabel} />
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">

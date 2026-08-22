@@ -58,10 +58,7 @@ export default async function AdminActivityPage({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface p-3">
-        <p className="font-mono text-xs uppercase tracking-wide text-accent">
-          {period.label} <span className="text-muted">· {period.dateRangeLabel} IST</span>
-        </p>
-        <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} />
+        <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} label={period.label} dateRangeLabel={period.dateRangeLabel} />
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

@@ -55,10 +55,7 @@ export default async function AdminEmailPage({ searchParams }: { searchParams: P
 
       <div className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="font-mono text-xs uppercase tracking-wide text-accent">
-            {period.label} <span className="text-muted">· {period.dateRangeLabel} IST</span>
-          </p>
-          <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} />
+          <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} label={period.label} dateRangeLabel={period.dateRangeLabel} />
         </div>
         <div className="flex flex-wrap gap-3">
           <AnalyticsStatCard label="Campaigns (period)" value={periodStats.campaignsInPeriod} previousValue={periodStats.previousCampaignsInPeriod} change={campaignsChange} />

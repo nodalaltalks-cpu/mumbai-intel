@@ -22,9 +22,11 @@ export interface NavbarPublicUser {
 export default function NavbarActions({
   publicUser,
   notifications,
+  unreadCount,
 }: {
   publicUser: NavbarPublicUser | null;
   notifications: PublicNotificationItem[];
+  unreadCount: number;
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const compareList = useCompareList();
@@ -63,7 +65,7 @@ export default function NavbarActions({
 
       {publicUser ? (
         <>
-          <NotificationBell notifications={notifications} />
+          <NotificationBell notifications={notifications} initialUnreadCount={unreadCount} />
           <ProfileMenu user={publicUser} />
         </>
       ) : (

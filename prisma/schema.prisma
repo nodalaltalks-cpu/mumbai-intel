@@ -1004,27 +1004,28 @@ enum UserRole {
 }
 
 model User {
-  id             String                    @id @default(cuid())
-  email          String                    @unique
-  name           String?
-  passwordHash   String
-  role           UserRole                  @default(EDITOR)
+  id                    String                    @id @default(cuid())
+  email                 String                    @unique
+  name                  String?
+  passwordHash          String
+  role                  UserRole                  @default(EDITOR)
   /// Fine-grained permission keys (e.g. "projects.edit", "reports.reject") layered
   /// on top of `role` for an EDITOR/VIEWER — see lib/auth/permissions.ts for the
   /// full key list and hasPermission()'s enforcement. ADMIN always bypasses this
   /// (role check alone is sufficient), so the array is only ever consulted for
   /// non-ADMIN accounts. Ignored entirely until a non-ADMIN user actually exists.
-  permissions    String[]                  @default([])
-  isActive       Boolean                   @default(true)
-  lastLoginAt    DateTime?
-  auditLogs      AuditLog[]
-  resetTokens    AdminPasswordResetToken[]
-  notifications  Notification[]
-  emailCampaigns EmailCampaign[]
-  pendingChanges PendingChange[]           @relation("PendingChangeActor")
-  reviewedChanges PendingChange[]          @relation("PendingChangeReviewer")
-  createdAt      DateTime                  @default(now())
-  updatedAt      DateTime                  @updatedAt
+  permissions           String[]                  @default([])
+  isActive              Boolean                   @default(true)
+  lastLoginAt           DateTime?
+  auditLogs             AuditLog[]
+  resetTokens           AdminPasswordResetToken[]
+  notifications         Notification[]
+  emailCampaigns        EmailCampaign[]
+  notificationCampaigns NotificationCampaign[]
+  pendingChanges        PendingChange[]           @relation("PendingChangeActor")
+  reviewedChanges       PendingChange[]           @relation("PendingChangeReviewer")
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
 }
 
 enum PendingChangeStatus {
@@ -1128,20 +1129,20 @@ enum ContactEnquiryStatus {
 /// the database). This is the persisted, admin-manageable record; the email
 /// notification stays as-is alongside it.
 model ContactEnquiry {
-  id             String               @id @default(cuid())
-  name           String
-  email          String
-  phone          String?
-  subject        String?
-  message        String
-  publicUserId   String?
-  publicUser     PublicUser?          @relation(fields: [publicUserId], references: [id], onDelete: SetNull)
-  sourcePage     String?
-  status         ContactEnquiryStatus @default(NEW)
-  adminNotes     String?
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
-  deletedAt      DateTime?
+  id              String               @id @default(cuid())
+  name            String
+  email           String
+  phone           String?
+  subject         String?
+  message         String
+  publicUserId    String?
+  publicUser      PublicUser?          @relation(fields: [publicUserId], references: [id], onDelete: SetNull)
+  sourcePage      String?
+  status          ContactEnquiryStatus @default(NEW)
+  adminNotes      String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  deletedAt       DateTime?
   deletedByUserId String?
 
   @@index([status, createdAt])
@@ -1200,6 +1201,11 @@ enum NotificationType {
   /// provider exists yet -- an admin confirms out-of-band and sets PublicUser.phoneVerifiedAt
   /// manually today; this notification is how they find out someone asked.
   ADMIN_PHONE_VERIFICATION_REQUESTED
+  /// Every founder-authored NotificationCampaign send uses this one type -- the specific
+  /// classification (new launch, price offer, trending locality, ...) lives on
+  /// NotificationCampaign.category instead, so this stays a single generic value rather
+  /// than one enum member per category (which NotificationCategory already covers).
+  CAMPAIGN_ANNOUNCEMENT
 }
 
 /// One shared table for both audiences (public researcher + founder admin)
@@ -1210,22 +1216,89 @@ enum NotificationType {
 /// the admin Activity panel's existing pattern) because this needs to survive
 /// across devices/sessions for an actual user-facing feature.
 model Notification {
-  id                    String           @id @default(cuid())
+  id                    String                @id @default(cuid())
   type                  NotificationType
   title                 String
   body                  String
   recipientPublicUserId String?
-  recipientPublicUser   PublicUser?      @relation(fields: [recipientPublicUserId], references: [id], onDelete: Cascade)
+  recipientPublicUser   PublicUser?           @relation(fields: [recipientPublicUserId], references: [id], onDelete: Cascade)
   recipientAdminUserId  String?
-  recipientAdminUser    User?            @relation(fields: [recipientAdminUserId], references: [id], onDelete: Cascade)
+  recipientAdminUser    User?                 @relation(fields: [recipientAdminUserId], references: [id], onDelete: Cascade)
   /// "Report" today; kept generic so a future notification source is a new value, not a schema change.
   entityType            String?
   entityId              String?
+  /// Denormalized from NotificationCampaign at send time (campaign sends only, otherwise
+  /// null) -- every recipient's action target is identical, so copying it here means every
+  /// existing read of Notification (the bell's poll, getAdminNotifications, ...) stays a
+  /// plain findMany with no new join, instead of every call site needing to include campaign.
+  imageUrl              String?
+  actionLabel           String?
+  actionUrl             String?
   readAt                DateTime?
-  createdAt             DateTime         @default(now())
+  /// Set when the recipient clicks the notification's action button (campaign sends only) --
+  /// the real per-notification signal a NotificationCampaign's "Clicked" count is derived from.
+  clickedAt             DateTime?
+  /// Set only for a founder-authored bulk send -- Notification stays the single source of
+  /// truth for both system notifications (report/enquiry lifecycle, campaignId null) and
+  /// campaign sends, rather than a second recipient table like EmailCampaignRecipient: a
+  /// campaign Notification already has everything a recipient row needs (readAt, and now
+  /// clickedAt), so a parallel table would just duplicate it.
+  campaignId            String?
+  campaign              NotificationCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  createdAt             DateTime              @default(now())
 
   @@index([recipientPublicUserId, readAt])
   @@index([recipientAdminUserId, readAt])
+  @@index([campaignId])
+}
+
+enum NotificationCategory {
+  NEW_LAUNCH
+  PRICE_OFFER
+  TRENDING_LOCALITY
+  NEW_REPORT
+  MARKET_INSIGHT
+  TRANSACTION_DATA
+  SAVED_SEARCH_ANNOUNCEMENT
+  PRODUCT_UPDATE
+  GENERAL_UPDATE
+}
+
+enum NotificationCampaignStatus {
+  DRAFT
+  QUEUED
+  SENDING
+  SENT
+  FAILED
+}
+
+/// Founder-authored in-platform notification send -- NOT email (see
+/// EmailCampaign for that, a deliberately separate system). Mirrors
+/// EmailCampaign's shape (parent campaign + recipientCount/status/sentAt)
+/// but needs no child recipient table, since Notification rows already
+/// carry campaignId/readAt/clickedAt per recipient (see the comment there).
+model NotificationCampaign {
+  id              String                     @id @default(cuid())
+  category        NotificationCategory
+  title           String
+  message         String
+  imageUrl        String?
+  actionLabel     String?
+  actionUrl       String?
+  /// The resolved targeting filter set at send time (segment + any locality/budget/etc.
+  /// selections) -- kept for the campaign's own history record, same reasoning as
+  /// EmailCampaign not storing a separate "audience definition" row.
+  targetFilters   Json?
+  status          NotificationCampaignStatus @default(DRAFT)
+  createdByUserId String
+  createdByUser   User                       @relation(fields: [createdByUserId], references: [id])
+  recipientCount  Int                        @default(0)
+  sentAt          DateTime?
+  createdAt       DateTime                   @default(now())
+
+  notifications Notification[]
+
+  @@index([status, createdAt])
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1408,25 +1481,25 @@ model IngestLogEntry {
 /// connector finds a likely duplicate of an existing row, or when a source's
 /// policy requires human approval before writing at all.
 model IngestStagingRecord {
-  id                String      @id @default(cuid())
-  batchId           String
-  batch             IngestBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  entityType        String
+  id                 String      @id @default(cuid())
+  batchId            String
+  batch              IngestBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  entityType         String
   /// Null = proposed create. Set = proposed merge into this existing row.
-  targetId          String?
-  payload           Json
-  matchedExistingId String?
-  matchConfidence   Decimal?    @db.Decimal(4, 3)
-  status            String      @default("PENDING") // PENDING | APPROVED | REJECTED | ROLLED_BACK
-  reviewedByUserId  String?
-  reviewedAt        DateTime?
+  targetId           String?
+  payload            Json
+  matchedExistingId  String?
+  matchConfidence    Decimal?    @db.Decimal(4, 3)
+  status             String      @default("PENDING") // PENDING | APPROVED | REJECTED | ROLLED_BACK
+  reviewedByUserId   String?
+  reviewedAt         DateTime?
   /// The Project/Builder/Locality/Transaction row this record's approval actually wrote to
   /// (created or merged into) -- set at approval time, so a later rollback can find it without
   /// re-deriving it from payload/targetId. Null for records approved before this field existed.
-  appliedEntityId   String?
-  rolledBackAt      DateTime?
+  appliedEntityId    String?
+  rolledBackAt       DateTime?
   rolledBackByUserId String?
-  createdAt         DateTime    @default(now())
+  createdAt          DateTime    @default(now())
 
   @@index([status, createdAt])
 }
@@ -1514,30 +1587,30 @@ model SearchHistory {
 /// recommendations) — nothing reads this to change what a user sees yet;
 /// it's real, user-editable data, not a placeholder.
 model UserPreferences {
-  id                       String            @id @default(cuid())
-  publicUserId             String            @unique
-  publicUser               PublicUser        @relation(fields: [publicUserId], references: [id], onDelete: Cascade)
+  id                       String     @id @default(cuid())
+  publicUserId             String     @unique
+  publicUser               PublicUser @relation(fields: [publicUserId], references: [id], onDelete: Cascade)
   preferredBudgetMinRupees Int?
   preferredBudgetMaxRupees Int?
   /// Structured picks from the existing Locality catalog (dropdown/checkbox selection).
-  preferredLocalityIds     String[]          @default([])
+  preferredLocalityIds     String[]   @default([])
   /// Multi-select, same reasoning as preferredConfigurations below — a user
   /// researching can be open to more than one property type at once.
-  preferredCategories      String[]          @default([])
+  preferredCategories      String[]   @default([])
   /// BHK bucket values ("1"|"2"|"3"|"4"), same value shape as
   /// lib/project-meta.ts's CONFIGURATION_FILTER_OPTIONS -- multi-select, not
   /// a single value, since a user can be open to more than one size.
-  preferredConfigurations  String[]          @default([])
+  preferredConfigurations  String[]   @default([])
   /// "READY_TO_MOVE" | "UNDER_CONSTRUCTION" | "NEW_LAUNCH" -- multi-select.
-  preferredReadiness       String[]          @default([])
+  preferredReadiness       String[]   @default([])
   /// "SELF_USE" | "INVESTMENT" -- multi-select, a user can be both.
-  purposes                 String[]          @default([])
+  purposes                 String[]   @default([])
   /// Free-text location interest ("Near Kurla station", "BKC") -- deliberately
   /// separate from preferredLocalityIds (the structured catalog picks) so a
   /// landmark/area with no Locality record yet is never forced into one.
-  localityFreeText         String[]          @default([])
-  createdAt                DateTime          @default(now())
-  updatedAt                DateTime          @updatedAt
+  localityFreeText         String[]   @default([])
+  createdAt                DateTime   @default(now())
+  updatedAt                DateTime   @updatedAt
 }
 
 /// Notification channel toggles. No notification is actually sent by
@@ -1651,17 +1724,17 @@ model EmailCampaign {
 /// Per-recipient row, not just a campaign-level count -- Section 18 explicitly
 /// requires an auditable recipient list, not only a final aggregate result.
 model EmailCampaignRecipient {
-  id            String               @id @default(cuid())
-  campaignId    String
-  campaign      EmailCampaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  publicUserId  String?
-  publicUser    PublicUser?          @relation(fields: [publicUserId], references: [id], onDelete: SetNull)
-  email         String
-  status        EmailRecipientStatus @default(PENDING)
-  sentAt        DateTime?
+  id                String               @id @default(cuid())
+  campaignId        String
+  campaign          EmailCampaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  publicUserId      String?
+  publicUser        PublicUser?          @relation(fields: [publicUserId], references: [id], onDelete: SetNull)
+  email             String
+  status            EmailRecipientStatus @default(PENDING)
+  sentAt            DateTime?
   /// Resend's own email id when accepted — for support/traceability lookups against Resend's dashboard, never proof of delivery.
   providerMessageId String?
-  failureReason String?
+  failureReason     String?
 
   @@index([campaignId, status])
 }
@@ -1719,6 +1792,11 @@ enum ResearchEventType {
   /// in the Locality catalog (LocationsPreferenceForm's free-text field) --
   /// a founder-facing demand signal only (Section 13), never shown to users.
   LOCALITY_INTEREST_ADDED
+  /// A user clicked a Notification's action button/CTA -- NOTIFICATION_OPENED
+  /// above already covers "opened the bell panel"; this is the distinct,
+  /// stronger engagement signal a founder notification campaign's "Clicked"
+  /// metric is built from (see Notification.clickedAt, set at the same call site).
+  NOTIFICATION_CLICKED
 }
 
 /// Site-wide "research intent" log — a deliberately generic single table

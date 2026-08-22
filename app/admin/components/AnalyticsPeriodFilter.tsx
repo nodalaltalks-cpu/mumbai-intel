@@ -15,7 +15,21 @@ const COOKIE_NAME = "mi_admin_analytics_period";
  * its link defaults to the same choice instead of resetting to "Month"
  * (Section 39). Every other query param on the current page is preserved.
  */
-export default function AnalyticsPeriodFilter({ current, currentFrom, currentTo }: { current: AnalyticsPeriodKey; currentFrom?: string; currentTo?: string }) {
+export default function AnalyticsPeriodFilter({
+  current,
+  currentFrom,
+  currentTo,
+  label,
+  dateRangeLabel,
+}: {
+  current: AnalyticsPeriodKey;
+  currentFrom?: string;
+  currentTo?: string;
+  /** "This Week" — when provided (alongside dateRangeLabel), rendered next to the picker so the actual range is always visible (Section 13/14), not just computed. Optional only for the rare caller that renders its own label elsewhere; every new usage should pass both. */
+  label?: string;
+  /** "17 Aug 2026 – 23 Aug 2026" — the full calendar range for the selected period, from AnalyticsPeriod.dateRangeLabel. */
+  dateRangeLabel?: string;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -50,6 +64,11 @@ export default function AnalyticsPeriodFilter({ current, currentFrom, currentTo 
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      {label && dateRangeLabel ? (
+        <p className="font-mono text-xs uppercase tracking-wide text-accent">
+          {label} <span className="text-muted">· {dateRangeLabel} IST</span>
+        </p>
+      ) : null}
       <div className="flex flex-wrap gap-1 rounded-sm border border-border bg-surface p-1">
         {ANALYTICS_PERIOD_OPTIONS.map((option) => (
           <button

@@ -69,7 +69,7 @@ export default async function AdminReportsPage({
           <AnalyticsStatCard label="Submitted (period)" value={periodStats.submittedInPeriod} previousValue={periodStats.previousSubmittedInPeriod} change={submittedChange} />
           <AnalyticsStatCard label="Resolved (period)" value={periodStats.resolvedInPeriod} />
         </div>
-        <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} />
+        <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} label={period.label} dateRangeLabel={period.dateRangeLabel} />
       </div>
 
       <div className="flex flex-wrap gap-1.5">

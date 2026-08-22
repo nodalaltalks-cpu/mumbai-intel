@@ -100,7 +100,7 @@ export default async function BrochureAnalyticsPage({ searchParams }: { searchPa
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} />
+          <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} label={period.label} dateRangeLabel={period.dateRangeLabel} />
           <a
             href="/api/admin/brochure-analytics/export"
             className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"

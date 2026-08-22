@@ -58,7 +58,7 @@ export default async function RegisteredUsersPage({
             adds), same as the dashboard&apos;s DAU/WAU/MAU.
           </p>
         </div>
-        <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} />
+        <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} label={period.label} dateRangeLabel={period.dateRangeLabel} />
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">

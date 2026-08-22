@@ -42,7 +42,7 @@ export default async function ReferralAnalyticsPage({ searchParams }: { searchPa
           <Link href="/admin/analytics" className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
             ← Analytics
           </Link>
-          <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} />
+          <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} label={period.label} dateRangeLabel={period.dateRangeLabel} />
         </div>
       </div>
 

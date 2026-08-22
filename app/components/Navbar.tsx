@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getSession } from "@/lib/auth/session";
 import { getPublicSession } from "@/lib/public-auth/session";
-import { getPublicNotifications } from "@/lib/queries/dashboard";
+import { getPublicNotifications, getPublicUnreadNotificationCount } from "@/lib/queries/dashboard";
 import NavbarActions from "./NavbarActions";
 import NavbarShell from "./NavbarShell";
 import NavLink from "./NavLink";
@@ -31,7 +31,14 @@ const NAV_LINKS = [
  */
 export default async function Navbar() {
   const [founderSession, publicSession] = await Promise.all([getSession(), getPublicSession()]);
-  const notifications = publicSession ? await getPublicNotifications(publicSession.userId) : [];
+  let notifications: Awaited<ReturnType<typeof getPublicNotifications>> = [];
+  let unreadCount = 0;
+  if (publicSession) {
+    [notifications, unreadCount] = await Promise.all([
+      getPublicNotifications(publicSession.userId),
+      getPublicUnreadNotificationCount(publicSession.userId),
+    ]);
+  }
 
   return (
     <NavbarShell>
@@ -62,6 +69,7 @@ export default async function Navbar() {
           <NavbarActions
             publicUser={publicSession ? { name: publicSession.name, email: publicSession.email, image: publicSession.image } : null}
             notifications={notifications}
+            unreadCount={unreadCount}
           />
           {founderSession ? (
             <Button href="/admin" variant="secondary" size="sm">

@@ -5,7 +5,7 @@ import { requireSession } from "@/lib/auth/guard";
 import { getPublicSession } from "@/lib/public-auth/session";
 import { prisma } from "@/lib/prisma";
 import { updateManyByRow } from "@/lib/actions/errors";
-import { getPublicNotifications, type PublicNotificationItem } from "@/lib/queries/dashboard";
+import { getPublicNotifications, getPublicUnreadNotificationCount, type PublicNotificationItem } from "@/lib/queries/dashboard";
 
 /**
  * Marks every unread notification for the signed-in admin as read. Per-row
@@ -57,6 +57,12 @@ export async function markPublicNotificationReadAction(notificationId: string): 
   revalidatePath("/", "layout");
 }
 
+export interface PublicNotificationSnapshot {
+  items: PublicNotificationItem[];
+  /** The real unread total (not just how many of the capped `items` list happen to be unread) — see getPublicUnreadNotificationCount. */
+  unreadCount: number;
+}
+
 /**
  * Lets NotificationBell (a client component, mounted once in the root
  * layout and server-rendered with whatever was true at that page load)
@@ -64,10 +70,14 @@ export async function markPublicNotificationReadAction(notificationId: string): 
  * "important notifications appear quickly." Plain interval polling, not a
  * websocket/SSE channel: this is a low-frequency, low-stakes UI refresh for
  * the signed-in visitor's own notifications, not session/behavior
- * surveillance, so the simplest correct mechanism is the right one.
+ * surveillance, so the simplest correct mechanism is the right one. Bundles
+ * the list and the unread count into one round trip rather than two
+ * separate polled actions, so tightening the poll interval doesn't double
+ * the read volume.
  */
-export async function fetchPublicNotificationsAction(): Promise<PublicNotificationItem[]> {
+export async function fetchPublicNotificationsAction(): Promise<PublicNotificationSnapshot> {
   const session = await getPublicSession();
-  if (!session) return [];
-  return getPublicNotifications(session.userId);
+  if (!session) return { items: [], unreadCount: 0 };
+  const [items, unreadCount] = await Promise.all([getPublicNotifications(session.userId), getPublicUnreadNotificationCount(session.userId)]);
+  return { items, unreadCount };
 }

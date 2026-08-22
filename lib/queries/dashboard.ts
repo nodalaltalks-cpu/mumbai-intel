@@ -18,7 +18,11 @@ export interface PublicNotificationItem {
   body: string;
   entityType: string | null;
   entityId: string | null;
+  imageUrl: string | null;
+  actionLabel: string | null;
+  actionUrl: string | null;
   readAt: Date | null;
+  clickedAt: Date | null;
   createdAt: Date;
 }
 
@@ -29,6 +33,16 @@ export async function getPublicNotifications(publicUserId: string, limit = 15): 
     orderBy: { createdAt: "desc" },
     take: limit,
   });
+}
+
+/**
+ * The real unread total, separate from getPublicNotifications' capped list
+ * of 15 rows — a cheap indexed COUNT, not the length of the (possibly
+ * truncated) display list, so the bell badge stays correct once a visitor
+ * has more than 15 unread notifications.
+ */
+export async function getPublicUnreadNotificationCount(publicUserId: string): Promise<number> {
+  return prisma.notification.count({ where: { recipientPublicUserId: publicUserId, readAt: null } });
 }
 
 export interface WishlistItem {
