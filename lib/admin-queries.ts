@@ -322,6 +322,45 @@ export async function getActivityFeed(limit = 15) {
   );
 }
 
+export interface ActivityFeedFilters {
+  since?: Date;
+  until?: Date;
+  entityType?: string;
+  actorId?: string;
+}
+
+/**
+ * The full Activity Center page (Section 22) — same underlying AuditLog
+ * table as the dashboard's getActivityFeed widget above, extended with the
+ * period/entity/actor filtering a standalone page needs. Callers pass the
+ * period's since/until from the existing central date-period utility
+ * (lib/analytics/period.ts) rather than this function doing its own date math.
+ */
+export async function getActivityFeedFiltered(filters: ActivityFeedFilters, limit = 100) {
+  return safeQuery("getActivityFeedFiltered", [], () =>
+    prisma.auditLog.findMany({
+      where: {
+        ...(filters.since || filters.until
+          ? { at: { ...(filters.since ? { gte: filters.since } : {}), ...(filters.until ? { lt: filters.until } : {}) } }
+          : {}),
+        ...(filters.entityType ? { entityType: filters.entityType } : {}),
+        ...(filters.actorId ? { actorId: filters.actorId } : {}),
+      },
+      orderBy: { at: "desc" },
+      take: limit,
+      include: { actor: { select: { id: true, name: true, email: true } } },
+    })
+  );
+}
+
+/** Distinct entity types currently present in AuditLog — powers the Activity Center's filter dropdown without hardcoding a list that drifts from what's actually logged. */
+export async function getActivityEntityTypes(): Promise<string[]> {
+  return safeQuery("getActivityEntityTypes", [], async () => {
+    const rows = await prisma.auditLog.findMany({ distinct: ["entityType"], select: { entityType: true }, orderBy: { entityType: "asc" } });
+    return rows.map((r) => r.entityType);
+  });
+}
+
 export async function getRecentProjectsAdmin(limit = 5) {
   return safeQuery("getRecentProjectsAdmin", [], () =>
     prisma.project.findMany({
@@ -1206,6 +1245,29 @@ export async function getIngestLogForBatch(batchId: string) {
   );
 }
 
+/**
+ * Plain-language operational summary for the Data Sync landing page (Section
+ * 7's "Data Quality Dashboard") — composed entirely from the existing
+ * IngestBatch/IngestStagingRecord/IngestLogEntry tables, no new model.
+ */
+export async function getDataSyncSummary() {
+  return safeQuery(
+    "getDataSyncSummary",
+    { pendingReview: 0, possibleDuplicates: 0, invalidRecent: 0, failedBatches: 0, lastSyncAt: null as Date | null },
+    async () => {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const [pendingReview, possibleDuplicates, invalidRecent, failedBatches, lastBatch] = await Promise.all([
+        prisma.ingestStagingRecord.count({ where: { status: "PENDING" } }),
+        prisma.ingestStagingRecord.count({ where: { status: "PENDING", matchedExistingId: { not: null } } }),
+        prisma.ingestLogEntry.count({ where: { action: "FAILED", createdAt: { gte: sevenDaysAgo } } }),
+        prisma.ingestBatch.count({ where: { status: "failed" } }),
+        prisma.ingestBatch.findFirst({ where: { status: "success" }, orderBy: { startedAt: "desc" }, select: { startedAt: true } }),
+      ]);
+      return { pendingReview, possibleDuplicates, invalidRecent, failedBatches, lastSyncAt: lastBatch?.startedAt ?? null };
+    }
+  );
+}
+
 export async function getPendingStagingRecords() {
   return safeQuery("getPendingStagingRecords", [], () =>
     prisma.ingestStagingRecord.findMany({
@@ -1484,12 +1546,67 @@ export async function getSavedSearchNotificationEligibility(limit = 200) {
 }
 
 /** Contact Us submissions for the admin queue (Section 9) — newest first, optionally filtered by status. */
-export async function getContactEnquiries(status?: "NEW" | "IN_PROGRESS" | "RESOLVED", limit = 100) {
+export async function getContactEnquiries(
+  status?: "NEW" | "IN_PROGRESS" | "WAITING_FOR_USER" | "RESOLVED" | "CLOSED",
+  limit = 100
+) {
   return safeQuery("getContactEnquiries", [], () =>
     prisma.contactEnquiry.findMany({
-      where: status ? { status } : undefined,
+      where: { deletedAt: null, ...(status ? { status } : {}) },
       orderBy: { createdAt: "desc" },
       take: limit,
+      include: { publicUser: { select: { id: true, email: true, name: true } } },
+    })
+  );
+}
+
+export async function getTrashedContactEnquiries(filters: TrashListFilters = {}) {
+  return safeQuery("getTrashedContactEnquiries", [] as Awaited<ReturnType<typeof fetchTrashedContactEnquiries>>, () =>
+    fetchTrashedContactEnquiries(filters)
+  );
+}
+
+async function fetchTrashedContactEnquiries(filters: TrashListFilters) {
+  const where: Prisma.ContactEnquiryWhereInput = { deletedAt: { not: null } };
+  if (filters.q) {
+    where.OR = [
+      { name: { contains: filters.q, mode: "insensitive" } },
+      { email: { contains: filters.q, mode: "insensitive" } },
+      { message: { contains: filters.q, mode: "insensitive" } },
+    ];
+  }
+  const items = await prisma.contactEnquiry.findMany({
+    where,
+    orderBy: { deletedAt: "desc" },
+    select: { id: true, name: true, email: true, subject: true, status: true, deletedAt: true, deletedByUserId: true },
+  });
+  const deletedByName = await resolveDeletedByNames(items.map((i) => i.deletedByUserId));
+  return items.map((i) => ({ ...i, deletedByName: i.deletedByUserId ? deletedByName.get(i.deletedByUserId) ?? null : null }));
+}
+
+export async function getTrashedCampaigns(filters: TrashListFilters = {}) {
+  return safeQuery("getTrashedCampaigns", [] as Awaited<ReturnType<typeof fetchTrashedCampaigns>>, () => fetchTrashedCampaigns(filters));
+}
+
+async function fetchTrashedCampaigns(filters: TrashListFilters) {
+  const where: Prisma.EmailCampaignWhereInput = { deletedAt: { not: null } };
+  if (filters.q) {
+    where.OR = [{ subject: { contains: filters.q, mode: "insensitive" } }];
+  }
+  const items = await prisma.emailCampaign.findMany({
+    where,
+    orderBy: { deletedAt: "desc" },
+    select: { id: true, subject: true, type: true, status: true, recipientCount: true, deletedAt: true, deletedByUserId: true },
+  });
+  const deletedByName = await resolveDeletedByNames(items.map((i) => i.deletedByUserId));
+  return items.map((i) => ({ ...i, deletedByName: i.deletedByUserId ? deletedByName.get(i.deletedByUserId) ?? null : null }));
+}
+
+/** Powers the Contact Enquiry detail page (User / Enquiry / Status panels). */
+export async function getContactEnquiryById(id: string) {
+  return safeQuery("getContactEnquiryById", null, () =>
+    prisma.contactEnquiry.findUnique({
+      where: { id },
       include: { publicUser: { select: { id: true, email: true, name: true } } },
     })
   );

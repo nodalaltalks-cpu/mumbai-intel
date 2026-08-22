@@ -1,7 +1,13 @@
 "use client";
 
-import { useActionState, useEffect, useState, useTransition } from "react";
-import { searchRecipientsAction, sendCampaignAction, type SendCampaignState } from "@/lib/actions/email-campaigns";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import {
+  searchRecipientsAction,
+  sendCampaignAction,
+  processCampaignQueueAction,
+  sendTestEmailAction,
+  type SendCampaignState,
+} from "@/lib/actions/email-campaigns";
 import type { EmailRecipientCandidate } from "@/lib/analytics/email-queries";
 import { SelectField, Field } from "./FormField";
 import RichTextEditor from "./RichTextEditor";
@@ -29,6 +35,11 @@ export default function EmailComposer({ localities }: { localities: { id: string
   const [preview, setPreview] = useState(false);
   const [subject, setSubject] = useState("");
   const [bodyHtml, setBodyHtml] = useState("");
+  const [testEmail, setTestEmail] = useState("");
+  const [testState, setTestState] = useState<{ error?: string; success?: string }>({});
+  const [isSendingTest, startTestTransition] = useTransition();
+  const [sendProgress, setSendProgress] = useState<{ sent: number; failed: number; remaining: number } | null>(null);
+  const draining = useRef(false);
 
   useEffect(() => {
     startSearch(async () => {
@@ -36,6 +47,44 @@ export default function EmailComposer({ localities }: { localities: { id: string
       setCandidates(results);
     });
   }, [q, segment, localityId]);
+
+  // Once sendCampaignAction queues a campaign, immediately drain it batch-by-batch — this is
+  // what makes "queued" still feel like "sent" from the founder's chair (Section 23: real
+  // automation, not a fake instant "sent" state — each batch is a real awaited SMTP send).
+  useEffect(() => {
+    if (!state.campaignId || draining.current) return;
+    draining.current = true;
+    let cancelled = false;
+    let totalSent = 0;
+    let totalFailed = 0;
+
+    async function drain(campaignId: string) {
+      for (;;) {
+        const result = await processCampaignQueueAction(campaignId);
+        if (cancelled) return;
+        if (result.error) {
+          setSendProgress(null);
+          return;
+        }
+        totalSent += result.sent ?? 0;
+        totalFailed += result.failed ?? 0;
+        setSendProgress({ sent: totalSent, failed: totalFailed, remaining: result.remaining ?? 0 });
+        if (!result.remaining) return;
+      }
+    }
+    void drain(state.campaignId);
+    return () => {
+      cancelled = true;
+    };
+  }, [state.campaignId]);
+
+  function handleSendTest() {
+    setTestState({});
+    startTestTransition(async () => {
+      const result = await sendTestEmailAction(testEmail, subject, bodyHtml);
+      setTestState(result);
+    });
+  }
 
   function toggle(candidate: EmailRecipientCandidate) {
     setSelected((prev) => {
@@ -151,6 +200,28 @@ export default function EmailComposer({ localities }: { localities: { id: string
           <Field label="Subject" name="subject" required value={subject} onChange={(e) => setSubject(e.target.value)} />
           <RichTextEditor name="bodyHtml" label="Body" onChange={setBodyHtml} />
         </div>
+
+        <div className="mt-4 flex flex-wrap items-end gap-2 border-t border-border pt-3">
+          <div className="flex-1">
+            <label className="mb-1 block text-[10px] uppercase tracking-wide text-muted">Send test email</label>
+            <input
+              value={testEmail}
+              onChange={(e) => setTestEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={handleSendTest}
+            disabled={isSendingTest || !testEmail || !subject || !bodyHtml}
+            className="shrink-0 rounded-sm border border-border px-3 py-2 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent disabled:opacity-50"
+          >
+            {isSendingTest ? "Sending test…" : "Send test"}
+          </button>
+        </div>
+        {testState.success ? <p className="mt-2 text-[11px] text-positive">{testState.success}</p> : null}
+        {testState.error ? <p className="mt-2 text-[11px] text-negative">{testState.error}</p> : null}
       </div>
 
       <div className="flex items-center gap-2">
@@ -161,8 +232,15 @@ export default function EmailComposer({ localities }: { localities: { id: string
         >
           {preview ? "Hide preview" : "Preview"}
         </button>
-        <SubmitButton pendingText="Sending…">Send to {selected.size} recipient{selected.size === 1 ? "" : "s"}</SubmitButton>
+        <SubmitButton pendingText="Queuing…">Send to {selected.size} recipient{selected.size === 1 ? "" : "s"}</SubmitButton>
       </div>
+
+      {sendProgress ? (
+        <p className="text-[11px] text-muted">
+          Sending… {sendProgress.sent} sent, {sendProgress.failed} failed
+          {sendProgress.remaining > 0 ? `, ${sendProgress.remaining} remaining` : " — done."}
+        </p>
+      ) : null}
 
       {preview ? (
         <div className="rounded-sm border border-border bg-surface p-4">

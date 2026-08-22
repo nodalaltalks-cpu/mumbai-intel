@@ -1,6 +1,7 @@
 "use server";
 
-import { requireAdminSession, requireMutateSession } from "@/lib/auth/guard";
+import { requireAdminSession, requireMutateSession, isAdmin } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { PRIMARY_CITY_SLUG } from "@/lib/queries";
 import { runIngestBatch } from "@/lib/ingestion/runner";
@@ -354,15 +355,43 @@ async function applyTransactionApproval(record: { payload: unknown }): Promise<s
   return created.id;
 }
 
-/** Approves a pending IngestStagingRecord — creates or merges, per the record's entityType. */
+/**
+ * Full-row snapshot of an entity for the audit trail's before/after — plain
+ * findUnique with no include, so it's exactly the scalar-field shape a
+ * rollback would need to restore, and exactly what logAudit's toJsonSafe
+ * already knows how to serialize (Decimal/BigInt/Date).
+ */
+async function fetchEntitySnapshot(entityType: string, id: string): Promise<unknown> {
+  switch (entityType) {
+    case "Project":
+      return prisma.project.findUnique({ where: { id } });
+    case "Builder":
+      return prisma.builder.findUnique({ where: { id } });
+    case "Locality":
+      return prisma.locality.findUnique({ where: { id } });
+    case "Transaction":
+      return prisma.transaction.findUnique({ where: { id } });
+    case "InfraAsset":
+      return prisma.infraAsset.findUnique({ where: { id } });
+    default:
+      return null;
+  }
+}
+
+/** Approves a pending IngestStagingRecord — creates or merges, per the record's entityType. Gated the same as any other write-to-production step (Section 21: employees can stage, only an approver — ADMIN or an explicit data_sync.approve grant — can publish). */
 export async function approveStagingRecordAction(id: string): Promise<IngestActionResult> {
   const session = await requireMutateSession();
+  if (!isAdmin(session.role) && !(await hasPermission(session, "data_sync.approve"))) {
+    return { error: "You don't have permission to approve imported data. Ask your admin to grant it." };
+  }
 
   const record = await prisma.ingestStagingRecord.findUnique({ where: { id } });
   if (!record) return { error: "Staging record not found" };
   if (record.status !== "PENDING") return { error: "This record has already been reviewed" };
 
   try {
+    const before = record.targetId ? await fetchEntitySnapshot(record.entityType, record.targetId) : null;
+
     let entityId: string;
     if (record.entityType === "InfraAsset") {
       entityId = await applyInfraAssetApproval(record);
@@ -378,10 +407,13 @@ export async function approveStagingRecordAction(id: string): Promise<IngestActi
       return { error: `Unsupported entity type "${record.entityType}"` };
     }
 
+    const after = await fetchEntitySnapshot(record.entityType, entityId);
+
     await prisma.ingestStagingRecord.update({
       where: { id },
-      data: { status: "APPROVED", reviewedByUserId: session.userId, reviewedAt: new Date() },
+      data: { status: "APPROVED", reviewedByUserId: session.userId, reviewedAt: new Date(), appliedEntityId: entityId },
     });
+    await logAudit(session.userId, "ingest.approve", record.entityType, entityId, { before, after });
     await emit("ReviewApproved", { stagingRecordId: id, entityType: record.entityType, entityId, actorId: session.userId });
     if (record.entityType === "Transaction") {
       await emit("TransactionImported", { transactionId: entityId, batchId: record.batchId, actorId: session.userId });
@@ -392,9 +424,12 @@ export async function approveStagingRecordAction(id: string): Promise<IngestActi
   }
 }
 
-/** Rejects a pending IngestStagingRecord — no write to the target entity. */
+/** Rejects a pending IngestStagingRecord — no write to the target entity. Same approver gate as approveStagingRecordAction. */
 export async function rejectStagingRecordAction(id: string): Promise<IngestActionResult> {
   const session = await requireMutateSession();
+  if (!isAdmin(session.role) && !(await hasPermission(session, "data_sync.approve"))) {
+    return { error: "You don't have permission to reject imported data. Ask your admin to grant it." };
+  }
 
   const record = await prisma.ingestStagingRecord.findUnique({ where: { id } });
   if (!record) return { error: "Staging record not found" };
@@ -406,6 +441,86 @@ export async function rejectStagingRecordAction(id: string): Promise<IngestActio
   });
   await emit("ReviewRejected", { stagingRecordId: id, entityType: record.entityType, actorId: session.userId });
   return {};
+}
+
+const ROLLBACK_SOFT_DELETE_ENTITY_TYPES = new Set(["Project", "Builder", "Locality", "Transaction"]);
+
+/**
+ * Rolls back a batch's already-approved staging records. Scoped deliberately
+ * narrow (Section 23: no fake automation) — only reverses the unambiguous
+ * case, a record that CREATED a brand-new row (record.targetId was null),
+ * by soft-deleting it into the existing Trash mechanism (same deletedAt/
+ * deletedByUserId columns Project/Builder/Locality/Transaction already use).
+ * A record that merged into an EXISTING row has no safe generic way to
+ * restore arbitrary prior field values here, so it's left untouched and
+ * counted as "needs manual review" — the entity's own History panel
+ * (AuditHistory, powered by the ingest.approve entry just below) already
+ * shows the exact before→after field diff for a founder to revert by hand.
+ * Also skips (as "needs manual review") anything touched again after
+ * approval, so a rollback can never clobber someone else's later edit.
+ */
+export async function rollbackBatchAction(
+  batchId: string
+): Promise<{ error?: string; rolledBack?: number; needsManualReview?: number }> {
+  const session = await requireAdminSession();
+
+  const batch = await prisma.ingestBatch.findUnique({ where: { id: batchId }, select: { id: true } });
+  if (!batch) return { error: "Batch not found" };
+
+  const records = await prisma.ingestStagingRecord.findMany({ where: { batchId, status: "APPROVED" } });
+  if (records.length === 0) return { error: "No approved records to roll back in this batch" };
+
+  let rolledBack = 0;
+  let needsManualReview = 0;
+
+  for (const record of records) {
+    const canAutoRollback = !record.targetId && record.appliedEntityId && ROLLBACK_SOFT_DELETE_ENTITY_TYPES.has(record.entityType);
+    if (!canAutoRollback) {
+      needsManualReview += 1;
+      continue;
+    }
+
+    const entityId = record.appliedEntityId!;
+    try {
+      const currentSnapshot = (await fetchEntitySnapshot(record.entityType, entityId)) as { updatedAt?: Date; deletedAt?: Date | null } | null;
+      if (!currentSnapshot || currentSnapshot.deletedAt) {
+        // Already gone or already in Trash — nothing left to roll back automatically.
+        needsManualReview += 1;
+        continue;
+      }
+      if (record.reviewedAt && currentSnapshot.updatedAt && currentSnapshot.updatedAt.getTime() > record.reviewedAt.getTime() + 5000) {
+        // Edited by someone/something since approval — don't silently discard that later edit.
+        needsManualReview += 1;
+        continue;
+      }
+
+      const deleteData =
+        record.entityType === "Transaction"
+          ? { deletedAt: new Date(), deletedByUserId: session.userId }
+          : { deletedAt: new Date(), deletedByUserId: session.userId, isPublished: false, isArchived: true };
+
+      if (record.entityType === "Project") await prisma.project.update({ where: { id: entityId }, data: deleteData });
+      else if (record.entityType === "Builder") await prisma.builder.update({ where: { id: entityId }, data: deleteData });
+      else if (record.entityType === "Locality") await prisma.locality.update({ where: { id: entityId }, data: deleteData });
+      else if (record.entityType === "Transaction") await prisma.transaction.update({ where: { id: entityId }, data: deleteData });
+
+      await prisma.ingestStagingRecord.update({
+        where: { id: record.id },
+        data: { status: "ROLLED_BACK", rolledBackAt: new Date(), rolledBackByUserId: session.userId },
+      });
+      await logAudit(session.userId, "ingest.rollback", record.entityType, entityId, {
+        before: { deletedAt: null },
+        after: { deletedAt: deleteData.deletedAt },
+      });
+      rolledBack += 1;
+    } catch {
+      needsManualReview += 1;
+    }
+  }
+
+  await logAudit(session.userId, "ingest.batch.rollback", "IngestBatch", batchId, { after: { rolledBack, needsManualReview } });
+  revalidateInfra();
+  return { rolledBack, needsManualReview };
 }
 
 /** Bulk-approves pending staging records — loops the single-record approval so each row still gets its own audit entry. */

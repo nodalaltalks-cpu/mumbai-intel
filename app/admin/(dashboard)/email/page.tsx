@@ -23,6 +23,7 @@ const TYPE_LABEL: Record<string, string> = {
 
 const STATUS_CLASS: Record<string, string> = {
   DRAFT: "border-border bg-surface-raised text-muted",
+  QUEUED: "border-border bg-surface-raised text-muted",
   SENDING: "border-accent/40 bg-accent/10 text-accent",
   SENT: "border-positive/40 bg-positive/10 text-positive",
   FAILED: "border-negative/40 bg-negative/10 text-negative",

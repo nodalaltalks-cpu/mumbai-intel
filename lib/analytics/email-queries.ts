@@ -1,7 +1,38 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, EmailCampaignType } from "@prisma/client";
 import type { AnalyticsPeriod } from "./period";
+
+/**
+ * Campaign types that count as marketing communication (Section 12) and
+ * therefore require the recipient to have actually opted in — vs.
+ * REPORT_COMMUNICATION, which is a reply to a report the user themselves
+ * filed and needs no separate marketing consent.
+ */
+const MARKETING_CAMPAIGN_TYPES: ReadonlySet<EmailCampaignType> = new Set(["NEWSLETTER", "RESEARCH_UPDATE", "MARKET_REPORT", "PRODUCT_COMMUNICATION"]);
+
+export function requiresMarketingConsent(type: EmailCampaignType): boolean {
+  return MARKETING_CAMPAIGN_TYPES.has(type);
+}
+
+/**
+ * Of the given PublicUser ids, which are actually eligible to receive a
+ * marketing send — subscribed to the newsletter OR opted into product
+ * updates. This is the hard send-time gate (Section 12: "Never send
+ * marketing emails simply because someone created an account"), applied
+ * regardless of how the recipients were selected in the composer.
+ */
+export async function filterEligibleForMarketing(userIds: string[]): Promise<Set<string>> {
+  if (userIds.length === 0) return new Set();
+  const eligible = await prisma.publicUser.findMany({
+    where: {
+      id: { in: userIds },
+      OR: [{ newsletterSubscriptions: { some: { status: "SUBSCRIBED" } } }, { notificationPreferences: { productUpdates: true } }],
+    },
+    select: { id: true },
+  });
+  return new Set(eligible.map((u) => u.id));
+}
 
 export interface EmailRecipientCandidate {
   id: string;
@@ -57,7 +88,7 @@ export interface EmailCampaignSummary {
 
 export async function getEmailCampaigns(limit = 50, period?: AnalyticsPeriod): Promise<EmailCampaignSummary[]> {
   return prisma.emailCampaign.findMany({
-    where: period ? { createdAt: { gte: period.since, lt: period.until } } : undefined,
+    where: { deletedAt: null, ...(period ? { createdAt: { gte: period.since, lt: period.until } } : {}) },
     orderBy: { createdAt: "desc" },
     take: limit,
     select: {

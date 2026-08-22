@@ -8,7 +8,10 @@ import type { SessionPayload } from "@/lib/auth/session";
 const NAV_SECTIONS: { label: string; links: { label: string; href: string }[] }[] = [
   {
     label: "Overview",
-    links: [{ label: "Dashboard", href: "/admin" }],
+    links: [
+      { label: "Dashboard", href: "/admin" },
+      { label: "Activity", href: "/admin/activity" },
+    ],
   },
   {
     label: "Catalog",

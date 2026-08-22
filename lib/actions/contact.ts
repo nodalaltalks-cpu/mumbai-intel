@@ -7,6 +7,8 @@ import { sendContactMessageEmail } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
 import { getPublicSession } from "@/lib/public-auth/session";
 import { CONTACT_SUBJECTS } from "@/lib/contact-constants";
+import { createNotification, notifyAllAdmins } from "@/lib/notifications";
+import { logAudit } from "@/lib/audit";
 import { friendlyPrismaError } from "./errors";
 
 const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefined ? undefined : v);
@@ -48,9 +50,10 @@ export async function submitContactMessageAction(_prevState: ContactFormState, f
   const data = parsed.data;
 
   const session = await getPublicSession();
+  let enquiryId: string;
 
   try {
-    await prisma.contactEnquiry.create({
+    const enquiry = await prisma.contactEnquiry.create({
       data: {
         name: data.name,
         email: data.email,
@@ -61,11 +64,33 @@ export async function submitContactMessageAction(_prevState: ContactFormState, f
         sourcePage: data.sourcePage ?? null,
       },
     });
+    enquiryId = enquiry.id;
   } catch (error) {
     return { error: friendlyPrismaError(error) };
   }
 
-  // Best-effort — the enquiry is already saved above, so a Resend hiccup here must never block the user's success message.
+  // Best-effort from here — the enquiry is already saved above, so none of this can block the user's success message.
+  await logAudit(session?.userId ?? null, "contact_enquiry.receive", "ContactEnquiry", enquiryId, {
+    after: { name: data.name, email: data.email, subject: data.subject ?? null },
+  });
+  if (session?.userId) {
+    await createNotification({
+      type: "CONTACT_ENQUIRY_RECEIVED",
+      title: "We've received your enquiry",
+      body: "Thanks for reaching out — we've received your enquiry and will follow up soon.",
+      recipientPublicUserId: session.userId,
+      entityType: "ContactEnquiry",
+      entityId: enquiryId,
+    });
+  }
+  await notifyAllAdmins({
+    type: "ADMIN_NEW_ENQUIRY",
+    title: "New contact enquiry",
+    body: `${data.name} — ${data.message.slice(0, 140)}`,
+    entityType: "ContactEnquiry",
+    entityId: enquiryId,
+  });
+
   try {
     await sendContactMessageEmail({ name: data.name, email: data.email, message: data.message });
   } catch (error) {

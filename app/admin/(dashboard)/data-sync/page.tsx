@@ -1,10 +1,21 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { requireSession } from "@/lib/auth/guard";
-import { getIngestSources, getRecentIngestBatches, getPendingStagingRecords, getFailedIngestBatches } from "@/lib/admin-queries";
+import { getIngestSources, getRecentIngestBatches, getPendingStagingRecords, getFailedIngestBatches, getDataSyncSummary } from "@/lib/admin-queries";
 import { triggerSyncAction, toggleIngestSourceEnabledAction, retryFailedBatchAction } from "@/lib/actions/ingestion";
 import { formatDate } from "@/lib/format";
 import ConfirmButton from "@/app/admin/components/ConfirmButton";
+import RollbackBatchButton from "@/app/admin/components/RollbackBatchButton";
+
+function StatTile({ label, value, tone }: { label: string; value: string | number; tone?: "warn" | "bad" }) {
+  const valueClass = tone === "bad" ? "text-negative" : tone === "warn" ? "text-amber-500" : "text-foreground";
+  return (
+    <div className="rounded-sm border border-border bg-surface p-3">
+      <p className="text-[10px] uppercase tracking-wide text-muted">{label}</p>
+      <p className={`mt-1 font-mono text-lg font-semibold ${valueClass}`}>{value}</p>
+    </div>
+  );
+}
 
 export const metadata: Metadata = { title: "Data Sync — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
@@ -18,11 +29,12 @@ const STATUS_STYLES: Record<string, string> = {
 
 export default async function DataSyncPage() {
   const session = await requireSession();
-  const [sources, batches, pending, failedBatches] = await Promise.all([
+  const [sources, batches, pending, failedBatches, summary] = await Promise.all([
     getIngestSources(),
     getRecentIngestBatches(15),
     getPendingStagingRecords(),
     getFailedIngestBatches(10),
+    getDataSyncSummary(),
   ]);
 
   return (
@@ -30,6 +42,15 @@ export default async function DataSyncPage() {
       <div>
         <h1 className="font-mono text-lg font-semibold text-foreground">Data Sync</h1>
         <p className="text-xs text-muted">Automated ingestion from authentic public sources — every write is logged and provenance-tagged.</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <StatTile label="Pending review" value={summary.pendingReview} tone={summary.pendingReview > 0 ? "warn" : undefined} />
+        <StatTile label="Possible duplicates" value={summary.possibleDuplicates} tone={summary.possibleDuplicates > 0 ? "warn" : undefined} />
+        <StatTile label="Invalid rows (7d)" value={summary.invalidRecent} tone={summary.invalidRecent > 0 ? "bad" : undefined} />
+        <StatTile label="Failed imports" value={summary.failedBatches} tone={summary.failedBatches > 0 ? "bad" : undefined} />
+        <StatTile label="Last sync" value={summary.lastSyncAt ? formatDate(summary.lastSyncAt) : "Never"} />
+        <StatTile label="Active sources" value={sources.filter((s) => s.enabled).length} />
       </div>
 
       {pending.length > 0 ? (
@@ -137,9 +158,14 @@ export default async function DataSyncPage() {
                     {batch._count.stagingRecords > 0 ? ` (${batch._count.stagingRecords} staged)` : ""}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <Link href={`/admin/data-sync/batches/${batch.id}`} className="font-mono text-accent hover:underline">
-                      View ({batch._count.logEntries})
-                    </Link>
+                    <div className="flex items-center justify-end gap-2">
+                      <Link href={`/admin/data-sync/batches/${batch.id}`} className="font-mono text-accent hover:underline">
+                        View ({batch._count.logEntries})
+                      </Link>
+                      {session.role === "ADMIN" && batch.status === "success" && batch._count.stagingRecords > 0 ? (
+                        <RollbackBatchButton batchId={batch.id} />
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               ))}

@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireAdminSession, requireMutateSession } from "@/lib/auth/guard";
+import { requireTrashReauth } from "@/lib/auth/trash-reauth";
 import { prisma } from "@/lib/prisma";
 import { revalidateBuilder } from "@/lib/cache";
 import { CONFIDENCE_LEVELS, DATA_SOURCES } from "@/lib/project-meta";
@@ -325,6 +326,11 @@ export async function restoreBuilderAction(builderId: string): Promise<{ error?:
  */
 export async function permanentlyDeleteBuilderAction(builderId: string): Promise<{ error?: string }> {
   const session = await requireAdminSession();
+  try {
+    await requireTrashReauth(session.userId);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Re-authentication required" };
+  }
   const [existing, projectCount] = await Promise.all([
     prisma.builder.findUnique({
       where: { id: builderId },
@@ -358,6 +364,11 @@ export async function permanentlyDeleteBuilderAction(builderId: string): Promise
 
 export async function emptyBuilderTrashAction(): Promise<{ error?: string; affected?: number }> {
   const session = await requireAdminSession();
+  try {
+    await requireTrashReauth(session.userId);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Re-authentication required" };
+  }
 
   // Project.builderId is ON DELETE SET NULL, so a bulk deleteMany would
   // otherwise silently detach still-live projects from their builder — skip
@@ -463,6 +474,13 @@ export async function bulkBuilderAction(
 ): Promise<{ error?: string; affected?: number }> {
   const session = await requireAdminSession();
   if (builderIds.length === 0) return { error: "No builders selected" };
+  if (operation === "permanent-delete") {
+    try {
+      await requireTrashReauth(session.userId);
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "Re-authentication required" };
+    }
+  }
 
   let affected = 0;
   try {

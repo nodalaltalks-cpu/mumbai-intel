@@ -9,12 +9,16 @@ const TABS = [
   { key: undefined, label: "All" },
   { key: "NEW", label: "New" },
   { key: "IN_PROGRESS", label: "In Progress" },
+  { key: "WAITING_FOR_USER", label: "Waiting for User" },
   { key: "RESOLVED", label: "Resolved" },
+  { key: "CLOSED", label: "Closed" },
 ] as const;
+
+const VALID_STATUSES = new Set(["NEW", "IN_PROGRESS", "WAITING_FOR_USER", "RESOLVED", "CLOSED"]);
 
 export default async function ContactEnquiriesPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   const sp = await searchParams;
-  const status = sp.status === "NEW" || sp.status === "IN_PROGRESS" || sp.status === "RESOLVED" ? sp.status : undefined;
+  const status = sp.status && VALID_STATUSES.has(sp.status) ? (sp.status as Parameters<typeof getContactEnquiries>[0]) : undefined;
   const enquiries = await getContactEnquiries(status);
 
   return (

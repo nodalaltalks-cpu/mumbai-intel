@@ -5,6 +5,7 @@ import { getEmailCampaignDetail } from "@/lib/analytics/email-queries";
 import { formatDateTime } from "@/lib/format";
 import BackButton from "@/app/admin/components/BackButton";
 import DeleteCampaignButton from "@/app/admin/components/DeleteCampaignButton";
+import ContinueSendingButton from "@/app/admin/components/ContinueSendingButton";
 
 export const metadata: Metadata = { title: "Campaign — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
@@ -28,6 +29,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
   const { id } = await params;
   const campaign = await getEmailCampaignDetail(id);
   if (!campaign) notFound();
+  const pendingCount = campaign.recipients.filter((r) => r.status === "PENDING").length;
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
@@ -40,7 +42,10 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
             {TYPE_LABEL[campaign.type] ?? campaign.type} · Created by {campaign.createdByUser?.name ?? campaign.createdByUser?.email ?? "--"}
           </p>
         </div>
-        {session.role === "ADMIN" ? <DeleteCampaignButton campaignId={campaign.id} subject={campaign.subject} /> : null}
+        <div className="flex items-center gap-2">
+          {pendingCount > 0 ? <ContinueSendingButton campaignId={campaign.id} pendingCount={pendingCount} /> : null}
+          {session.role === "ADMIN" ? <DeleteCampaignButton campaignId={campaign.id} subject={campaign.subject} /> : null}
+        </div>
       </div>
 
       <section className="rounded-sm border border-border bg-surface p-4">
@@ -57,8 +62,8 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
           <div><dt className="text-muted">Opened / Clicked</dt><dd className="font-mono text-muted">Not tracked</dd></div>
         </dl>
         <p className="mt-3 text-[10px] text-muted">
-          "Accepted by provider" means Resend&apos;s API took the send request — it is not proof of delivery. Delivery/bounce/open/click tracking
-          requires a Resend webhook, which isn&apos;t wired up yet.
+          &quot;Accepted by provider&quot; means the mail server took the send request over SMTP — it is not proof of delivery. Delivery/bounce/open/click
+          tracking requires a provider webhook, which isn&apos;t wired up yet.
         </p>
       </section>
 

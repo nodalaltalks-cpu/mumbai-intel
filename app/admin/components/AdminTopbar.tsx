@@ -224,6 +224,13 @@ export default function AdminTopbar({
                 ))
               )}
             </div>
+            <Link
+              href="/admin/activity"
+              onClick={() => setOpenMenu(null)}
+              className="block border-t border-border px-3 py-2 text-center text-[10px] font-mono uppercase tracking-wide text-accent hover:bg-surface"
+            >
+              View full activity log →
+            </Link>
           </div>
         ) : null}
       </div>

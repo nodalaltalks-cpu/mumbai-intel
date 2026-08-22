@@ -68,6 +68,16 @@ export const PERMISSION_GROUPS = [
     permissions: [{ key: "analytics.view", label: "View analytics" }],
   },
   {
+    key: "data_sync",
+    label: "Data Sync",
+    // Uploading/staging data is already available to any EDITOR-role user (requireMutateSession,
+    // same bar as every other data-entry action) -- no separate key for it, since gating it behind
+    // an explicit grant would silently revoke a capability existing EDITOR accounts already have.
+    // Only the write-to-production step (approve/reject/rollback) is gated, matching "Employee can
+    // import data, but cannot approve import."
+    permissions: [{ key: "data_sync.approve", label: "Approve, reject, or roll back imported data" }],
+  },
+  {
     key: "content",
     label: "Content",
     permissions: [{ key: "content.edit", label: "Edit platform content" }],

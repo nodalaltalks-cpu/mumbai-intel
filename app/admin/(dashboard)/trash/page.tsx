@@ -1,11 +1,15 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { requireSession } from "@/lib/auth/guard";
+import { requireAdminSession } from "@/lib/auth/guard";
+import { hasValidTrashReauth } from "@/lib/auth/trash-reauth";
+import { logAudit } from "@/lib/audit";
 import {
   getTrashedProjects,
   getTrashedBuilders,
   getTrashedLocalities,
   getTrashedTransactions,
+  getTrashedContactEnquiries,
+  getTrashedCampaigns,
 } from "@/lib/admin-queries";
 import {
   restoreProjectAction,
@@ -31,8 +35,21 @@ import {
   bulkTransactionAction,
   emptyTransactionTrashAction,
 } from "@/lib/actions/transactions";
+import {
+  restoreEnquiryAction,
+  permanentlyDeleteEnquiryAction,
+  bulkEnquiryTrashAction,
+  emptyEnquiryTrashAction,
+} from "@/lib/actions/contact-enquiries";
+import {
+  restoreCampaignAction,
+  permanentlyDeleteCampaignAction,
+  bulkCampaignTrashAction,
+  emptyCampaignTrashAction,
+} from "@/lib/actions/email-campaigns";
 import { formatPaise } from "@/lib/format";
 import TrashPanel, { type TrashItem } from "@/app/admin/components/TrashPanel";
+import TrashReauthGate from "@/app/admin/components/TrashReauthGate";
 
 export const metadata: Metadata = { title: "Trash — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
@@ -42,6 +59,8 @@ const TABS = [
   { key: "builders", label: "Builders" },
   { key: "localities", label: "Localities" },
   { key: "transactions", label: "Transactions" },
+  { key: "enquiries", label: "Contact Enquiries" },
+  { key: "campaigns", label: "Campaigns" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -51,8 +70,26 @@ export default async function AdminTrashPage({
 }: {
   searchParams: Promise<{ tab?: string; q?: string }>;
 }) {
-  const session = await requireSession();
-  const isAdmin = session.role === "ADMIN";
+  // Founder-only, full stop (Section 18) -- viewing this page at all previously only required
+  // requireSession() (any logged-in role), even though the mutating actions were already
+  // ADMIN-gated. That mismatch is fixed here.
+  const session = await requireAdminSession();
+
+  if (!(await hasValidTrashReauth(session.userId))) {
+    await logAudit(session.userId, "trash.access_denied_needs_reauth", "Trash", session.userId);
+    return (
+      <div className="flex flex-col gap-4">
+        <div>
+          <h1 className="font-mono text-lg font-semibold text-foreground">Trash</h1>
+          <p className="text-xs text-muted">Soft-deleted records — restore or permanently delete.</p>
+        </div>
+        <TrashReauthGate />
+      </div>
+    );
+  }
+  await logAudit(session.userId, "trash.access", "Trash", session.userId);
+
+  const isAdmin = true;
   const params = await searchParams;
   const tab = (TABS.some((t) => t.key === params.tab) ? params.tab : "projects") as TabKey;
   const q = params.q?.trim() || undefined;
@@ -124,7 +161,7 @@ export default async function AdminTrashPage({
         emptyTrashAction={emptyLocalityTrashAction}
       />
     );
-  } else {
+  } else if (tab === "transactions") {
     const rows = await getTrashedTransactions({ q });
     items = rows.map((r) => ({
       id: r.id,
@@ -141,6 +178,44 @@ export default async function AdminTrashPage({
         permanentDeleteAction={permanentlyDeleteTransactionAction}
         bulkAction={bulkTransactionAction}
         emptyTrashAction={emptyTransactionTrashAction}
+      />
+    );
+  } else if (tab === "enquiries") {
+    const rows = await getTrashedContactEnquiries({ q });
+    items = rows.map((r) => ({
+      id: r.id,
+      label: r.name,
+      sublabel: [r.email, r.subject, r.status].filter(Boolean).join(" · "),
+      deletedAt: r.deletedAt as Date,
+      deletedByName: r.deletedByName,
+    }));
+    panel = (
+      <TrashPanel
+        items={items}
+        isAdmin={isAdmin}
+        restoreAction={restoreEnquiryAction}
+        permanentDeleteAction={permanentlyDeleteEnquiryAction}
+        bulkAction={bulkEnquiryTrashAction}
+        emptyTrashAction={emptyEnquiryTrashAction}
+      />
+    );
+  } else {
+    const rows = await getTrashedCampaigns({ q });
+    items = rows.map((r) => ({
+      id: r.id,
+      label: r.subject,
+      sublabel: `${r.type} · ${r.status} · ${r.recipientCount} recipient(s)`,
+      deletedAt: r.deletedAt as Date,
+      deletedByName: r.deletedByName,
+    }));
+    panel = (
+      <TrashPanel
+        items={items}
+        isAdmin={isAdmin}
+        restoreAction={restoreCampaignAction}
+        permanentDeleteAction={permanentlyDeleteCampaignAction}
+        bulkAction={bulkCampaignTrashAction}
+        emptyTrashAction={emptyCampaignTrashAction}
       />
     );
   }

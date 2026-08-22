@@ -1118,7 +1118,9 @@ enum ReportStatus {
 enum ContactEnquiryStatus {
   NEW
   IN_PROGRESS
+  WAITING_FOR_USER
   RESOLVED
+  CLOSED
 }
 
 /// A Contact Us submission -- previously fire-and-forget (an email to the
@@ -1139,8 +1141,11 @@ model ContactEnquiry {
   adminNotes     String?
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
+  deletedAt      DateTime?
+  deletedByUserId String?
 
   @@index([status, createdAt])
+  @@index([deletedAt])
 }
 
 /// A visitor-submitted "this looks wrong" report — extends the existing
@@ -1181,6 +1186,14 @@ enum NotificationType {
   REPORT_RESOLVED
   ADMIN_NEW_REPORT
   ADMIN_REPORT_UNRESOLVED
+  CONTACT_ENQUIRY_RECEIVED
+  CONTACT_ENQUIRY_IN_PROGRESS
+  CONTACT_ENQUIRY_WAITING_FOR_USER
+  CONTACT_ENQUIRY_RESPONSE
+  CONTACT_ENQUIRY_RESOLVED
+  CONTACT_ENQUIRY_CLOSED
+  CONTACT_ENQUIRY_REOPENED
+  ADMIN_NEW_ENQUIRY
   /// Cloudinary (or, later, another provider) usage crossed a WATCH/WARNING/CRITICAL threshold.
   ADMIN_STORAGE_WARNING
   /// A user asked to verify their phone (lib/actions/phone-verification.ts). No live OTP
@@ -1404,9 +1417,15 @@ model IngestStagingRecord {
   payload           Json
   matchedExistingId String?
   matchConfidence   Decimal?    @db.Decimal(4, 3)
-  status            String      @default("PENDING") // PENDING | APPROVED | REJECTED
+  status            String      @default("PENDING") // PENDING | APPROVED | REJECTED | ROLLED_BACK
   reviewedByUserId  String?
   reviewedAt        DateTime?
+  /// The Project/Builder/Locality/Transaction row this record's approval actually wrote to
+  /// (created or merged into) -- set at approval time, so a later rollback can find it without
+  /// re-deriving it from payload/targetId. Null for records approved before this field existed.
+  appliedEntityId   String?
+  rolledBackAt      DateTime?
+  rolledBackByUserId String?
   createdAt         DateTime    @default(now())
 
   @@index([status, createdAt])
@@ -1579,6 +1598,7 @@ enum EmailCampaignType {
 
 enum EmailCampaignStatus {
   DRAFT
+  QUEUED
   SENDING
   SENT
   FAILED
@@ -1619,10 +1639,13 @@ model EmailCampaign {
   failureCount     Int                 @default(0)
   sentAt           DateTime?
   createdAt        DateTime            @default(now())
+  deletedAt        DateTime?
+  deletedByUserId  String?
 
   recipients EmailCampaignRecipient[]
 
   @@index([status, createdAt])
+  @@index([deletedAt])
 }
 
 /// Per-recipient row, not just a campaign-level count -- Section 18 explicitly

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdminSession, requireMutateSession } from "@/lib/auth/guard";
+import { requireTrashReauth } from "@/lib/auth/trash-reauth";
 import { prisma } from "@/lib/prisma";
 import { revalidateProject } from "@/lib/cache";
 import { PROJECT_STATUSES } from "@/lib/project-meta";
@@ -494,6 +495,11 @@ export async function restoreProjectAction(projectId: string): Promise<{ error?:
  */
 export async function permanentlyDeleteProjectAction(projectId: string): Promise<{ error?: string }> {
   const session = await requireAdminSession();
+  try {
+    await requireTrashReauth(session.userId);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Re-authentication required" };
+  }
 
   const existing = await prisma.project.findUnique({ where: { id: projectId }, select: { deletedAt: true } });
   if (!existing) return { error: "Project not found" };
@@ -522,6 +528,13 @@ export async function bulkProjectAction(
 ): Promise<{ error?: string; affected?: number }> {
   const session = await requireAdminSession();
   if (projectIds.length === 0) return { error: "No projects selected" };
+  if (operation === "permanent-delete") {
+    try {
+      await requireTrashReauth(session.userId);
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "Re-authentication required" };
+    }
+  }
 
   try {
     let affected = 0;
@@ -570,6 +583,11 @@ export async function bulkProjectAction(
 /** Permanently deletes everything currently in the Project Trash. */
 export async function emptyProjectTrashAction(): Promise<{ error?: string; affected?: number }> {
   const session = await requireAdminSession();
+  try {
+    await requireTrashReauth(session.userId);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Re-authentication required" };
+  }
 
   const trashed = await prisma.project.findMany({ where: { deletedAt: { not: null } }, select: { id: true } });
   for (const p of trashed) {

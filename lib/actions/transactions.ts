@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireAdminSession, requireMutateSession } from "@/lib/auth/guard";
+import { requireTrashReauth } from "@/lib/auth/trash-reauth";
 import { prisma } from "@/lib/prisma";
 import { revalidateTransaction } from "@/lib/cache";
 import { BUYER_TYPES, CONFIDENCE_LEVELS, DATA_SOURCES, TRANSACTION_TYPES } from "@/lib/project-meta";
@@ -167,6 +168,11 @@ export async function restoreTransactionAction(transactionId: string): Promise<{
 
 export async function permanentlyDeleteTransactionAction(transactionId: string): Promise<{ error?: string }> {
   const session = await requireAdminSession();
+  try {
+    await requireTrashReauth(session.userId);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Re-authentication required" };
+  }
 
   const existing = await prisma.transaction.findUnique({ where: { id: transactionId }, select: { deletedAt: true } });
   if (!existing) return { error: "Transaction not found" };
@@ -180,6 +186,11 @@ export async function permanentlyDeleteTransactionAction(transactionId: string):
 
 export async function emptyTransactionTrashAction(): Promise<{ error?: string; affected?: number }> {
   const session = await requireAdminSession();
+  try {
+    await requireTrashReauth(session.userId);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Re-authentication required" };
+  }
   const result = await prisma.transaction.deleteMany({ where: { deletedAt: { not: null } } });
   await logAudit(session.userId, "transaction.trash.empty", "Transaction", "bulk");
   revalidateTransaction();
@@ -194,6 +205,13 @@ export async function bulkTransactionAction(
 ): Promise<{ error?: string; affected?: number }> {
   const session = await requireAdminSession();
   if (transactionIds.length === 0) return { error: "No transactions selected" };
+  if (operation === "permanent-delete") {
+    try {
+      await requireTrashReauth(session.userId);
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "Re-authentication required" };
+    }
+  }
 
   let affected = 0;
   try {

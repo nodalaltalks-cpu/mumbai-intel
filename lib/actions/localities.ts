@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireAdminSession, requireMutateSession } from "@/lib/auth/guard";
+import { requireTrashReauth } from "@/lib/auth/trash-reauth";
 import { prisma } from "@/lib/prisma";
 import { revalidateLocality } from "@/lib/cache";
 import { PRIMARY_CITY_SLUG } from "@/lib/queries";
@@ -353,6 +354,11 @@ export async function restoreLocalityAction(localityId: string): Promise<DeleteL
 
 export async function permanentlyDeleteLocalityAction(localityId: string): Promise<DeleteLocalityResult> {
   const session = await requireAdminSession();
+  try {
+    await requireTrashReauth(session.userId);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Re-authentication required" };
+  }
 
   const [projectCount, transactionCount, existing] = await Promise.all([
     prisma.project.count({ where: { localityId } }),
@@ -381,6 +387,11 @@ export async function permanentlyDeleteLocalityAction(localityId: string): Promi
 
 export async function emptyLocalityTrashAction(): Promise<{ error?: string; affected?: number }> {
   const session = await requireAdminSession();
+  try {
+    await requireTrashReauth(session.userId);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Re-authentication required" };
+  }
 
   const blocked = await prisma.locality.findMany({
     where: { deletedAt: { not: null }, OR: [{ projects: { some: {} } }, { transactions: { some: {} } }] },
@@ -486,6 +497,13 @@ export async function bulkLocalityAction(
 ): Promise<{ error?: string; affected?: number }> {
   const session = await requireAdminSession();
   if (localityIds.length === 0) return { error: "No localities selected" };
+  if (operation === "permanent-delete") {
+    try {
+      await requireTrashReauth(session.userId);
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "Re-authentication required" };
+    }
+  }
 
   let affected = 0;
   try {

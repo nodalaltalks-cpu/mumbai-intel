@@ -1,20 +1,63 @@
 import "server-only";
+import nodemailer, { type Transporter } from "nodemailer";
 
 /**
- * Plain fetch call to the Resend API — no SDK dependency, consistent with the
- * rest of the codebase's "hand-rolled, no framework lock-in" style already
- * used for Google OAuth (see lib/public-auth/google.ts).
- *
- * Requires RESEND_API_KEY / EMAIL_FROM (see .env). Without them,
- * isEmailDeliveryConfigured() is false and sendEmail() falls back to logging
- * the message server-side, so the reset/contact flows stay fully testable
- * locally without an API key.
+ * SMTP transport (Section 10) — replaces the previous plain-fetch call to
+ * Resend's HTTP API. Generic SMTP_HOST/PORT/USER/PASSWORD/FROM env vars are
+ * honored first (so this works with any SMTP-capable provider, per the
+ * spec); when they aren't set, this defaults to Resend's own SMTP relay
+ * (smtp.resend.com, user "resend", password = the existing RESEND_API_KEY)
+ * so no new vendor signup is required — same provider, same API key,
+ * different wire protocol. Live-verified from a dev sandbox: TLS handshake
+ * and SMTP AUTH exchange with smtp.resend.com both complete correctly on
+ * ports 587 and 465 (confirmed by the server's own "Authentication
+ * credentials invalid" response when tested against a stale key) — the
+ * transport itself is reachable and correct; only a valid credential is
+ * needed to complete an actual send.
  */
+interface SmtpConfig {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  pass: string;
+  from: string;
+}
 
-const RESEND_API_URL = "https://api.resend.com/emails";
+function resolveSmtpConfig(): SmtpConfig | null {
+  const pass = process.env.SMTP_PASSWORD || process.env.RESEND_API_KEY;
+  const from = process.env.SMTP_FROM || process.env.EMAIL_FROM;
+  if (!pass || !from) return null;
+  const port = Number(process.env.SMTP_PORT) || 587;
+  return {
+    host: process.env.SMTP_HOST || "smtp.resend.com",
+    port,
+    secure: port === 465,
+    user: process.env.SMTP_USER || "resend",
+    pass,
+    from,
+  };
+}
+
+let cachedTransporter: Transporter | null = null;
+let cachedConfigKey: string | null = null;
+
+/** Cached per unique config (host+port+user) — recreated if env vars change (e.g. between test runs), same instance reused across sends otherwise, matching Fluid Compute's instance-reuse model instead of reconnecting per email. */
+function getTransporter(config: SmtpConfig): Transporter {
+  const key = `${config.host}:${config.port}:${config.user}`;
+  if (cachedTransporter && cachedConfigKey === key) return cachedTransporter;
+  cachedTransporter = nodemailer.createTransport({
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    auth: { user: config.user, pass: config.pass },
+  });
+  cachedConfigKey = key;
+  return cachedTransporter;
+}
 
 export function isEmailDeliveryConfigured(): boolean {
-  return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
+  return resolveSmtpConfig() !== null;
 }
 
 /**
@@ -41,9 +84,10 @@ export interface SendEmailResult {
 
 /** Every existing internal caller uses the sendXEmail wrappers below, which only look at the boolean; the in-house email campaign sender (lib/actions/email-campaigns.ts) needs the full result to record an honest per-recipient status. */
 async function sendEmailDetailed(params: { to: string; subject: string; html: string; replyTo?: string }): Promise<SendEmailResult> {
-  if (!isEmailDeliveryConfigured()) {
+  const config = resolveSmtpConfig();
+  if (!config) {
     if (isDeployedEnvironment()) {
-      const error = "Email delivery is not configured (RESEND_API_KEY/EMAIL_FROM missing) in a deployed environment.";
+      const error = "Email delivery is not configured (no SMTP_PASSWORD/RESEND_API_KEY or SMTP_FROM/EMAIL_FROM) in a deployed environment.";
       console.error(`[email] ${error} Refusing to fake-send "${params.subject}" to ${params.to}.`);
       return { ok: false, error };
     }
@@ -51,28 +95,24 @@ async function sendEmailDetailed(params: { to: string; subject: string; html: st
     return { ok: true };
   }
 
-  const response = await fetch(RESEND_API_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: process.env.EMAIL_FROM,
+  try {
+    const info = await getTransporter(config).sendMail({
+      from: config.from,
       to: params.to,
       subject: params.subject,
       html: params.html,
-      ...(params.replyTo ? { reply_to: params.replyTo } : {}),
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    console.error(`[email] Resend send failed (${response.status}): ${body}`);
-    return { ok: false, error: `Resend API error ${response.status}` };
+      ...(params.replyTo ? { replyTo: params.replyTo } : {}),
+    });
+    return { ok: true, providerMessageId: info.messageId };
+  } catch (error) {
+    // The real SMTP-server error, never a generic placeholder -- this is what was missing
+    // before (a Resend HTTP error body used to be logged but discarded, leaving only
+    // "Resend API error {status}" for the admin to see). Whatever the server actually said
+    // ("Authentication credentials invalid", "domain not verified", etc.) reaches the caller.
+    const message = error instanceof Error ? error.message : "Unknown SMTP error";
+    console.error(`[email] SMTP send failed for "${params.subject}" to ${params.to}:`, message);
+    return { ok: false, error: message };
   }
-  const json = await response.json().catch(() => null);
-  return { ok: true, providerMessageId: typeof json?.id === "string" ? json.id : undefined };
 }
 
 async function sendEmail(params: { to: string; subject: string; html: string; replyTo?: string }): Promise<boolean> {
