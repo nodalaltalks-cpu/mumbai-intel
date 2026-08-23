@@ -41,6 +41,8 @@ export async function updatePublicProfileAction(_prevState: ProfileFormState, fo
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 
+  const before = await prisma.publicUser.findUnique({ where: { id: session.userId }, select: { profileCompletionPercent: true } });
+
   try {
     await prisma.publicUser.update({
       where: { id: session.userId },
@@ -56,7 +58,10 @@ export async function updatePublicProfileAction(_prevState: ProfileFormState, fo
   }
 
   const completionPercent = await recalculatePublicUserCompletion(session.userId);
-  await recordResearchEvent("PROFILE_UPDATED", { entityType: "PublicUser", entityId: session.userId });
+  await recordResearchEvent("PROFILE_UPDATED", { entityType: "PublicUser", entityId: session.userId, metadata: { section: "basic_profile" } });
+  if (before?.profileCompletionPercent !== 100 && completionPercent === 100) {
+    await recordResearchEvent("PROFILE_COMPLETED", { entityType: "PublicUser", entityId: session.userId, metadata: { source: "basic_profile" } });
+  }
 
   revalidatePath("/account");
   return { success: "Profile saved.", completionPercent };

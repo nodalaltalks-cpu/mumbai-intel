@@ -14,11 +14,12 @@ import {
   getPopularSearches,
   getUserPreferences,
   getNotificationPreferences,
+  getDashboardNextActionSignals,
 } from "@/lib/queries/dashboard";
 import { removeWishlistItemAction } from "@/lib/actions/wishlist";
 import { toggleSavedProjectAction } from "@/lib/actions/saved-projects";
 import { removeRecentViewAction, clearRecentViewsAction } from "@/lib/actions/recent-views";
-import { deleteSavedSearchAction } from "@/lib/actions/saved-searches";
+import { deleteSavedSearchAction, toggleSavedSearchNotifyAction } from "@/lib/actions/saved-searches";
 import { clearSearchHistoryAction } from "@/lib/actions/search-history";
 import { formatDate, formatRelativeTime } from "@/lib/format";
 import BrochureDownloadLink from "@/app/components/BrochureDownloadLink";
@@ -31,6 +32,8 @@ import EmptyState from "@/app/components/ui/EmptyState";
 import Button from "@/app/components/ui/Button";
 import RemoveItemButton from "@/app/components/RemoveItemButton";
 import ClearAllButton from "@/app/components/ClearAllButton";
+import NextActionCard from "@/app/components/NextActionCard";
+import SavedSearchAlertToggle from "./SavedSearchAlertToggle";
 import NotificationPreferencesForm from "./NotificationPreferencesForm";
 import ProfileForm from "./ProfileForm";
 import PropertyPreferencesForm from "./PropertyPreferencesForm";
@@ -38,8 +41,10 @@ import BudgetPreferenceForm from "./BudgetPreferenceForm";
 import LocationsPreferenceForm from "./LocationsPreferenceForm";
 import PurposeForm from "./PurposeForm";
 import PhoneVerificationCard from "./PhoneVerificationCard";
+import VerifyEmailButton from "./VerifyEmailButton";
 import ProfileCompletionBar from "@/app/components/ui/ProfileCompletionBar";
 import { getCompletionSections } from "@/lib/profile-completion";
+import { resolveNextAction } from "@/lib/dashboard-next-action";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
 import { generateUniqueReferralCode } from "@/lib/referral";
 import ShareReferralCard from "@/app/components/ShareReferralCard";
@@ -51,40 +56,52 @@ const TABS = [
   { key: "research", label: "Continue Research" },
   { key: "wishlist", label: "Wishlist" },
   { key: "searches", label: "Saved Searches" },
-  { key: "history", label: "Search History" },
   { key: "profile", label: "Profile" },
 ] as const;
 
-/** Two-row layout: research/wishlist/searches together, then history alongside Profile — which gets its own visually-stronger pill style below (Section 11) rather than blending into the plain tab row, to nudge profile completion without reading as an ad. */
+/** Profile gets its own visually-stronger pill style below with a completion badge, rather than blending into the plain tab row, to nudge profile completion without reading as an ad. Search History deliberately isn't a top-level tab — it's folded into the Profile tab (#research-activity) since it's reference material, not a primary action surface. */
 const PRIMARY_TAB_KEYS = ["research", "wishlist", "searches"] as const;
-const SECONDARY_TAB_KEYS = ["history"] as const;
+
+function greeting(): string {
+  const hourIst = (new Date().getUTCHours() + 5.5) % 24;
+  if (hourIst < 5) return "Good night";
+  if (hourIst < 12) return "Good morning";
+  if (hourIst < 17) return "Good afternoon";
+  return "Good evening";
+}
 
 type TabKey = (typeof TABS)[number]["key"];
 
 export default async function AccountPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const session = await requirePublicSession("/account");
   const sp = await searchParams;
-  const tab = (TABS.some((t) => t.key === sp.tab) ? sp.tab : "research") as TabKey;
+  // "history" was a top-level tab before Search History moved into Profile
+  // (Section 7) — redirect old bookmarks/links there instead of silently
+  // falling back to Continue Research.
+  const requestedTab = sp.tab === "history" ? "profile" : sp.tab;
+  const tab = (TABS.some((t) => t.key === requestedTab) ? requestedTab : "research") as TabKey;
 
   // Each query below is gated to the active tab — viewing "Continue Research"
   // shouldn't also pay for the Wishlist join, Saved Searches, Search History,
   // Popular Searches, preferences, notification-preferences, and
   // getLocalitiesForSelect() queries that only the Profile tab needs. `user`
-  // is the one exception: the header (name/avatar) renders on every tab.
+  // and the next-action signals are the exceptions: the header and the
+  // dashboard-wide "what should I do next" card render on every tab.
   // eslint-disable-next-line prefer-const -- `user` is reassigned below by the referralCode lazy-backfill
-  let [user, savedProjects, wishlist, recentViews, savedSearches, searchHistory, popularSearches, preferences, notificationPreferences, localities] =
+  let [user, savedProjects, wishlist, recentViews, savedSearches, searchHistory, popularSearches, preferences, notificationPreferences, localities, nextActionSignals] =
     await Promise.all([
-      prisma.publicUser.findUnique({ where: { id: session.userId } }),
-      tab === "profile" ? getSavedProjectsForUser(session.userId) : Promise.resolve([]),
-      tab === "wishlist" ? getWishlistForUser(session.userId) : Promise.resolve([]),
-      tab === "research" ? getRecentViewsForUser(session.userId) : Promise.resolve([]),
-      tab === "searches" ? getSavedSearchesForUser(session.userId) : Promise.resolve([]),
-      tab === "history" ? getSearchHistoryForUser(session.userId) : Promise.resolve([]),
-      tab === "history" ? getPopularSearches(8) : Promise.resolve([]),
-      tab === "profile" ? getUserPreferences(session.userId) : Promise.resolve(null),
-      tab === "profile" ? getNotificationPreferences(session.userId) : Promise.resolve(null),
-      tab === "profile" ? getLocalitiesForSelect() : Promise.resolve([]),
-    ]);
+    prisma.publicUser.findUnique({ where: { id: session.userId } }),
+    tab === "profile" ? getSavedProjectsForUser(session.userId) : Promise.resolve([]),
+    tab === "wishlist" ? getWishlistForUser(session.userId) : Promise.resolve([]),
+    tab === "research" ? getRecentViewsForUser(session.userId) : Promise.resolve([]),
+    tab === "searches" ? getSavedSearchesForUser(session.userId) : Promise.resolve([]),
+    tab === "profile" ? getSearchHistoryForUser(session.userId) : Promise.resolve([]),
+    tab === "profile" ? getPopularSearches(8) : Promise.resolve([]),
+    tab === "profile" ? getUserPreferences(session.userId) : Promise.resolve(null),
+    tab === "profile" ? getNotificationPreferences(session.userId) : Promise.resolve(null),
+    tab === "profile" ? getLocalitiesForSelect() : Promise.resolve([]),
+    getDashboardNextActionSignals(session.userId),
+  ]);
   if (!user) notFound();
 
   // Lazy backfill: accounts created before the referral feature shipped have
@@ -110,24 +127,13 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
           preferredLocalityIds: preferences?.preferredLocalityIds ?? [],
           localityFreeText: preferences?.localityFreeText ?? [],
           preferredCategories: preferences?.preferredCategories ?? [],
+          preferredConfigurations: preferences?.preferredConfigurations ?? [],
+          preferredReadiness: preferences?.preferredReadiness ?? [],
           purposes: preferences?.purposes ?? [],
         })
       : [];
 
-  // Drives the "Tell us what you're looking for" empty state (Section 17) —
-  // true once the user has set anything in the Research Profile section, so
-  // the prompt disappears the moment it's no longer useful.
-  const hasAnyResearchPreference = Boolean(
-    preferences &&
-      (preferences.preferredBudgetMinRupees !== null ||
-        preferences.preferredBudgetMaxRupees !== null ||
-        preferences.preferredLocalityIds.length > 0 ||
-        preferences.localityFreeText.length > 0 ||
-        preferences.preferredCategories.length > 0 ||
-        preferences.preferredConfigurations.length > 0 ||
-        preferences.preferredReadiness.length > 0 ||
-        preferences.purposes.length > 0)
-  );
+  const nextAction = resolveNextAction({ profileCompletionPercent: user.profileCompletionPercent, ...nextActionSignals });
 
   function tabHref(key: TabKey) {
     return `/account?tab=${key}`;
@@ -139,7 +145,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
 
       <main id="main-content" className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-4 py-10 sm:px-6">
         <div className="flex items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-border bg-surface-raised text-lg font-mono font-semibold text-foreground">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-surface-raised text-lg font-mono font-semibold text-foreground">
             {user.image ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={user.image} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
@@ -147,54 +153,48 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               (user.name ?? user.email).slice(0, 2).toUpperCase()
             )}
           </div>
-          <div>
-            <h1 className="font-mono text-2xl font-bold text-foreground">My Dashboard</h1>
-            <p className="text-sm text-muted">{user.name ?? user.email}</p>
+          <div className="min-w-0">
+            <h1 className="truncate font-mono text-xl font-bold text-foreground sm:text-2xl">
+              {greeting()}
+              {user.name ? `, ${user.name.split(" ")[0]}` : ""}
+            </h1>
+            <p className="text-sm text-muted">Your property research home</p>
           </div>
         </div>
 
+        {nextAction ? <NextActionCard action={nextAction} /> : null}
+
         <ShareReferralCard referralCode={user.referralCode as string} />
 
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap gap-1 overflow-x-auto border-b border-border pb-px">
-            {TABS.filter((t) => (PRIMARY_TAB_KEYS as readonly string[]).includes(t.key)).map((t) => (
-              <Link
-                key={t.key}
-                href={tabHref(t.key)}
-                className={`shrink-0 rounded-t-sm border-b-2 px-3 py-2 text-xs font-mono uppercase tracking-wide transition-colors ${
-                  tab === t.key ? "border-accent text-accent" : "border-transparent text-muted hover:text-foreground"
-                }`}
-              >
-                {t.label}
-              </Link>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            {TABS.filter((t) => (SECONDARY_TAB_KEYS as readonly string[]).includes(t.key)).map((t) => (
-              <Link
-                key={t.key}
-                href={tabHref(t.key)}
-                className={`shrink-0 rounded-sm px-3 py-1.5 text-xs font-mono uppercase tracking-wide transition-colors ${
-                  tab === t.key ? "bg-accent/10 text-accent" : "text-muted hover:text-foreground"
-                }`}
-              >
-                {t.label}
-              </Link>
-            ))}
+        <div className="flex items-center gap-2 overflow-x-auto border-b border-border pb-px">
+          {TABS.filter((t) => (PRIMARY_TAB_KEYS as readonly string[]).includes(t.key)).map((t) => (
             <Link
-              href={tabHref("profile")}
-              className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-mono font-semibold uppercase tracking-wide transition-colors ${
-                tab === "profile" ? "bg-accent text-white" : "bg-accent/10 text-accent hover:bg-accent/20"
+              key={t.key}
+              href={tabHref(t.key)}
+              className={`shrink-0 rounded-t-sm border-b-2 px-3 py-2 text-xs font-mono uppercase tracking-wide transition-colors ${
+                tab === t.key ? "border-accent text-accent" : "border-transparent text-muted hover:text-foreground"
               }`}
             >
-              Profile
-              {user.profileCompletionPercent < 100 ? (
-                <span className={`rounded-full px-1.5 py-0.5 text-[9px] ${tab === "profile" ? "bg-white/20" : "bg-accent/15"}`}>
-                  {user.profileCompletionPercent}%
-                </span>
-              ) : null}
+              {t.label}
             </Link>
-          </div>
+          ))}
+          <Link
+            href={tabHref("profile")}
+            className={`ml-auto flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-mono font-semibold uppercase tracking-wide transition-colors ${
+              tab === "profile" ? "bg-accent text-white" : "bg-accent/10 text-accent hover:bg-accent/20"
+            }`}
+          >
+            Profile
+            {user.profileCompletionPercent < 100 ? (
+              <span className={`rounded-full px-1.5 py-0.5 text-[9px] ${tab === "profile" ? "bg-white/20" : "bg-accent/15"}`}>
+                {user.profileCompletionPercent}%
+              </span>
+            ) : (
+              <span className={`rounded-full px-1.5 py-0.5 text-[9px] ${tab === "profile" ? "bg-white/20" : "bg-accent/15"}`} aria-label="Complete">
+                ✓
+              </span>
+            )}
+          </Link>
         </div>
 
         {tab === "research" ? (
@@ -209,7 +209,11 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               ) : null}
             </div>
             {recentViews.length === 0 ? (
-              <EmptyState title="Nothing viewed yet" message="Open a project, builder, locality, transaction, or the market report to start building your research trail." />
+              <EmptyState
+                title="Your research trail is empty"
+                message="Open a project, builder, locality, transaction, or the market report and we'll keep track of it here."
+                cta={{ label: "Explore projects", href: "/projects" }}
+              />
             ) : (
               <ul className="flex flex-col gap-2">
                 {recentViews.map((item) => (
@@ -262,7 +266,11 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
           <section className="flex flex-col gap-3">
             <h2 className="font-mono text-sm font-semibold text-foreground">Wishlist</h2>
             {wishlist.length === 0 ? (
-              <EmptyState title="Your wishlist is empty" message="Tap Save on any project, builder, or locality page to bookmark it here." />
+              <EmptyState
+                title="Your research list is empty"
+                message="Save projects, builders or localities you want to compare later — one tap on any page."
+                cta={{ label: "Explore projects", href: "/projects" }}
+              />
             ) : (
               <div className="overflow-x-auto rounded-sm border border-border">
                 <table className="w-full min-w-[640px] border-collapse text-left text-xs">
@@ -335,73 +343,36 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
             <div className="flex flex-col gap-3">
               <h2 className="font-mono text-sm font-semibold text-foreground">Saved Searches</h2>
               {savedSearches.length === 0 ? (
-                <EmptyState title="No saved searches yet" message="Use “Save Search” on the Projects page to store a filter combination and revisit it anytime." />
+                <EmptyState
+                  title="No saved searches yet"
+                  message="Save a search to quickly return to it later — use “Save Search” on the Projects page."
+                  cta={{ label: "Start a search", href: "/projects" }}
+                />
               ) : (
-                <ul className="flex flex-col gap-2">
-                  {savedSearches.map((search) => (
-                    <li key={search.id} className="flex items-center justify-between gap-3 rounded-sm border border-border bg-surface p-3">
-                      <Link href={search.href} className="min-w-0 flex-1">
-                        <p className="truncate font-mono text-sm text-foreground hover:text-accent">{search.label}</p>
-                        <p className="text-xs text-muted">Saved {formatDate(search.createdAt)}</p>
-                      </Link>
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        <Link href={search.href} className="rounded-sm border border-border px-2.5 py-1.5 text-[11px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
-                          Run
+                <>
+                  <p className="text-[11px] text-muted">
+                    Alerts aren&apos;t live yet — turning one on saves your preference so you&apos;re ready the moment match notifications launch.
+                  </p>
+                  <ul className="flex flex-col gap-2">
+                    {savedSearches.map((search) => (
+                      <li key={search.id} className="flex items-center justify-between gap-3 rounded-sm border border-border bg-surface p-3">
+                        <Link href={search.href} className="min-w-0 flex-1">
+                          <p className="truncate font-mono text-sm text-foreground hover:text-accent">{search.label}</p>
+                          <p className="text-xs text-muted">Saved {formatDate(search.createdAt)}</p>
                         </Link>
-                        <RemoveItemButton action={deleteSavedSearchAction.bind(null, search.id)} />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <SavedSearchAlertToggle id={search.id} notifyOnMatch={search.notifyOnMatch} />
+                          <Link href={search.href} className="rounded-sm border border-border px-2.5 py-1.5 text-[11px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent">
+                            Run
+                          </Link>
+                          <RemoveItemButton action={deleteSavedSearchAction.bind(null, search.id)} />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </>
               )}
             </div>
-          </section>
-        ) : null}
-
-        {tab === "history" ? (
-          <section className="flex flex-col gap-6">
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <h2 className="font-mono text-sm font-semibold text-foreground">Recent Searches</h2>
-                {searchHistory.length > 0 ? (
-                  <ClearAllButton action={clearSearchHistoryAction} confirmText="Clear your entire search history?" label="Clear History" />
-                ) : null}
-              </div>
-              {searchHistory.length === 0 ? (
-                <EmptyState title="No search history yet" message="Searches you run while signed in will appear here, synced across devices." />
-              ) : (
-                <ul className="flex flex-wrap gap-1.5">
-                  {searchHistory.map((h) => (
-                    <li key={h.id}>
-                      <Link
-                        href={`/projects?q=${encodeURIComponent(h.query)}`}
-                        className="rounded-full border border-border px-3 py-1 text-xs text-muted hover:border-accent hover:text-accent"
-                      >
-                        {h.query}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            {popularSearches.length > 0 ? (
-              <div className="flex flex-col gap-3">
-                <h2 className="font-mono text-sm font-semibold text-foreground">Popular Searches</h2>
-                <ul className="flex flex-wrap gap-1.5">
-                  {popularSearches.map((p) => (
-                    <li key={p.query}>
-                      <Link
-                        href={`/projects?q=${encodeURIComponent(p.query)}`}
-                        className="rounded-full border border-border px-3 py-1 text-xs text-muted hover:border-accent hover:text-accent"
-                      >
-                        {p.query} <span className="text-muted/60">({p.count})</span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
           </section>
         ) : null}
 
@@ -432,6 +403,9 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                 <Fact label="Member since" value={formatDate(user.createdAt)} />
                 <Fact label="Last sign-in" value={user.lastLoginAt ? formatDate(user.lastLoginAt) : "--"} />
               </div>
+              <div className="mt-3">
+                <VerifyEmailButton verified={user.emailVerifiedAt !== null} />
+              </div>
               <div className="mt-4 border-t border-border pt-4">
                 <ProfileForm name={user.name} phone={user.phone} city={user.city} currentLocality={user.currentLocality} />
                 <PhoneVerificationCard verified={user.phoneVerifiedAt !== null} />
@@ -445,21 +419,6 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                 the rest, and come back anytime.
               </p>
             </div>
-
-            {!hasAnyResearchPreference ? (
-              <div className="rounded-sm border border-dashed border-accent/40 bg-accent/5 p-4">
-                <p className="font-mono text-sm font-semibold text-foreground">Tell us what you&apos;re looking for</p>
-                <p className="mt-1 text-xs text-muted">
-                  Set your budget, preferred locations and property type to make your research more relevant.
-                </p>
-                <a
-                  href="#budget"
-                  className="mt-3 inline-flex items-center rounded-sm border border-accent/40 bg-accent/10 px-3 py-2 text-xs font-mono uppercase tracking-wide text-accent hover:bg-accent/20"
-                >
-                  Complete Research Profile
-                </a>
-              </div>
-            ) : null}
 
             <div id="budget" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
               <h3 className="font-mono text-xs uppercase tracking-wide text-muted">Budget</h3>
@@ -517,8 +476,59 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                   ))}
                 </div>
               ) : (
-                <EmptyState className="mt-3" title="No saved projects yet" message="Tap Save on any project page to bookmark it here." />
+                <EmptyState
+                  className="mt-3"
+                  title="No saved projects yet"
+                  message="Tap Save on any project page to bookmark it here."
+                  cta={{ label: "Explore projects", href: "/projects" }}
+                />
               )}
+            </section>
+
+            <section id="research-activity" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
+              <div className="flex items-center justify-between">
+                <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Research Activity</h2>
+                {searchHistory.length > 0 ? (
+                  <ClearAllButton action={clearSearchHistoryAction} confirmText="Clear your entire search history?" label="Clear History" />
+                ) : null}
+              </div>
+              <div className="mt-3 flex flex-col gap-2">
+                <p className="text-[11px] uppercase tracking-wide text-muted">Recent searches</p>
+                {searchHistory.length === 0 ? (
+                  <p className="text-xs text-muted">Searches you run while signed in will appear here, synced across devices.</p>
+                ) : (
+                  <ul className="flex flex-wrap gap-1.5">
+                    {searchHistory.map((h) => (
+                      <li key={h.id}>
+                        <Link
+                          href={`/projects?q=${encodeURIComponent(h.query)}`}
+                          className="rounded-full border border-border px-3 py-1 text-xs text-muted hover:border-accent hover:text-accent"
+                        >
+                          {h.query}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {popularSearches.length > 0 ? (
+                <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4">
+                  <p className="text-[11px] uppercase tracking-wide text-muted">Popular searches</p>
+                  <ul className="flex flex-wrap gap-1.5">
+                    {popularSearches.map((p) => (
+                      <li key={p.query}>
+                        <Link
+                          href={`/projects?q=${encodeURIComponent(p.query)}`}
+                          className="rounded-full border border-border px-3 py-1 text-xs text-muted hover:border-accent hover:text-accent"
+                        >
+                          {p.query} <span className="text-muted/60">({p.count})</span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </section>
 
             <form action={logoutAction}>

@@ -20,6 +20,8 @@ export interface ProfileCompletionInput {
   preferredLocalityIds: string[];
   localityFreeText: string[];
   preferredCategories: string[];
+  preferredConfigurations: string[];
+  preferredReadiness: string[];
   purposes: string[];
 }
 
@@ -36,6 +38,8 @@ export const PROFILE_COMPLETION_SECTIONS: CompletionSection[] = [
   { key: "budget", label: "Budget range", isComplete: (i) => Boolean(i.preferredBudgetMinRupees) || Boolean(i.preferredBudgetMaxRupees) },
   { key: "localities", label: "Preferred locations", isComplete: (i) => i.preferredLocalityIds.length > 0 || i.localityFreeText.length > 0 },
   { key: "category", label: "Property type", isComplete: (i) => i.preferredCategories.length > 0 },
+  { key: "configuration", label: "Configuration", isComplete: (i) => i.preferredConfigurations.length > 0 },
+  { key: "readiness", label: "Timeline", isComplete: (i) => i.preferredReadiness.length > 0 },
   { key: "purpose", label: "Purpose", isComplete: (i) => i.purposes.length > 0 },
 ];
 
@@ -75,6 +79,8 @@ export async function recalculatePublicUserCompletion(publicUserId: string): Pro
           preferredLocalityIds: true,
           localityFreeText: true,
           preferredCategories: true,
+          preferredConfigurations: true,
+          preferredReadiness: true,
           purposes: true,
         },
       },
@@ -91,6 +97,8 @@ export async function recalculatePublicUserCompletion(publicUserId: string): Pro
     preferredLocalityIds: user.preferences?.preferredLocalityIds ?? [],
     localityFreeText: user.preferences?.localityFreeText ?? [],
     preferredCategories: user.preferences?.preferredCategories ?? [],
+    preferredConfigurations: user.preferences?.preferredConfigurations ?? [],
+    preferredReadiness: user.preferences?.preferredReadiness ?? [],
     purposes: user.preferences?.purposes ?? [],
   });
 

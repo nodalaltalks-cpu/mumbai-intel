@@ -414,6 +414,30 @@ export async function getUserPreferences(publicUserId: string) {
   return prisma.userPreferences.findUnique({ where: { publicUserId } });
 }
 
+export interface DashboardNextActionSignals {
+  savedProjectsCount: number;
+  recentViewsCount: number;
+  savedSearchesCount: number;
+  savedSearchesWithAlertsOffCount: number;
+}
+
+/**
+ * Cheap counts only (no row payloads) — deliberately separate from the
+ * per-tab gated list queries above (getWishlistForUser etc.), since this one
+ * runs on EVERY /account tab (the "what should I do next" banner is
+ * dashboard-wide, not Profile-tab-only) and must stay cheap regardless of
+ * which tab's own heavier query also runs alongside it.
+ */
+export async function getDashboardNextActionSignals(publicUserId: string): Promise<DashboardNextActionSignals> {
+  const [savedProjectsCount, recentViewsCount, savedSearchesCount, savedSearchesWithAlertsOffCount] = await Promise.all([
+    prisma.savedProject.count({ where: { publicUserId } }),
+    prisma.recentView.count({ where: { publicUserId } }),
+    prisma.savedSearch.count({ where: { publicUserId } }),
+    prisma.savedSearch.count({ where: { publicUserId, notifyOnMatch: false } }),
+  ]);
+  return { savedProjectsCount, recentViewsCount, savedSearchesCount, savedSearchesWithAlertsOffCount };
+}
+
 export async function getNotificationPreferences(publicUserId: string) {
   return prisma.notificationPreferences.findUnique({ where: { publicUserId } });
 }

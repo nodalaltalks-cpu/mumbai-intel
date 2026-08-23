@@ -1369,10 +1369,17 @@ model PublicUser {
   /// Which channel the referral link that brought this user in was shared
   /// through ("whatsapp" | "copy_link" | "native_share"), if known.
   referralSource           String?
+  /// Keys of contextual profile-completion prompts (e.g. "wishlist_no_prefs",
+  /// "saved_search_no_alert") this user has explicitly dismissed — so a
+  /// dismissed prompt never reappears and nags them. Plain string keys, not a
+  /// separate table: the set is small and per-user, same reasoning as every
+  /// other small denormalized array on this model (highlights, legalNames elsewhere).
+  dismissedPrompts         String[]     @default([])
   createdAt                DateTime     @default(now())
   updatedAt                DateTime     @updatedAt
 
-  resetTokens             PublicPasswordResetToken[]
+  resetTokens              PublicPasswordResetToken[]
+  emailVerificationTokens  PublicEmailVerificationToken[]
   savedProjects           SavedProject[]
   wishlist                Wishlist[]
   recentViews             RecentView[]
@@ -1407,6 +1414,23 @@ model SavedProject {
 /// itself is never stored — only its hash — so a leaked database row can't be
 /// replayed as a live reset link.
 model PublicPasswordResetToken {
+  id        String     @id @default(cuid())
+  userId    String
+  user      PublicUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String     @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime   @default(now())
+
+  @@index([userId])
+}
+
+/// Same shape/lifecycle as PublicPasswordResetToken (hash-only at rest, expiring,
+/// single-use via usedAt) — sendEmailVerificationEmail (lib/email.ts) already builds
+/// the email template, it was just never wired to a real token flow. Verifying moves
+/// PublicUser.emailVerifiedAt, which lib/profile-completion.ts already scores, so
+/// credentials-signup users have a real, self-serve way to reach 100% completion.
+model PublicEmailVerificationToken {
   id        String     @id @default(cuid())
   userId    String
   user      PublicUser @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1815,6 +1839,18 @@ enum ResearchEventType {
   /// queryable the same way as the other funnel stages, without needing a
   /// second read of the ContactEnquiry table.
   CONTACT_ENQUIRY_SUBMITTED
+  /// The one-time milestone when profileCompletionPercent first reaches 100 —
+  /// distinct from the routine PROFILE_UPDATED ping fired on every save, so
+  /// "completion rate" and "time to complete" are directly queryable without
+  /// re-deriving them from a percent column's edit history.
+  PROFILE_COMPLETED
+  /// A contextual profile-completion prompt (dashboard next-action card, or an
+  /// inline nudge after search/save/download) was shown, clicked through, or
+  /// explicitly dismissed. metadata carries { promptKey } so each distinct
+  /// prompt's shown/clicked/dismissed funnel is queryable per-prompt.
+  PROFILE_PROMPT_SHOWN
+  PROFILE_PROMPT_CLICKED
+  PROFILE_PROMPT_DISMISSED
 }
 
 /// Site-wide "research intent" log — a deliberately generic single table

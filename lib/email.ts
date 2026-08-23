@@ -316,9 +316,17 @@ export async function sendWelcomeEmail(to: string, name: string | null): Promise
   await sendEmail({ to, subject: "Welcome to NoDalalTalks", html });
 }
 
-/** Accepts a pre-built verification URL (same shape as sendPasswordResetEmail's resetUrl) — ready to call once a verification-token flow exists; see PublicPasswordResetToken for the analogous pattern that would back one. */
-export async function sendEmailVerificationEmail(to: string, verifyUrl: string, expiryMinutes: number): Promise<void> {
-  if (TRANSACTIONAL_EMAILS_PAUSED) return logPausedEmail("Verify your NoDalalTalks email", to);
+/**
+ * Accepts a pre-built verification URL (same shape as sendPasswordResetEmail's
+ * resetUrl) — now backed by a real token flow (PublicEmailVerificationToken,
+ * lib/actions/email-verification.ts). Deliberately NOT gated by
+ * TRANSACTIONAL_EMAILS_PAUSED, same exception as sendPasswordResetEmail
+ * above: verifying email is what lets a credentials-signup user's profile
+ * ever reach 100% completion (lib/profile-completion.ts scores
+ * emailVerifiedAt), so silently no-op'ing this would quietly cap every
+ * non-Google user below 100% with no way to find out why.
+ */
+export async function sendEmailVerificationEmail(to: string, verifyUrl: string, expiryMinutes: number): Promise<boolean> {
   const safeUrl = escapeHtml(verifyUrl);
   const html = emailShell(`
     <h1 style="margin:0 0 12px;font-size:20px;line-height:1.3;font-weight:600;color:#18181b;">Verify your email</h1>
@@ -334,7 +342,7 @@ export async function sendEmailVerificationEmail(to: string, verifyUrl: string, 
       If you didn't create a NoDalalTalks account, you can safely ignore this email.
     </p>
   `);
-  await sendEmail({ to, subject: "Verify your NoDalalTalks email", html });
+  return sendEmail({ to, subject: "Verify your NoDalalTalks email", html });
 }
 
 /** Confirms a brochure download to a signed-in user — call from wherever a download is already recorded server-side (e.g. app/api/analytics/brochure/route.ts) with that user's email, never from the client. */

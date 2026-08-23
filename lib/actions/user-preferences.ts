@@ -13,7 +13,7 @@ const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefi
 
 const CONFIGURATIONS = ["1", "2", "3", "4"] as const;
 const READINESS = ["READY_TO_MOVE", "UNDER_CONSTRUCTION", "NEW_LAUNCH"] as const;
-const PURPOSES = ["SELF_USE", "INVESTMENT"] as const;
+const PURPOSES = ["SELF_USE", "INVESTMENT", "RESEARCHING"] as const;
 
 const preferencesSchema = z.object({
   preferredBudgetMinRupees: z.preprocess(emptyToUndefined, z.coerce.number().min(0).optional()),
@@ -108,7 +108,21 @@ export async function updatePreferencesAction(_prevState: PreferencesFormState, 
     await recordResearchEvent("LOCALITY_INTEREST_ADDED", { metadata: { locality } });
   }
 
+  // Which of the 4 independent preference cards this particular save came
+  // from — profile-completion step-level analytics (Section 15), reusing
+  // the existing PROFILE_UPDATED type via metadata rather than one enum
+  // value per card.
+  const touchedSection = Object.keys(data)[0];
+  if (touchedSection) {
+    await recordResearchEvent("PROFILE_UPDATED", { entityType: "PublicUser", entityId: session.userId, metadata: { section: touchedSection } });
+  }
+
+  const wasComplete = (await prisma.publicUser.findUnique({ where: { id: session.userId }, select: { profileCompletionPercent: true } }))
+    ?.profileCompletionPercent === 100;
   const completionPercent = await recalculatePublicUserCompletion(session.userId);
+  if (!wasComplete && completionPercent === 100) {
+    await recordResearchEvent("PROFILE_COMPLETED", { entityType: "PublicUser", entityId: session.userId, metadata: { source: "preferences" } });
+  }
 
   revalidatePath("/account");
   return { success: "Saved.", completionPercent };

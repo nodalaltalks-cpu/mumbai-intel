@@ -6,6 +6,7 @@ import { updatePreferencesAction } from "@/lib/actions/user-preferences";
 const PURPOSE_OPTIONS = [
   { value: "SELF_USE", label: "Self Use" },
   { value: "INVESTMENT", label: "Investment" },
+  { value: "RESEARCHING", label: "Just Researching" },
 ] as const;
 
 /** Purpose is a genuine multi-select (Section 14: "The user must be able to select BOTH") — not a radio group. Instant-save like the other toggle cards. */
