@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireMutateSession, requireAdminSession, isAdmin } from "@/lib/auth/guard";
-import { hasPermission } from "@/lib/auth/permissions";
+import { hasPermission, type PermissionKey } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { emit } from "@/lib/events";
 import { createNotification } from "@/lib/notifications";
@@ -43,9 +43,12 @@ async function appendReviewRequest(body: string): Promise<string> {
   return `${body} Enjoying NoDalalTalks? We'd love a quick review: ${links.join(" · ")}`;
 }
 
-async function setStatus(reportId: string, status: ReportStatus, resolutionNote?: string): Promise<{ error?: string }> {
+async function setStatus(reportId: string, status: ReportStatus, requiredPermission: PermissionKey, resolutionNote?: string): Promise<{ error?: string }> {
   try {
     const session = await requireMutateSession();
+    if (!(await hasPermission(session, requiredPermission))) {
+      return { error: "You don't have permission to do this." };
+    }
     const existing = await prisma.report.findUnique({ where: { id: reportId }, select: { status: true } });
     const report = await prisma.report.update({
       where: { id: reportId },
@@ -88,16 +91,16 @@ async function setStatus(reportId: string, status: ReportStatus, resolutionNote?
 }
 
 export async function markUnderReviewAction(reportId: string): Promise<{ error?: string }> {
-  return setStatus(reportId, "UNDER_REVIEW");
+  return setStatus(reportId, "UNDER_REVIEW", "reports.review");
 }
 
 export async function acceptReportAction(reportId: string): Promise<{ error?: string }> {
-  return setStatus(reportId, "ACCEPTED");
+  return setStatus(reportId, "ACCEPTED", "reports.review");
 }
 
 /** The actual "mark rejected + notify the reporter with the remark" logic — called directly for an ADMIN's own rejection, and by pending-changes.ts's approval handler once a founder approves an EDITOR-queued rejection. */
 export async function applyReportRejection(reportId: string, remark: string): Promise<{ error?: string }> {
-  return setStatus(reportId, "REJECTED", remark);
+  return setStatus(reportId, "REJECTED", "reports.reject", remark);
 }
 
 /**
@@ -145,12 +148,15 @@ export async function rejectReportAction(reportId: string, remark: string): Prom
 }
 
 export async function resolveReportAction(reportId: string): Promise<{ error?: string }> {
-  return setStatus(reportId, "RESOLVED");
+  return setStatus(reportId, "RESOLVED", "reports.approve");
 }
 
 /** Communication history for one report — reuses the existing generic AuditLog + getAuditHistory (already powering the Project edit page's History panel), not a new model. Fetched on demand per row rather than upfront for every report in the queue. */
 export async function getReportHistoryAction(reportId: string) {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "reports.view"))) {
+    throw new Error("You don't have permission to do this.");
+  }
   return getAuditHistory("Report", reportId);
 }
 

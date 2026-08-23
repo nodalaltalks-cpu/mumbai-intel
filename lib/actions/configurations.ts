@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireMutateSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { friendlyPrismaError } from "./errors";
 
@@ -24,7 +25,10 @@ export async function addConfigurationAction(
   _prevState: ConfigurationActionState,
   formData: FormData
 ): Promise<ConfigurationActionState> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = configurationSchema.safeParse({
     label: formData.get("label"),
@@ -65,7 +69,10 @@ export async function updateConfigurationAction(
   _prevState: ConfigurationActionState,
   formData: FormData
 ): Promise<ConfigurationActionState> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = configurationSchema.safeParse({
     label: formData.get("label"),
@@ -95,7 +102,10 @@ export async function updateConfigurationAction(
 }
 
 export async function deleteConfigurationAction(configurationId: string): Promise<{ error?: string }> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
   const config = await prisma.configuration.delete({ where: { id: configurationId } });
   revalidatePath(`/admin/projects/${config.projectId}/edit`);
   return {};

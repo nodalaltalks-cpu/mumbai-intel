@@ -6,6 +6,7 @@ import { getOrCreateAnonSessionId } from "@/lib/analytics/session-id";
 import { parseUserAgent } from "@/lib/analytics/user-agent";
 import { writeBrochureEvent, type BrochureEventType } from "@/lib/analytics/brochure-events";
 import { sendBrochureDownloadEmail } from "@/lib/email";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 const VALID_EVENT_TYPES: BrochureEventType[] = ["VIEWED", "DOWNLOAD_STARTED", "DOWNLOAD_COMPLETED", "DOWNLOAD_FAILED"];
 
@@ -28,6 +29,12 @@ interface BrochureTrackBody {
  * client-fired beacon for "did they see the page at all."
  */
 export async function POST(req: NextRequest) {
+  // Unauthenticated (anonymous browsing is tracked too) — rate-limited by IP so this
+  // sendBeacon-fired endpoint can't be scripted into a write/email-sending amplification loop.
+  const rateLimitIp = await getClientIp();
+  const rateLimit = checkRateLimit(`analytics-brochure:${rateLimitIp}`, 60, 60);
+  if (!rateLimit.allowed) return NextResponse.json({ ok: false, error: "Too many requests" }, { status: 429 });
+
   let body: BrochureTrackBody;
   try {
     body = await req.json();
@@ -46,7 +53,8 @@ export async function POST(req: NextRequest) {
   });
   if (!project) return NextResponse.json({ ok: false, error: "Project not found" }, { status: 404 });
 
-  const [session, sessionId, ip] = await Promise.all([getPublicSession(), getOrCreateAnonSessionId(), getClientIp()]);
+  const [session, sessionId] = await Promise.all([getPublicSession(), getOrCreateAnonSessionId()]);
+  const ip = rateLimitIp;
   const { device, browser, os } = parseUserAgent(req.headers.get("user-agent"));
   const country = req.headers.get("x-vercel-ip-country");
   const city = req.headers.get("x-vercel-ip-city");

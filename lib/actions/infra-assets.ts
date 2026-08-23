@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireMutateSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { INFRA_TYPES } from "@/lib/project-meta";
 import { friendlyPrismaError } from "./errors";
@@ -30,7 +31,10 @@ export async function createInfraAssetAction(
   _prevState: InfraAssetActionState,
   formData: FormData
 ): Promise<InfraAssetActionState> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = infraAssetSchema.safeParse({
     type: formData.get("type"),

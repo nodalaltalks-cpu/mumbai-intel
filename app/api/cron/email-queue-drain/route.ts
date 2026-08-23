@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { drainCampaignQueue } from "@/lib/email-queue";
+import { verifyCronSecret } from "@/lib/verify-cron-secret";
 
 /**
  * Safety net, not the primary send path — EmailComposer auto-drains a
@@ -14,8 +15,7 @@ import { drainCampaignQueue } from "@/lib/email-queue";
  * to be the timely delivery mechanism.
  */
 export async function GET(request: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

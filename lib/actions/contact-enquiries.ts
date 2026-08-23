@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireMutateSession, requireAdminSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
@@ -47,7 +48,10 @@ const STATUS_NOTIFICATION_COPY: Partial<Record<ContactEnquiryStatus, { type: Not
  * here as separate immutable entries -- nothing is ever overwritten.
  */
 export async function getEnquiryHistoryAction(enquiryId: string) {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "support.manage_enquiries"))) {
+    throw new Error("You don't have permission to do this.");
+  }
   return getAuditHistory("ContactEnquiry", enquiryId);
 }
 
@@ -69,6 +73,9 @@ export async function changeEnquiryStatusAction(
   formData: FormData
 ): Promise<ContactEnquiryFormState> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "support.manage_enquiries"))) {
+    return { error: "You don't have permission to do this." };
+  }
   const parsed = statusSchema.safeParse({ status: formData.get("status") });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid status" };
 
@@ -113,6 +120,9 @@ export async function addInternalNoteAction(
   formData: FormData
 ): Promise<ContactEnquiryFormState> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "support.manage_enquiries"))) {
+    return { error: "You don't have permission to do this." };
+  }
   const parsed = noteSchema.safeParse({ note: formData.get("note") });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid note" };
 
@@ -144,6 +154,9 @@ export async function recordResponseAction(
   formData: FormData
 ): Promise<ContactEnquiryFormState> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "support.manage_enquiries"))) {
+    return { error: "You don't have permission to do this." };
+  }
   const parsed = responseSchema.safeParse({ message: formData.get("message") });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid response" };
 
@@ -179,6 +192,9 @@ export async function recordResponseAction(
 /** Reopens a RESOLVED/CLOSED enquiry back to IN_PROGRESS. */
 export async function reopenEnquiryAction(enquiryId: string): Promise<ContactEnquiryFormState> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "support.manage_enquiries"))) {
+    return { error: "You don't have permission to do this." };
+  }
   try {
     const existing = await prisma.contactEnquiry.findUnique({ where: { id: enquiryId }, select: { status: true, publicUserId: true } });
     if (!existing) return { error: "Enquiry not found — it may have been deleted." };

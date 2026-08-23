@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { runIngestBatch } from "@/lib/ingestion/runner";
+import { verifyCronSecret } from "@/lib/verify-cron-secret";
 
 // Requests the longest function duration Vercel's plan allows — a citywide
 // sync can take a while even with batched reads (see MAX_WRITES_PER_RUN in
@@ -15,8 +16,7 @@ export const maxDuration = 300;
  * just finds its public URL.
  */
 export async function GET(request: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

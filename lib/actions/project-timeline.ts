@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireMutateSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { friendlyPrismaError } from "./errors";
 
@@ -23,7 +24,10 @@ export async function addProjectTimelineEventAction(
   _prevState: TimelineActionState,
   formData: FormData
 ): Promise<TimelineActionState> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = timelineEventSchema.safeParse({
     title: formData.get("title"),
@@ -56,7 +60,10 @@ export async function addProjectTimelineEventAction(
 }
 
 export async function deleteProjectTimelineEventAction(eventId: string): Promise<{ error?: string }> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
   const event = await prisma.projectTimelineEvent.delete({ where: { id: eventId } });
   revalidatePath(`/admin/projects/${event.projectId}/edit`);
   return {};

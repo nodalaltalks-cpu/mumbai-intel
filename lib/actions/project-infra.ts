@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireMutateSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { INFRA_TYPES } from "@/lib/project-meta";
 import { friendlyPrismaError } from "./errors";
@@ -25,7 +26,10 @@ export async function linkProjectInfraAction(
   _prevState: ProjectInfraActionState,
   formData: FormData
 ): Promise<ProjectInfraActionState> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = linkExistingSchema.safeParse({
     infraId: formData.get("infraId"),
@@ -64,7 +68,10 @@ export async function createAndLinkProjectInfraAction(
   _prevState: ProjectInfraActionState,
   formData: FormData
 ): Promise<ProjectInfraActionState> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = newAssetSchema.safeParse({
     type: formData.get("type"),
@@ -98,7 +105,10 @@ export async function createAndLinkProjectInfraAction(
 }
 
 export async function unlinkProjectInfraAction(linkId: string): Promise<{ error?: string }> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
   const link = await prisma.projectInfra.delete({ where: { id: linkId } });
   revalidatePath(`/admin/projects/${link.projectId}/edit`);
   return {};

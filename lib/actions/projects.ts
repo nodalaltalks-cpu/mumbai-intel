@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdminSession, requireMutateSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { requireTrashReauth } from "@/lib/auth/trash-reauth";
 import { prisma } from "@/lib/prisma";
 import { revalidateProject } from "@/lib/cache";
@@ -98,6 +99,9 @@ export async function createProjectAction(
   formData: FormData
 ): Promise<ProjectFormState> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "projects.create"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = parseProjectForm(formData);
   if (!parsed.success) {
@@ -190,6 +194,9 @@ export async function updateProjectAction(
   } catch (error) {
     return { error: friendlyPrismaError(error) };
   }
+  if (!(await hasPermission(session, "projects.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = parseProjectForm(formData);
   if (!parsed.success) {
@@ -237,10 +244,14 @@ export async function updateProjectAction(
 
 /** Silent background autosave from the edit form — same shape as updateProjectAction but no redirect. */
 export async function autosaveProjectAction(projectId: string, formData: FormData): Promise<{ error?: string; savedAt?: string }> {
+  let autosaveSession;
   try {
-    await requireMutateSession();
+    autosaveSession = await requireMutateSession();
   } catch (error) {
     return { error: friendlyPrismaError(error) };
+  }
+  if (!(await hasPermission(autosaveSession, "projects.edit"))) {
+    return { error: "You don't have permission to do this." };
   }
 
   const parsed = parseProjectForm(formData);
@@ -301,6 +312,9 @@ export async function togglePublishAction(projectId: string, nextValue: boolean)
 /** Marks a draft as ready for an ADMIN to review — the Draft → Under Review step ahead of Publish. Doesn't publish anything itself. */
 export async function submitForReviewAction(projectId: string): Promise<{ error?: string }> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "projects.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
   const existing = await prisma.project.findUnique({ where: { id: projectId }, select: { slug: true, isPublished: true } });
   if (!existing) return { error: "Project not found" };
   if (existing.isPublished) return { error: "This project is already published" };
@@ -314,6 +328,9 @@ export async function submitForReviewAction(projectId: string): Promise<{ error?
 /** Pulls a project back out of the review queue without publishing or discarding it — back to a plain Draft. */
 export async function withdrawFromReviewAction(projectId: string): Promise<{ error?: string }> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "projects.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
   const existing = await prisma.project.findUnique({ where: { id: projectId }, select: { slug: true } });
   if (!existing) return { error: "Project not found" };
 
@@ -325,6 +342,9 @@ export async function withdrawFromReviewAction(projectId: string): Promise<{ err
 
 export async function toggleFeaturedAction(projectId: string, nextValue: boolean): Promise<void> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "projects.edit"))) {
+    throw new Error("You don't have permission to do this.");
+  }
   const updated = await prisma.project.update({ where: { id: projectId }, data: { isFeatured: nextValue }, select: { slug: true } });
   await logAudit(session.userId, nextValue ? "project.feature" : "project.unfeature", "Project", projectId);
   revalidateProject({ id: projectId, slug: updated.slug });
@@ -347,6 +367,9 @@ export async function updateProjectStatusAction(
 ): Promise<{ error?: string }> {
   try {
     const session = await requireMutateSession();
+    if (!(await hasPermission(session, "projects.edit"))) {
+      return { error: "You don't have permission to do this." };
+    }
     if (!PROJECT_STATUSES.includes(nextStatus)) return { error: "Invalid status" };
     const updated = await prisma.project.update({ where: { id: projectId }, data: { status: nextStatus }, select: { slug: true } });
     await logAudit(session.userId, "project.status.update", "Project", projectId);
@@ -359,6 +382,9 @@ export async function updateProjectStatusAction(
 
 export async function duplicateProjectAction(projectId: string): Promise<{ error?: string; newProjectId?: string }> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "projects.create"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const source = await prisma.project.findUnique({
     where: { id: projectId },

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireMutateSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { slugify } from "@/lib/slug";
 import { friendlyPrismaError } from "./errors";
@@ -35,7 +36,10 @@ async function uniqueMicroMarketSlug(localityId: string, name: string): Promise<
  * just to add a missing micro market.
  */
 export async function createMicroMarketInlineAction(localityId: string, name: string): Promise<InlineCreateResult> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "localities.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
   const trimmed = name.trim();
   if (!trimmed) return { error: "Name is required" };
   if (!localityId) return { error: "Select a locality first" };
@@ -56,7 +60,10 @@ export async function addMicroMarketAction(
   _prevState: MicroMarketActionState,
   formData: FormData
 ): Promise<MicroMarketActionState> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "localities.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = microMarketSchema.safeParse({ name: formData.get("name") });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -74,7 +81,10 @@ export async function addMicroMarketAction(
 }
 
 export async function deleteMicroMarketAction(microMarketId: string): Promise<{ error?: string }> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "localities.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
   const mm = await prisma.microMarket.delete({ where: { id: microMarketId } });
   revalidatePath(`/admin/localities/${mm.localityId}/edit`);
   return {};

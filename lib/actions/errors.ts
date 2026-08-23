@@ -32,5 +32,11 @@ export function friendlyPrismaError(error: unknown): string {
       return "Record not found, it may have already been deleted.";
     }
   }
-  return error instanceof Error ? error.message : "Something went wrong";
+  // Anything else -- including errors from the Neon HTTP driver adapter, which don't always
+  // land as a PrismaClientKnownRequestError the way classic-engine errors do, so a raw
+  // constraint-violation/table-name message can otherwise slip past every case above and
+  // reach the browser verbatim. Log the real error server-side (Vercel function logs) and
+  // return a generic message instead of ever forwarding error.message to the client.
+  console.error("[friendlyPrismaError] unclassified error:", error);
+  return "Something went wrong. Please try again.";
 }

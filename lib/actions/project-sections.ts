@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireMutateSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { friendlyPrismaError } from "./errors";
 
@@ -20,7 +21,10 @@ export async function addProjectSectionAction(
   _prevState: SectionActionState,
   formData: FormData
 ): Promise<SectionActionState> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = sectionSchema.safeParse({
     title: formData.get("title"),
@@ -51,7 +55,10 @@ export async function addProjectSectionAction(
 }
 
 export async function deleteProjectSectionAction(sectionId: string): Promise<{ error?: string }> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
   const section = await prisma.projectSection.delete({ where: { id: sectionId } });
   revalidatePath(`/admin/projects/${section.projectId}/edit`);
   return {};

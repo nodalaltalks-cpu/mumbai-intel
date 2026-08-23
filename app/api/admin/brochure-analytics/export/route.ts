@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/auth/guard";
+import { requireMutateSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { getBrochureEventsForExport } from "@/lib/analytics/brochure-queries";
 
 function csvEscape(value: string | number | boolean | null): string {
@@ -11,7 +12,10 @@ function csvEscape(value: string | number | boolean | null): string {
 const COLUMNS = ["createdAt", "eventType", "projectName", "builderName", "localityName", "device", "browser", "os", "country", "city", "isRepeat", "isLoggedIn"] as const;
 
 export async function GET() {
-  await requireSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "analytics.view"))) {
+    return NextResponse.json({ error: "You don't have permission to do this." }, { status: 403 });
+  }
 
   const events = await getBrochureEventsForExport(5000);
   const header = COLUMNS.join(",");

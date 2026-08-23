@@ -1,6 +1,7 @@
 "use server";
 
 import { requireMutateSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { deleteDocumentByPublicId, documentPublicIdFromUrl, uploadDocumentFile } from "@/lib/cloudinary";
 import { prisma } from "@/lib/prisma";
 import { emit } from "@/lib/events";
@@ -16,6 +17,9 @@ export async function addProjectDocumentAction(
   formData: FormData
 ): Promise<DocumentActionState> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const title = String(formData.get("title") ?? "").trim();
   if (!title) return { error: "Title is required" };
@@ -55,6 +59,9 @@ export async function addProjectDocumentAction(
 
 export async function deleteProjectDocumentAction(documentId: string): Promise<{ error?: string }> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const doc = await prisma.projectDocument.findUnique({ where: { id: documentId } });
   if (!doc) return { error: "Document not found" };

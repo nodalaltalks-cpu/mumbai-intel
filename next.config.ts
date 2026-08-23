@@ -6,6 +6,12 @@ const SECURITY_HEADERS = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
   { key: "X-DNS-Prefetch-Control", value: "on" },
+  // Inert without HTTPS (browsers only ever honor this over a secure connection), so it's
+  // safe to send unconditionally including in local dev -- no need to gate on NODE_ENV.
+  // The custom domain already gets this from Vercel's platform-level injection, but that's
+  // Vercel's *.vercel.app/nodalaltalks.com behavior specifically, not something this app can
+  // rely on if it's ever hosted elsewhere, and it doesn't cover includeSubDomains/preload.
+  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
 ];
 
 // Production-only: Turbopack's dev HMR client relies on eval/inline scripts
@@ -16,11 +22,16 @@ const SECURITY_HEADERS = [
 // meaningful protection against the dangerouslySetInnerHTML rich-text fields.
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  // www.googletagmanager.com: GoogleAnalytics (@next/third-parties/google, app/layout.tsx)
+  // loads the gtag.js script from here whenever NEXT_PUBLIC_GA_MEASUREMENT_ID is set -- it
+  // was previously CSP-blocked (silently, no visible error) since this domain wasn't allowed.
+  "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: https://res.cloudinary.com https://*.tile.openstreetmap.org https://lh3.googleusercontent.com",
   "font-src 'self' data:",
-  "connect-src 'self'",
+  // *.google-analytics.com / *.analytics.google.com: gtag's actual event-beacon endpoints
+  // (same GA integration as script-src above).
+  "connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com",
   // Without an explicit frame-src, browsers fall back to default-src 'self' for iframes too --
   // silently blocking BrochureUploader's PDF preview (res.cloudinary.com) and MapEmbed's
   // location preview (openstreetmap.org) with Chrome's generic "This content is blocked"

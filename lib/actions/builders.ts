@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireAdminSession, requireMutateSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { requireTrashReauth } from "@/lib/auth/trash-reauth";
 import { prisma } from "@/lib/prisma";
 import { revalidateBuilder } from "@/lib/cache";
@@ -183,6 +184,9 @@ export async function createBuilderAction(
   formData: FormData
 ): Promise<BuilderFormState> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = parseBuilderForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -206,6 +210,9 @@ export interface InlineCreateResult {
 /** Minimal create for the Project form's inline "+ New Builder" — same shared creation path as the full form, sensible defaults for everything but name, no redirect (the Project form stays open and auto-selects the new builder). */
 export async function createBuilderInlineAction(name: string): Promise<InlineCreateResult> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
   const trimmed = name.trim();
   if (!trimmed) return { error: "Name is required" };
 
@@ -227,6 +234,9 @@ export async function updateBuilderAction(
   formData: FormData
 ): Promise<BuilderFormState> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = parseBuilderForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -407,6 +417,9 @@ export async function toggleBuilderPublishAction(builderId: string, nextValue: b
 
 export async function toggleBuilderFeaturedAction(builderId: string, nextValue: boolean): Promise<void> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    throw new Error("You don't have permission to do this.");
+  }
   const updated = await prisma.builder.update({ where: { id: builderId }, data: { isFeatured: nextValue }, select: { slug: true } });
   await logAudit(session.userId, nextValue ? "builder.feature" : "builder.unfeature", "Builder", builderId);
   revalidateBuilder({ id: builderId, slug: updated.slug });
@@ -425,6 +438,9 @@ export async function toggleBuilderArchiveAction(builderId: string, nextValue: b
 
 export async function duplicateBuilderAction(builderId: string): Promise<{ error?: string; newBuilderId?: string }> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const source = await prisma.builder.findUnique({ where: { id: builderId }, include: { amenities: true } });
   if (!source) return { error: "Builder not found" };
@@ -539,6 +555,9 @@ export async function addBuilderTimelineEventAction(
   formData: FormData
 ): Promise<{ error?: string }> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = timelineSchema.safeParse({
     year: formData.get("year"),
@@ -570,6 +589,9 @@ export async function addBuilderTimelineEventAction(
 
 export async function deleteBuilderTimelineEventAction(eventId: string): Promise<{ error?: string }> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
   const event = await prisma.builderTimelineEvent.delete({ where: { id: eventId } });
   await logAudit(session.userId, "builder.timeline.delete", "BuilderTimelineEvent", eventId);
   const builder = await prisma.builder.findUnique({ where: { id: event.builderId }, select: { slug: true } });
@@ -596,6 +618,9 @@ export async function addBuilderScoreSnapshotAction(
   formData: FormData
 ): Promise<{ error?: string }> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = scoreSchema.safeParse({
     asOf: formData.get("asOf"),
@@ -637,6 +662,9 @@ export async function addBuilderScoreSnapshotAction(
 
 export async function deleteBuilderScoreSnapshotAction(snapshotId: string): Promise<{ error?: string }> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
   const snapshot = await prisma.builderScoreSnapshot.delete({ where: { id: snapshotId } });
   await logAudit(session.userId, "builder.score.delete", "BuilderScoreSnapshot", snapshotId);
   const builder = await prisma.builder.findUnique({ where: { id: snapshot.builderId }, select: { slug: true } });

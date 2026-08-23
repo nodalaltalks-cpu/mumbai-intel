@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireMutateSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { deleteImageByPublicId, publicIdFromUrl, uploadImageFile } from "@/lib/cloudinary";
 import { prisma } from "@/lib/prisma";
 import { IMAGE_KINDS } from "@/lib/project-meta";
@@ -31,6 +32,9 @@ export async function addProjectImageAction(
   formData: FormData
 ): Promise<ImageActionState> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = addImageSchema.safeParse({
     projectId: formData.get("projectId"),
@@ -94,7 +98,10 @@ export async function reorderProjectImageAction(
   imageId: string,
   direction: "up" | "down"
 ): Promise<{ error?: string }> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const image = await prisma.projectImage.findUnique({ where: { id: imageId } });
   if (!image) return { error: "Image not found" };
@@ -118,6 +125,9 @@ export async function reorderProjectImageAction(
 
 export async function deleteProjectImageAction(imageId: string): Promise<{ error?: string }> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const image = await prisma.projectImage.findUnique({
     where: { id: imageId },

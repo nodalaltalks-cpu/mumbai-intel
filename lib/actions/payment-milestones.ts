@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireMutateSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { friendlyPrismaError } from "./errors";
 import { PAYMENT_MILESTONE_PRESETS } from "@/lib/project-meta";
@@ -29,7 +30,10 @@ export async function addPaymentMilestoneAction(
   _prevState: PaymentMilestoneActionState,
   formData: FormData
 ): Promise<PaymentMilestoneActionState> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = milestoneSchema.safeParse({
     label: formData.get("label"),
@@ -69,7 +73,10 @@ export async function updatePaymentMilestoneAction(
   _prevState: PaymentMilestoneActionState,
   formData: FormData
 ): Promise<PaymentMilestoneActionState> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = milestoneSchema.safeParse({
     label: formData.get("label"),
@@ -98,7 +105,10 @@ export async function updatePaymentMilestoneAction(
 }
 
 export async function deletePaymentMilestoneAction(milestoneId: string): Promise<{ error?: string }> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
   const milestone = await prisma.projectPaymentMilestone.delete({ where: { id: milestoneId } });
   revalidatePath(`/admin/projects/${milestone.projectId}/edit`);
   return {};

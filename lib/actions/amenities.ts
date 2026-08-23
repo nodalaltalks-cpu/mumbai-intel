@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireMutateSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { ensureUniqueSlug } from "@/lib/slug";
 import { friendlyPrismaError } from "./errors";
 
@@ -32,7 +33,10 @@ export interface AmenityInlineCreateResult {
  * accepted a category at all.
  */
 export async function createAmenityInlineAction(name: string, projectId?: string, category?: string): Promise<AmenityInlineCreateResult> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
   const trimmed = name.trim();
   if (!trimmed) return { error: "Name is required" };
   const trimmedCategory = category?.trim() || "CONVENIENCE";

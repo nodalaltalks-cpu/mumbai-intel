@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireMutateSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { deleteImageByPublicId, publicIdFromUrl, uploadImageFile } from "@/lib/cloudinary";
 import { prisma } from "@/lib/prisma";
 import { emit } from "@/lib/events";
@@ -18,6 +19,9 @@ export async function addBuilderImageAction(
   formData: FormData
 ): Promise<BuilderImageActionState> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const files = formData.getAll("file").filter((f): f is File => f instanceof File && f.size > 0);
   if (files.length === 0) return { error: "Choose at least one image file to upload" };
@@ -54,6 +58,9 @@ export async function addBuilderImageAction(
 
 export async function deleteBuilderImageAction(imageId: string): Promise<{ error?: string }> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const image = await prisma.builderImage.findUnique({ where: { id: imageId } });
   if (!image) return { error: "Image not found" };
@@ -73,7 +80,10 @@ export async function deleteBuilderImageAction(imageId: string): Promise<{ error
 }
 
 export async function reorderBuilderImageAction(imageId: string, direction: "up" | "down"): Promise<{ error?: string }> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const image = await prisma.builderImage.findUnique({ where: { id: imageId } });
   if (!image) return { error: "Image not found" };

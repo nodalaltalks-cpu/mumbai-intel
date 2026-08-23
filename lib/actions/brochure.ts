@@ -1,6 +1,7 @@
 "use server";
 
 import { requireAdminSession, requireMutateSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import {
   deleteDocumentByPublicId,
   deleteImageByPublicId,
@@ -47,7 +48,10 @@ export async function uploadBrochureForProject(project: BrochureTargetProject, f
   // createProjectAction) already checks the session before calling this, but
   // this function is exported and "use server" makes it a callable endpoint
   // in its own right — it must never trust a caller-supplied actorId alone.
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   if (!(file instanceof File) || file.size === 0) {
     return { error: "Choose a PDF file to upload" };
@@ -188,6 +192,9 @@ export async function uploadBrochureThumbnailAction(
   formData: FormData
 ): Promise<BrochureActionState> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) return { error: "Choose an image file to upload" };

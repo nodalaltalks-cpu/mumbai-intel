@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireAdminSession, requireMutateSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { requireTrashReauth } from "@/lib/auth/trash-reauth";
 import { prisma } from "@/lib/prisma";
 import { revalidateTransaction } from "@/lib/cache";
@@ -97,6 +98,9 @@ export async function createTransactionAction(
   formData: FormData
 ): Promise<TransactionFormState> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "transactions.create"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = parseTransactionForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -119,6 +123,9 @@ export async function updateTransactionAction(
   formData: FormData
 ): Promise<TransactionFormState> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "transactions.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = parseTransactionForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };

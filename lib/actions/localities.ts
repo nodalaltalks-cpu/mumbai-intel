@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireAdminSession, requireMutateSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { requireTrashReauth } from "@/lib/auth/trash-reauth";
 import { prisma } from "@/lib/prisma";
 import { revalidateLocality } from "@/lib/cache";
@@ -212,6 +213,9 @@ export async function createLocalityAction(
   formData: FormData
 ): Promise<LocalityFormState> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "localities.add"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = parseLocalityForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -237,6 +241,9 @@ export async function createLocalityAction(
  */
 export async function createLocalityInlineAction(name: string): Promise<InlineCreateResult> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "localities.add"))) {
+    return { error: "You don't have permission to do this." };
+  }
   const trimmed = name.trim();
   if (!trimmed) return { error: "Name is required" };
 
@@ -260,6 +267,9 @@ export async function updateLocalityAction(
   formData: FormData
 ): Promise<LocalityFormState> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "localities.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = parseLocalityForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -425,6 +435,9 @@ export async function toggleLocalityPublishAction(localityId: string, nextValue:
 
 export async function toggleLocalityFeaturedAction(localityId: string, nextValue: boolean): Promise<void> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "localities.edit"))) {
+    throw new Error("You don't have permission to do this.");
+  }
   const updated = await prisma.locality.update({ where: { id: localityId }, data: { isFeatured: nextValue }, select: { slug: true } });
   await logAudit(session.userId, nextValue ? "locality.feature" : "locality.unfeature", "Locality", localityId);
   revalidateLocality({ id: localityId, slug: updated.slug });
@@ -443,6 +456,9 @@ export async function toggleLocalityArchiveAction(localityId: string, nextValue:
 
 export async function duplicateLocalityAction(localityId: string): Promise<{ error?: string; newLocalityId?: string }> {
   const session = await requireMutateSession();
+  if (!(await hasPermission(session, "localities.add"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const source = await prisma.locality.findUnique({ where: { id: localityId }, include: { amenities: true } });
   if (!source) return { error: "Locality not found" };

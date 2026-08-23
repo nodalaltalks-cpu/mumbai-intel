@@ -54,6 +54,11 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    key: "support",
+    label: "Support",
+    permissions: [{ key: "support.manage_enquiries", label: "Manage contact enquiries" }],
+  },
+  {
     key: "campaigns",
     label: "Campaigns",
     permissions: [

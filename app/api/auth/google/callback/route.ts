@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     // the founder into the public account system and redirected to the
     // public site instead of /admin.
     const admin = await prisma.user.findUnique({ where: { email: profile.email } });
-    if (admin && admin.isActive) {
+    if (admin && admin.isActive && profile.email_verified) {
       await prisma.user.update({ where: { id: admin.id }, data: { lastLoginAt: new Date() } });
       await setSessionCookie({ userId: admin.id, email: admin.email, name: admin.name, role: admin.role });
       const response = NextResponse.redirect(new URL("/admin", origin));
@@ -68,6 +68,15 @@ export async function GET(request: NextRequest) {
       // rather than erroring, so the same person can sign in either way.
       const existingByEmail = await prisma.publicUser.findUnique({ where: { email: profile.email } });
       if (existingByEmail) {
+        // Credentials signup never verifies email ownership (lib/actions/public-auth.ts),
+        // so an attacker could pre-register someone else's email with a password of
+        // their choosing, then keep using that password after the real owner shows up
+        // and links their verified Google account. Google's verified ownership of this
+        // email supersedes an unverified credentials account -- null the old password
+        // so it stops working the moment the real owner links Google. An already-
+        // verified credentials account (owner proved email ownership some other way,
+        // or this is a second Google link) is unaffected.
+        const wasUnverifiedCredentialsAccount = existingByEmail.provider === "CREDENTIALS" && !existingByEmail.emailVerifiedAt;
         user = await prisma.publicUser.update({
           where: { id: existingByEmail.id },
           data: {
@@ -75,6 +84,7 @@ export async function GET(request: NextRequest) {
             image: existingByEmail.image ?? profile.picture,
             emailVerifiedAt: existingByEmail.emailVerifiedAt ?? new Date(),
             lastLoginAt: new Date(),
+            ...(wasUnverifiedCredentialsAccount ? { passwordHash: null } : {}),
           },
         });
       } else {

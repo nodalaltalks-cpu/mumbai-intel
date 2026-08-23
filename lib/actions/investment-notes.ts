@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireMutateSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { DATA_SOURCES, CONFIDENCE_LEVELS } from "@/lib/project-meta";
 import { friendlyPrismaError } from "./errors";
@@ -25,7 +26,10 @@ export async function addInvestmentNoteAction(
   _prevState: InvestmentNoteActionState,
   formData: FormData
 ): Promise<InvestmentNoteActionState> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = noteSchema.safeParse({
     kind: formData.get("kind"),
@@ -65,7 +69,10 @@ export async function updateInvestmentNoteAction(
   _prevState: InvestmentNoteActionState,
   formData: FormData
 ): Promise<InvestmentNoteActionState> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = noteSchema.safeParse({
     kind: formData.get("kind"),
@@ -94,7 +101,10 @@ export async function updateInvestmentNoteAction(
 }
 
 export async function deleteInvestmentNoteAction(noteId: string): Promise<{ error?: string }> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
   const note = await prisma.investmentNote.delete({ where: { id: noteId } });
   revalidatePath(`/admin/projects/${note.projectId}/edit`);
   return {};

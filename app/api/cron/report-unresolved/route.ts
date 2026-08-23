@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { notifyUnresolvedReports } from "@/lib/notifications";
+import { verifyCronSecret } from "@/lib/verify-cron-secret";
 
 /**
  * Vercel Cron hits this daily. Same CRON_SECRET check as
@@ -7,8 +8,7 @@ import { notifyUnresolvedReports } from "@/lib/notifications";
  * `Authorization: Bearer <CRON_SECRET>` when that env var is set.
  */
 export async function GET(request: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

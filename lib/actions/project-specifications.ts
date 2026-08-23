@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireMutateSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { friendlyPrismaError } from "./errors";
 
@@ -20,7 +21,10 @@ export async function addProjectSpecificationAction(
   _prevState: SpecificationActionState,
   formData: FormData
 ): Promise<SpecificationActionState> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
 
   const parsed = specificationSchema.safeParse({
     category: formData.get("category"),
@@ -51,7 +55,10 @@ export async function addProjectSpecificationAction(
 }
 
 export async function deleteProjectSpecificationAction(specificationId: string): Promise<{ error?: string }> {
-  await requireMutateSession();
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { error: "You don't have permission to do this." };
+  }
   const spec = await prisma.projectSpecification.delete({ where: { id: specificationId } });
   revalidatePath(`/admin/projects/${spec.projectId}/edit`);
   return {};
