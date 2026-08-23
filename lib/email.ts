@@ -134,7 +134,8 @@ function escapeHtml(value: string): string {
  * renders consistently across Outlook/Gmail/Apple Mail, none of which
  * support external or `<style>`-block CSS reliably.
  */
-export async function sendPasswordResetEmail(to: string, resetUrl: string, expiryMinutes: number): Promise<void> {
+/** Returns whether the send actually succeeded — the caller (requestPasswordResetAction) uses this to log a founder-visible audit entry on failure, without ever changing the generic response shown to the requester (never reveal account existence). */
+export async function sendPasswordResetEmail(to: string, resetUrl: string, expiryMinutes: number): Promise<boolean> {
   const safeUrl = escapeHtml(resetUrl);
   const html = `
     <div style="background:#fafafa;padding:40px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
@@ -177,7 +178,7 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string, expir
     </div>
   `;
 
-  await sendEmail({ to, subject: "Reset your NoDalalTalks password", html });
+  return sendEmail({ to, subject: "Reset your NoDalalTalks password", html });
 }
 
 /** Newsletter signups aren't persisted to a table today — this forwards the address the same way the contact form does, to the site's own inbox, so a real person adds it to the actual mailing list. */

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth/token";
 import { REFERRAL_COOKIE_MAX_AGE_SECONDS, REFERRAL_COOKIE_NAME } from "@/lib/referral-constants";
+import { TRASH_REAUTH_COOKIE, TRASH_REAUTH_COOKIE_PATH } from "@/lib/auth/trash-reauth-constants";
 
 export const config = {
   matcher: ["/admin/:path*", "/"],
@@ -51,6 +52,24 @@ export function proxy(request: NextRequest) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
+  }
+
+  // Leaving Trash for any other admin section must immediately end that
+  // Trash authorization, not just let it silently time out after 10 minutes
+  // (the founder being logged into Admin elsewhere must never count as still
+  // being authorized for Trash). The cookie is scoped to path=/admin/trash,
+  // so the browser never SENDS it on this request in the first place —
+  // `request.cookies.get(...)` is always empty here, which means it cannot
+  // be used to decide whether to clear it. A Set-Cookie response header
+  // doesn't require the browser to have sent that cookie first, though: it's
+  // issued unconditionally below (cheap even when there's nothing to clear),
+  // and the browser still applies it to the path-scoped cookie in its jar.
+  // Runs for both hard reloads and client-side navigation (the App Router
+  // still round-trips through here for the new route's RSC payload).
+  if (!pathname.startsWith(TRASH_REAUTH_COOKIE_PATH)) {
+    const response = NextResponse.next();
+    response.cookies.delete({ name: TRASH_REAUTH_COOKIE, path: TRASH_REAUTH_COOKIE_PATH });
+    return response;
   }
 
   return NextResponse.next();

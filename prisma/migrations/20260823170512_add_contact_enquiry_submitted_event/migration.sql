@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "ResearchEventType" ADD VALUE 'CONTACT_ENQUIRY_SUBMITTED';

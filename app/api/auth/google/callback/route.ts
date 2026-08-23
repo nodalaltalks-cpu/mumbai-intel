@@ -68,23 +68,25 @@ export async function GET(request: NextRequest) {
       // rather than erroring, so the same person can sign in either way.
       const existingByEmail = await prisma.publicUser.findUnique({ where: { email: profile.email } });
       if (existingByEmail) {
-        // Credentials signup never verifies email ownership (lib/actions/public-auth.ts),
-        // so an attacker could pre-register someone else's email with a password of
-        // their choosing, then keep using that password after the real owner shows up
-        // and links their verified Google account. Google's verified ownership of this
-        // email supersedes an unverified credentials account -- null the old password
-        // so it stops working the moment the real owner links Google. An already-
-        // verified credentials account (owner proved email ownership some other way,
-        // or this is a second Google link) is unaffected.
-        const wasUnverifiedCredentialsAccount = existingByEmail.provider === "CREDENTIALS" && !existingByEmail.emailVerifiedAt;
+        // Previously nulled passwordHash here whenever the existing account was
+        // "unverified" -- but email verification was never actually wired up
+        // anywhere in the app (signupAction never sets emailVerifiedAt), so every
+        // real credentials account counted as "unverified" and had its real,
+        // working password silently deleted the moment its owner ever clicked
+        // "Continue with Google" (e.g. on the same login page, by habit or
+        // mistake). That's a confirmed real-world bug, not a hardening measure:
+        // it broke every user it was meant to protect and never differentiated
+        // an attacker-planted account from a genuine one. Just link Google
+        // instead -- both login methods now work for the same account, matching
+        // "existing account is correctly identified, no duplicate account
+        // created" with no surprise side effect on the password.
         user = await prisma.publicUser.update({
           where: { id: existingByEmail.id },
           data: {
             googleId: profile.sub,
             image: existingByEmail.image ?? profile.picture,
-            emailVerifiedAt: existingByEmail.emailVerifiedAt ?? new Date(),
+            emailVerifiedAt: existingByEmail.emailVerifiedAt ?? (profile.email_verified ? new Date() : null),
             lastLoginAt: new Date(),
-            ...(wasUnverifiedCredentialsAccount ? { passwordHash: null } : {}),
           },
         });
       } else {

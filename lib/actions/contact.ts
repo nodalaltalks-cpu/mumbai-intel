@@ -9,6 +9,7 @@ import { getPublicSession } from "@/lib/public-auth/session";
 import { CONTACT_SUBJECTS } from "@/lib/contact-constants";
 import { createNotification, notifyAllAdmins } from "@/lib/notifications";
 import { logAudit } from "@/lib/audit";
+import { recordResearchEvent } from "@/lib/analytics/research-events";
 import { friendlyPrismaError } from "./errors";
 
 const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefined ? undefined : v);
@@ -72,6 +73,11 @@ export async function submitContactMessageAction(_prevState: ContactFormState, f
   // Best-effort from here — the enquiry is already saved above, so none of this can block the user's success message.
   await logAudit(session?.userId ?? null, "contact_enquiry.receive", "ContactEnquiry", enquiryId, {
     after: { name: data.name, email: data.email, subject: data.subject ?? null },
+  });
+  // Closes the search -> ... -> contact funnel's final stage (Section 3).
+  await recordResearchEvent("CONTACT_ENQUIRY_SUBMITTED", {
+    entityId: enquiryId,
+    metadata: { subject: data.subject ?? null, sourcePage: data.sourcePage ?? null },
   });
   if (session?.userId) {
     await createNotification({

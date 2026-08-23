@@ -1,6 +1,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 import crypto from "crypto";
+import { TRASH_REAUTH_COOKIE, TRASH_REAUTH_COOKIE_PATH } from "./trash-reauth-constants";
 
 /**
  * Short-lived, separate step-up credential for Trash (Section 18) — not a
@@ -8,10 +9,20 @@ import crypto from "crypto";
  * hash (same verifyPassword() used by ChangePasswordForm/settings.ts) and,
  * on success, stamps a short-TTL signed cookie using the same HMAC scheme
  * as the main session token (lib/auth/token.ts), scoped to one userId so it
- * can never be replayed for a different account. Auto-lock after
- * inactivity = the TTL itself; there is nothing to "log out" of separately.
+ * can never be replayed for a different account.
+ *
+ * Scoped to path=/admin/trash (not "/") so the browser itself never sends it
+ * on any other admin page — the founder being logged into Admin elsewhere
+ * must never count as still being authorized for Trash. That alone only
+ * stops the cookie being *sent* elsewhere though; it doesn't stop it from
+ * still being valid and silently re-accepted if the founder returns to
+ * Trash within the TTL after visiting other pages. proxy.ts is what
+ * actually deletes the cookie server-side the instant a request lands on
+ * any admin page OTHER than /admin/trash — that's what makes "leave Trash,
+ * come back" require the password again, not just this path scoping. The
+ * TTL below is then a ceiling for "stayed on the Trash page and did
+ * nothing," not the primary expiry mechanism.
  */
-const TRASH_REAUTH_COOKIE = "mi_trash_reauth";
 const TRASH_REAUTH_TTL_SECONDS = 10 * 60;
 
 interface TrashReauthPayload {
@@ -38,14 +49,14 @@ export async function grantTrashReauth(userId: string): Promise<void> {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    path: "/",
+    path: TRASH_REAUTH_COOKIE_PATH,
     maxAge: TRASH_REAUTH_TTL_SECONDS,
   });
 }
 
 export async function clearTrashReauth(): Promise<void> {
   const store = await cookies();
-  store.delete(TRASH_REAUTH_COOKIE);
+  store.delete({ name: TRASH_REAUTH_COOKIE, path: TRASH_REAUTH_COOKIE_PATH });
 }
 
 export async function hasValidTrashReauth(userId: string): Promise<boolean> {

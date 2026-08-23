@@ -14,6 +14,7 @@ import { recalculatePublicUserCompletion } from "@/lib/profile-completion";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/request-ip";
 import { sendPasswordResetEmail, sendWelcomeEmail } from "@/lib/email";
+import { logAudit } from "@/lib/audit";
 import { generateUniqueReferralCode, resolveReferral } from "@/lib/referral";
 import { REFERRAL_COOKIE_NAME } from "@/lib/referral-constants";
 
@@ -192,7 +193,13 @@ export async function requestPasswordResetAction(_prevState: PublicAuthState, fo
       },
     });
     const resetUrl = `${getSiteUrl()}/reset-password?token=${token}`;
-    await sendPasswordResetEmail(email, resetUrl, RESET_TOKEN_TTL_MINUTES);
+    const sent = await sendPasswordResetEmail(email, resetUrl, RESET_TOKEN_TTL_MINUTES);
+    // The requester always sees the same generic success message (never reveal
+    // account existence) — but a real send failure (e.g. misconfigured SMTP/
+    // Resend credentials) previously vanished into a server log only the
+    // founder would never see. Logging it to the same Audit trail the founder
+    // already checks in Admin surfaces it without weakening that guarantee.
+    if (!sent) await logAudit(null, "password_reset_email.failed", "User", admin.id);
     return successState;
   }
 
@@ -209,7 +216,8 @@ export async function requestPasswordResetAction(_prevState: PublicAuthState, fo
   });
 
   const resetUrl = `${getSiteUrl()}/reset-password?token=${token}`;
-  await sendPasswordResetEmail(email, resetUrl, RESET_TOKEN_TTL_MINUTES);
+  const sent = await sendPasswordResetEmail(email, resetUrl, RESET_TOKEN_TTL_MINUTES);
+  if (!sent) await logAudit(null, "password_reset_email.failed", "PublicUser", user.id);
 
   return successState;
 }

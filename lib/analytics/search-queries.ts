@@ -204,10 +204,12 @@ export interface SearchConversionRates {
   viewedProjectRate: number | null;
   engagedRate: number | null;
   downloadedBrochureRate: number | null;
+  contactedRate: number | null;
 }
 
 const VIEWED_PROJECT_EVENT_TYPES: ResearchEventType[] = ["PROJECT_VIEWED"];
 const ENGAGED_EVENT_TYPES: ResearchEventType[] = ["COMPARE_USED", "WISHLIST_ADDED"];
+const CONTACTED_EVENT_TYPES: ResearchEventType[] = ["CONTACT_ENQUIRY_SUBMITTED"];
 
 /**
  * Search-to-X rates (Section 18) — a TRUE intersection (of the users who
@@ -233,7 +235,7 @@ export async function getSearchConversionRates(period: AnalyticsPeriod): Promise
   const searchedUsers = searcherIds.length;
 
   if (searchedUsers === 0) {
-    return { searchedUsers: 0, viewedProjectRate: null, engagedRate: null, downloadedBrochureRate: null };
+    return { searchedUsers: 0, viewedProjectRate: null, engagedRate: null, downloadedBrochureRate: null, contactedRate: null };
   }
 
   async function countIntersection(eventTypes: ResearchEventType[]): Promise<number> {
@@ -244,13 +246,14 @@ export async function getSearchConversionRates(period: AnalyticsPeriod): Promise
     return groups.length;
   }
 
-  const [viewedProject, engaged, downloadedBrochure] = await Promise.all([
+  const [viewedProject, engaged, downloadedBrochure, contacted] = await Promise.all([
     countIntersection(VIEWED_PROJECT_EVENT_TYPES),
     countIntersection(ENGAGED_EVENT_TYPES),
     prisma.brochureDownloadEvent.groupBy({
       by: ["publicUserId"],
       where: { eventType: "DOWNLOAD_COMPLETED", publicUserId: { in: searcherIds }, createdAt: { gte: period.since, lt: period.until } },
     }),
+    countIntersection(CONTACTED_EVENT_TYPES),
   ]);
 
   const rate = (n: number) => Math.round((n / searchedUsers) * 1000) / 10;
@@ -259,6 +262,7 @@ export async function getSearchConversionRates(period: AnalyticsPeriod): Promise
     viewedProjectRate: rate(viewedProject),
     engagedRate: rate(engaged),
     downloadedBrochureRate: rate(downloadedBrochure.length),
+    contactedRate: rate(contacted),
   };
 }
 

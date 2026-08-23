@@ -1809,6 +1809,12 @@ enum ResearchEventType {
   /// stronger engagement signal a founder notification campaign's "Clicked"
   /// metric is built from (see Notification.clickedAt, set at the same call site).
   NOTIFICATION_CLICKED
+  /// The search -> ... -> contact funnel's final stage (Section 3) — fired
+  /// from submitContactMessageAction alongside the existing ContactEnquiry
+  /// row, so "how many searches this period led to a contact enquiry" is
+  /// queryable the same way as the other funnel stages, without needing a
+  /// second read of the ContactEnquiry table.
+  CONTACT_ENQUIRY_SUBMITTED
 }
 
 /// Site-wide "research intent" log — a deliberately generic single table

@@ -2,6 +2,8 @@
 
 import { searchPublic, type PublicSearchResult } from "@/lib/queries";
 import { recordSearchAction } from "@/lib/actions/search-history";
+import { recordResearchEvent } from "@/lib/analytics/research-events";
+import { getOrCreateAnonSessionId } from "@/lib/analytics/session-id";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/request-ip";
 
@@ -24,5 +26,22 @@ export async function publicSearchAction(query: string): Promise<PublicSearchRes
   if (!limit.allowed) return EMPTY_RESULT;
 
   await recordSearchAction(trimmed);
-  return searchPublic(trimmed);
+  const result = await searchPublic(trimmed);
+
+  // Previously this search box's queries were invisible to admin Search
+  // Analytics entirely — recordSearchAction only writes SearchHistory (a
+  // personal "your past searches" feature, no-ops for anonymous visitors,
+  // no result count). Firing the same SEARCH_PERFORMED event the /projects
+  // and /transactions search boxes already use puts this surface into the
+  // exact same admin queries (lib/analytics/search-queries.ts) with zero
+  // new schema — including anonymous searchers, via the anon session id.
+  const resultCount = result.projects.length + result.builders.length + result.localities.length;
+  const sessionId = await getOrCreateAnonSessionId();
+  await recordResearchEvent("SEARCH_PERFORMED", {
+    metadata: { query: trimmed, source: "global_search" },
+    resultCount,
+    sessionId,
+  });
+
+  return result;
 }

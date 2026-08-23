@@ -93,13 +93,14 @@ export default async function SearchAnalyticsPage({ searchParams }: { searchPara
       <section className="rounded-sm border border-border bg-surface p-4">
         <h2 className="mb-1 font-mono text-sm font-semibold text-foreground">Search-to-outcome rates</h2>
         <p className="mb-3 text-[11px] text-muted">
-          Of users who searched this period, the share who also viewed a project / compared or saved / downloaded a brochure in the same period — an
-          aggregate signal, not a per-search click trail (no per-search click is captured anywhere in this app).
+          Of users who searched this period, the share who also viewed a project / compared or saved / downloaded a brochure / sent a contact enquiry in the
+          same period — an aggregate signal, not a per-search click trail (no per-search click is captured anywhere in this app).
         </p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           <RateTile label="Search → viewed a project" percent={conversion.viewedProjectRate} />
           <RateTile label="Search → compared / saved" percent={conversion.engagedRate} />
           <RateTile label="Search → downloaded brochure" percent={conversion.downloadedBrochureRate} />
+          <RateTile label="Search → contacted us" percent={conversion.contactedRate} />
         </div>
       </section>
 
