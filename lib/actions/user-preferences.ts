@@ -5,15 +5,25 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getPublicSession } from "@/lib/public-auth/session";
 import { PROPERTY_CATEGORIES } from "@/lib/project-meta";
-import { recalculatePublicUserCompletion } from "@/lib/profile-completion";
+import { recalculatePublicUserCompletion, getMilestoneCrossed } from "@/lib/profile-completion";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
 import { friendlyPrismaError } from "./errors";
 
 const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefined ? undefined : v);
 
-const CONFIGURATIONS = ["1", "2", "3", "4"] as const;
-const READINESS = ["READY_TO_MOVE", "UNDER_CONSTRUCTION", "NEW_LAUNCH"] as const;
+// Existing BHK buckets plus the non-BHK property forms the founder asked to
+// add — kept in the same String[] column rather than a new field, since
+// "configuration" already means "the shapes of property this user is open
+// to," and these are just more values in that same list.
+const CONFIGURATIONS = ["1", "2", "3", "4", "PENTHOUSE", "DUPLEX", "BUNGALOW", "PLOT", "LAND"] as const;
+// NEW_LAUNCH kept (never remove an existing option) alongside the two new
+// values the founder asked for — PRE_LAUNCH is genuinely distinct from
+// NEW_LAUNCH (announced/marketed vs. formally launched), and
+// NEAR_POSSESSION_6M sits between UNDER_CONSTRUCTION and READY_TO_MOVE.
+const READINESS = ["PRE_LAUNCH", "NEW_LAUNCH", "UNDER_CONSTRUCTION", "NEAR_POSSESSION_6M", "READY_TO_MOVE"] as const;
 const PURPOSES = ["SELF_USE", "INVESTMENT", "RESEARCHING"] as const;
+const FAMILY_SIZES = ["1", "2", "3", "4", "5", "6_PLUS", "PREFER_NOT_TO_SAY"] as const;
+const FAMILY_INCOME_RANGES = ["BELOW_5L", "5L_10L", "10L_20L", "20L_50L", "50L_1CR", "1CR_PLUS", "PREFER_NOT_TO_SAY"] as const;
 
 const preferencesSchema = z.object({
   preferredBudgetMinRupees: z.preprocess(emptyToUndefined, z.coerce.number().min(0).optional()),
@@ -84,6 +94,14 @@ export async function updatePreferencesAction(_prevState: PreferencesFormState, 
       .map((v) => String(v).trim())
       .filter(Boolean);
   }
+  if (formData.has("familySize")) {
+    const v = String(formData.get("familySize"));
+    data.familySize = (FAMILY_SIZES as readonly string[]).includes(v) ? v : null;
+  }
+  if (formData.has("familyIncomeRange")) {
+    const v = String(formData.get("familyIncomeRange"));
+    data.familyIncomeRange = (FAMILY_INCOME_RANGES as readonly string[]).includes(v) ? v : null;
+  }
 
   let newlyAddedLocalities: string[] = [];
   try {
@@ -108,20 +126,45 @@ export async function updatePreferencesAction(_prevState: PreferencesFormState, 
     await recordResearchEvent("LOCALITY_INTEREST_ADDED", { metadata: { locality } });
   }
 
-  // Which of the 4 independent preference cards this particular save came
-  // from — profile-completion step-level analytics (Section 15), reusing
-  // the existing PROFILE_UPDATED type via metadata rather than one enum
-  // value per card.
+  // Which of the independent preference cards this particular save came
+  // from — profile-completion step-level analytics. Field key only, never
+  // the actual value (never the budget amount, income bracket, etc.).
   const touchedSection = Object.keys(data)[0];
   if (touchedSection) {
     await recordResearchEvent("PROFILE_UPDATED", { entityType: "PublicUser", entityId: session.userId, metadata: { section: touchedSection } });
+    const FIELD_KEY: Record<string, string> = {
+      preferredBudgetMinRupees: "budget",
+      preferredBudgetMaxRupees: "budget",
+      preferredCategories: "category",
+      preferredConfigurations: "configuration",
+      preferredReadiness: "readiness",
+      purposes: "purpose",
+      preferredLocalityIds: "localities",
+      localityFreeText: "localities",
+      familySize: "familySize",
+      familyIncomeRange: "familyIncome",
+    };
+    const fieldKey = FIELD_KEY[touchedSection];
+    const value = data[touchedSection];
+    const filled = Array.isArray(value) ? value.length > 0 : value !== null && value !== undefined;
+    if (fieldKey && filled) {
+      await recordResearchEvent("PROFILE_FIELD_COMPLETED", { entityType: "PublicUser", entityId: session.userId, metadata: { field: fieldKey } });
+    }
   }
 
-  const wasComplete = (await prisma.publicUser.findUnique({ where: { id: session.userId }, select: { profileCompletionPercent: true } }))
-    ?.profileCompletionPercent === 100;
+  const before = (await prisma.publicUser.findUnique({ where: { id: session.userId }, select: { profileCompletionPercent: true } }))
+    ?.profileCompletionPercent ?? 0;
   const completionPercent = await recalculatePublicUserCompletion(session.userId);
-  if (!wasComplete && completionPercent === 100) {
+  if (before !== 100 && completionPercent === 100) {
     await recordResearchEvent("PROFILE_COMPLETED", { entityType: "PublicUser", entityId: session.userId, metadata: { source: "preferences" } });
+  } else {
+    const milestone = getMilestoneCrossed(before, completionPercent);
+    if (milestone) {
+      await recordResearchEvent(`PROFILE_COMPLETION_${milestone}` as Parameters<typeof recordResearchEvent>[0], {
+        entityType: "PublicUser",
+        entityId: session.userId,
+      });
+    }
   }
 
   revalidatePath("/account");

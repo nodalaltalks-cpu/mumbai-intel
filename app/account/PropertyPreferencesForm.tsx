@@ -3,40 +3,46 @@
 import { useState, useTransition } from "react";
 import { updatePreferencesAction } from "@/lib/actions/user-preferences";
 import { CATEGORY_LABEL, CONFIGURATION_FILTER_OPTIONS, PROPERTY_CATEGORIES } from "@/lib/project-meta";
+import { useProfileCompletion } from "@/lib/profile-completion-client";
+import SkipFieldButton from "./SkipFieldButton";
 
-const READINESS_OPTIONS = [
-  { value: "READY_TO_MOVE", label: "Ready to Move" },
-  { value: "UNDER_CONSTRUCTION", label: "Under Construction" },
-  { value: "NEW_LAUNCH", label: "New Launch" },
+// Non-BHK property shapes, kept local to this preference form rather than
+// added to lib/project-meta.ts's CONFIGURATION_FILTER_OPTIONS — that list is
+// shared with the public Projects/Transactions filters, and these are a
+// user's loose research preference, not a real listing filter value.
+const SPECIAL_CONFIGURATION_OPTIONS = [
+  { value: "PENTHOUSE", label: "Penthouse" },
+  { value: "DUPLEX", label: "Duplex" },
+  { value: "BUNGALOW", label: "Bungalow" },
+  { value: "PLOT", label: "Plot" },
+  { value: "LAND", label: "Land" },
 ] as const;
 
-/** Property type / configuration / status — all instant-save (no separate Save button) since these are simple toggles, matching the progressive-profile "save automatically where practical" goal. Each change posts only this card's own fields; lib/actions/user-preferences.ts's field-presence gating means the other cards' saved values are never touched. Property type is multi-select (a user researching can be open to more than one type at once), same shape as configuration/status below. */
+/** Property type / configuration — instant-save (no separate Save button), each change posting only this card's own fields; lib/actions/user-preferences.ts's field-presence gating means the other cards' saved values are never touched. Both are multi-select (a user researching can be open to more than one at once). */
 export default function PropertyPreferencesForm({
   preferredCategories,
   preferredConfigurations,
-  preferredReadiness,
 }: {
   preferredCategories: string[];
   preferredConfigurations: string[];
-  preferredReadiness: string[];
 }) {
   const [categories, setCategories] = useState(new Set<string>(preferredCategories));
   const [configurations, setConfigurations] = useState(new Set(preferredConfigurations));
-  const [readiness, setReadiness] = useState(new Set(preferredReadiness));
   const [isPending, startTransition] = useTransition();
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const { setFieldComplete, scrollToNextAfter } = useProfileCompletion();
 
-  function save(next: { categories?: Set<string>; configurations?: Set<string>; readiness?: Set<string> }) {
+  function save(next: { categories?: Set<string>; configurations?: Set<string> }) {
     const fd = new FormData();
     fd.set("categoriesSubmitted", "1");
     for (const c of next.categories ?? categories) fd.append("preferredCategories", c);
     fd.set("configurationsSubmitted", "1");
     for (const c of next.configurations ?? configurations) fd.append("preferredConfigurations", c);
-    fd.set("readinessSubmitted", "1");
-    for (const r of next.readiness ?? readiness) fd.append("preferredReadiness", r);
     startTransition(async () => {
       await updatePreferencesAction({}, fd);
       setSavedAt(Date.now());
+      if ((next.categories ?? categories).size > 0) scrollToNextAfter("category");
+      if ((next.configurations ?? configurations).size > 0) scrollToNextAfter("configuration");
     });
   }
 
@@ -45,6 +51,7 @@ export default function PropertyPreferencesForm({
     if (next.has(value)) next.delete(value);
     else next.add(value);
     setCategories(next);
+    setFieldComplete("category", next.size > 0);
     save({ categories: next });
   }
 
@@ -53,20 +60,13 @@ export default function PropertyPreferencesForm({
     if (next.has(value)) next.delete(value);
     else next.add(value);
     setConfigurations(next);
+    setFieldComplete("configuration", next.size > 0);
     save({ configurations: next });
-  }
-
-  function toggleReadiness(value: string) {
-    const next = new Set(readiness);
-    if (next.has(value)) next.delete(value);
-    else next.add(value);
-    setReadiness(next);
-    save({ readiness: next });
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
+      <div id="field-category" tabIndex={-1}>
         <span className="mb-1.5 block text-[11px] uppercase tracking-wide text-muted">Property type (select any)</span>
         <div className="flex flex-wrap gap-1.5">
           {PROPERTY_CATEGORIES.map((c) => (
@@ -84,7 +84,7 @@ export default function PropertyPreferencesForm({
         </div>
       </div>
 
-      <div>
+      <div id="field-configuration" tabIndex={-1}>
         <span className="mb-1.5 block text-[11px] uppercase tracking-wide text-muted">Configuration (select any)</span>
         <div className="flex flex-wrap gap-1.5">
           {CONFIGURATION_FILTER_OPTIONS.map((c) => (
@@ -99,28 +99,25 @@ export default function PropertyPreferencesForm({
               {c.label}
             </button>
           ))}
-        </div>
-      </div>
-
-      <div>
-        <span className="mb-1.5 block text-[11px] uppercase tracking-wide text-muted">Status (select any)</span>
-        <div className="flex flex-wrap gap-1.5">
-          {READINESS_OPTIONS.map((r) => (
+          {SPECIAL_CONFIGURATION_OPTIONS.map((c) => (
             <button
-              key={r.value}
+              key={c.value}
               type="button"
-              onClick={() => toggleReadiness(r.value)}
+              onClick={() => toggleConfiguration(c.value)}
               className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                readiness.has(r.value) ? "border-accent bg-accent/10 text-accent" : "border-border text-muted hover:border-accent/50"
+                configurations.has(c.value) ? "border-accent bg-accent/10 text-accent" : "border-border text-muted hover:border-accent/50"
               }`}
             >
-              {r.label}
+              {c.label}
             </button>
           ))}
         </div>
       </div>
 
-      <p className="text-[10px] text-muted">{isPending ? "Saving…" : savedAt ? "Saved" : "Tap to select, saved automatically."}</p>
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] text-muted">{isPending ? "Saving…" : savedAt ? "Saved" : "Tap to select, saved automatically."}</p>
+        <SkipFieldButton fieldKey="configuration" />
+      </div>
     </div>
   );
 }

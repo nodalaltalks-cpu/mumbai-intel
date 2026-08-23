@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getPublicSession } from "@/lib/public-auth/session";
-import { recalculatePublicUserCompletion } from "@/lib/profile-completion";
+import { recalculatePublicUserCompletion, getMilestoneCrossed } from "@/lib/profile-completion";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
 import { friendlyPrismaError } from "@/lib/actions/errors";
 
@@ -59,8 +59,17 @@ export async function updatePublicProfileAction(_prevState: ProfileFormState, fo
 
   const completionPercent = await recalculatePublicUserCompletion(session.userId);
   await recordResearchEvent("PROFILE_UPDATED", { entityType: "PublicUser", entityId: session.userId, metadata: { section: "basic_profile" } });
-  if (before?.profileCompletionPercent !== 100 && completionPercent === 100) {
+  const beforePercent = before?.profileCompletionPercent ?? 0;
+  if (beforePercent !== 100 && completionPercent === 100) {
     await recordResearchEvent("PROFILE_COMPLETED", { entityType: "PublicUser", entityId: session.userId, metadata: { source: "basic_profile" } });
+  } else {
+    const milestone = getMilestoneCrossed(beforePercent, completionPercent);
+    if (milestone) {
+      await recordResearchEvent(`PROFILE_COMPLETION_${milestone}` as Parameters<typeof recordResearchEvent>[0], {
+        entityType: "PublicUser",
+        entityId: session.userId,
+      });
+    }
   }
 
   revalidatePath("/account");

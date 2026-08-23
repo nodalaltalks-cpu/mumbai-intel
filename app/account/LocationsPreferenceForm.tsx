@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { updatePreferencesAction } from "@/lib/actions/user-preferences";
+import { useProfileCompletion } from "@/lib/profile-completion-client";
+import SkipFieldButton from "./SkipFieldButton";
 
 /**
  * Locations preference — two distinct inputs, stored separately per Section
@@ -25,6 +27,7 @@ export default function LocationsPreferenceForm({
   const [draft, setDraft] = useState("");
   const [isPending, startTransition] = useTransition();
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const { setFieldComplete, scrollToNextAfter } = useProfileCompletion();
 
   const nameById = new Map(localities.map((l) => [l.id, l.name]));
   function selectedLabels(ids: Set<string>, freeTextList: string[]): string[] {
@@ -32,22 +35,26 @@ export default function LocationsPreferenceForm({
   }
 
   function saveIds(next: Set<string>) {
+    setFieldComplete("localities", next.size > 0 || freeText.length > 0);
     const fd = new FormData();
     fd.set("localityIdsSubmitted", "1");
     for (const id of next) fd.append("preferredLocalityIds", id);
     startTransition(async () => {
       await updatePreferencesAction({}, fd);
       setSavedAt(Date.now());
+      if (next.size > 0) scrollToNextAfter("localities");
     });
   }
 
   function saveFreeText(next: string[]) {
+    setFieldComplete("localities", next.length > 0 || checkedIds.size > 0);
     const fd = new FormData();
     fd.set("localityFreeTextSubmitted", "1");
     for (const t of next) fd.append("localityFreeText", t);
     startTransition(async () => {
       await updatePreferencesAction({}, fd);
       setSavedAt(Date.now());
+      if (next.length > 0) scrollToNextAfter("localities");
     });
   }
 
@@ -130,13 +137,16 @@ export default function LocationsPreferenceForm({
         </div>
       ) : null}
 
-      <p className="text-[10px] text-muted">
-        {isPending
-          ? "Saving…"
-          : savedAt && (checkedIds.size > 0 || freeText.length > 0)
-            ? `Your recommendations will now prioritize ${selectedLabels(checkedIds, freeText).join(", ")}.`
-            : "Saved automatically."}
-      </p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[10px] text-muted">
+          {isPending
+            ? "Saving…"
+            : savedAt && (checkedIds.size > 0 || freeText.length > 0)
+              ? `Your recommendations will now prioritize ${selectedLabels(checkedIds, freeText).join(", ")}.`
+              : "Saved automatically."}
+        </p>
+        <SkipFieldButton fieldKey="localities" />
+      </div>
     </div>
   );
 }

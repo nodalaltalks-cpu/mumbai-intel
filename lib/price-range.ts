@@ -25,6 +25,24 @@ export function parseIndianPrice(input: string): number | null {
   return Math.round(value);
 }
 
+/**
+ * True when a typed value had no lakh/crore/cr unit AND parsed to an amount
+ * no real property budget would ever be (under ₹1 lakh) — e.g. "1.2" or "50"
+ * typed with no unit, which parseIndianPrice reads literally as ₹1/₹50
+ * rather than guessing the unit the person meant. Opt-in (only
+ * BudgetPreferenceForm uses this via PriceRangeFilter's warnOnAmbiguous
+ * prop) so the public Transactions/Projects price filters, which already
+ * rely on parseIndianPrice's plain-rupees fallback, are unaffected.
+ */
+export function isAmbiguousBareNumber(input: string): boolean {
+  const cleaned = input.trim().toLowerCase().replace(/₹/g, "").replace(/,/g, "");
+  const match = cleaned.match(/^(\d+(?:\.\d+)?)\s*(l|lac|lacs|lakh|lakhs|cr|crore|crores)?$/);
+  if (!match) return false;
+  const hasUnit = Boolean(match[2]);
+  const value = Number(match[1]);
+  return !hasUnit && Number.isFinite(value) && value * 1 < LAKH;
+}
+
 function trimZeros(n: number): string {
   return (Math.round(n * 100) / 100).toString();
 }

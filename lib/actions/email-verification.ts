@@ -3,7 +3,7 @@
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getPublicSession } from "@/lib/public-auth/session";
-import { recalculatePublicUserCompletion } from "@/lib/profile-completion";
+import { recalculatePublicUserCompletion, getMilestoneCrossed } from "@/lib/profile-completion";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { sendEmailVerificationEmail } from "@/lib/email";
@@ -65,12 +65,24 @@ export async function verifyEmailAction(_prevState: EmailVerificationState, form
     return { error: "This verification link is invalid or has expired. Request a new one from your profile." };
   }
 
+  const before = (await prisma.publicUser.findUnique({ where: { id: record.userId }, select: { profileCompletionPercent: true } }))
+    ?.profileCompletionPercent ?? 0;
+
   await prisma.publicUser.update({ where: { id: record.userId }, data: { emailVerifiedAt: new Date() } });
   await prisma.publicEmailVerificationToken.update({ where: { id: record.id }, data: { usedAt: new Date() } });
 
   const completionPercent = await recalculatePublicUserCompletion(record.userId);
-  if (completionPercent === 100) {
+  await recordResearchEvent("PROFILE_FIELD_COMPLETED", { entityType: "PublicUser", entityId: record.userId, metadata: { field: "emailVerified" } });
+  if (before !== 100 && completionPercent === 100) {
     await recordResearchEvent("PROFILE_COMPLETED", { entityType: "PublicUser", entityId: record.userId, metadata: { source: "email_verification" } });
+  } else {
+    const milestone = getMilestoneCrossed(before, completionPercent);
+    if (milestone) {
+      await recordResearchEvent(`PROFILE_COMPLETION_${milestone}` as Parameters<typeof recordResearchEvent>[0], {
+        entityType: "PublicUser",
+        entityId: record.userId,
+      });
+    }
   }
 
   return { success: "Your email is verified." };

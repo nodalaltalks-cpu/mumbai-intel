@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   formatIndianPriceCompact,
+  isAmbiguousBareNumber,
   parseIndianPrice,
   PRICE_SLIDER_STEPS,
   rupeesToSliderPosition,
@@ -21,11 +22,15 @@ export default function PriceRangeFilter({
   minRupees,
   maxRupees,
   onCommit,
+  warnOnAmbiguous = false,
 }: {
   minRupees: number | null;
   maxRupees: number | null;
   onCommit: (min: number | null, max: number | null) => void;
+  /** Opt-in: reject (rather than silently commit) a unit-less typed value under ₹1 Lakh, e.g. "1.2" or "50" — nobody means a ₹1 or ₹50 property budget, they forgot Lakh/Cr. Off by default so the public Transactions/Projects price filters (which already treat a bare number as plain rupees, e.g. a precise "4500000") keep their current behavior untouched. */
+  warnOnAmbiguous?: boolean;
 }) {
+  const [ambiguousField, setAmbiguousField] = useState<"min" | "max" | null>(null);
   // Local mirrors of minRupees/maxRupees, not just derived display state --
   // ProjectFilters' onCommit goes through router.push, which re-renders this
   // component with fresh props only after the navigation lands. Reading the
@@ -54,6 +59,7 @@ export default function PriceRangeFilter({
 
   function commitText(which: "min" | "max", text: string) {
     if (text.trim() === "") {
+      setAmbiguousField(null);
       if (which === "min") {
         setMinValue(null);
         setMinPos(0);
@@ -65,8 +71,13 @@ export default function PriceRangeFilter({
       }
       return;
     }
+    if (warnOnAmbiguous && isAmbiguousBareNumber(text)) {
+      setAmbiguousField(which); // leave the previous committed value untouched -- never silently guess the unit
+      return;
+    }
     const parsed = parseIndianPrice(text);
     if (parsed === null) return; // unparseable -- leave the typed text alone rather than silently discarding it
+    setAmbiguousField(null);
     if (which === "min") {
       setMinValue(parsed);
       setMinText(formatIndianPriceCompact(parsed));
@@ -108,25 +119,43 @@ export default function PriceRangeFilter({
           <span className="mb-1 block text-[10px] uppercase tracking-wide text-muted">From</span>
           <input
             value={minText}
-            onChange={(e) => setMinText(e.target.value)}
+            onChange={(e) => {
+              setMinText(e.target.value);
+              if (ambiguousField === "min") setAmbiguousField(null);
+            }}
             onBlur={(e) => commitText("min", e.target.value)}
             placeholder="e.g. 50 Lakh"
             inputMode="decimal"
-            className="w-full rounded-sm border border-border bg-surface px-3 py-2.5 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+            aria-invalid={ambiguousField === "min"}
+            className={`w-full rounded-sm border bg-surface px-3 py-2.5 text-sm text-foreground placeholder:text-muted focus:outline-none ${
+              ambiguousField === "min" ? "border-negative focus:border-negative" : "border-border focus:border-accent"
+            }`}
           />
         </label>
         <label className="flex-1">
           <span className="mb-1 block text-[10px] uppercase tracking-wide text-muted">To</span>
           <input
             value={maxText}
-            onChange={(e) => setMaxText(e.target.value)}
+            onChange={(e) => {
+              setMaxText(e.target.value);
+              if (ambiguousField === "max") setAmbiguousField(null);
+            }}
             onBlur={(e) => commitText("max", e.target.value)}
             placeholder="e.g. 5 Cr"
             inputMode="decimal"
-            className="w-full rounded-sm border border-border bg-surface px-3 py-2.5 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+            aria-invalid={ambiguousField === "max"}
+            className={`w-full rounded-sm border bg-surface px-3 py-2.5 text-sm text-foreground placeholder:text-muted focus:outline-none ${
+              ambiguousField === "max" ? "border-negative focus:border-negative" : "border-border focus:border-accent"
+            }`}
           />
         </label>
       </div>
+      {ambiguousField ? (
+        <p className="text-[11px] text-negative">
+          Did you mean Lakh or Cr? Please add a unit, e.g. &ldquo;{ambiguousField === "min" ? minText : maxText} Lakh&rdquo; or &ldquo;
+          {ambiguousField === "min" ? minText : maxText} Cr&rdquo;.
+        </p>
+      ) : null}
 
       <div className="px-1 pb-1 pt-2">
         <div className="relative h-6">

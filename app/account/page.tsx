@@ -10,8 +10,6 @@ import {
   getWishlistForUser,
   getRecentViewsForUser,
   getSavedSearchesForUser,
-  getSearchHistoryForUser,
-  getPopularSearches,
   getUserPreferences,
   getNotificationPreferences,
   getDashboardNextActionSignals,
@@ -20,7 +18,6 @@ import { removeWishlistItemAction } from "@/lib/actions/wishlist";
 import { toggleSavedProjectAction } from "@/lib/actions/saved-projects";
 import { removeRecentViewAction, clearRecentViewsAction } from "@/lib/actions/recent-views";
 import { deleteSavedSearchAction, toggleSavedSearchNotifyAction } from "@/lib/actions/saved-searches";
-import { clearSearchHistoryAction } from "@/lib/actions/search-history";
 import { formatDate, formatRelativeTime } from "@/lib/format";
 import BrochureDownloadLink from "@/app/components/BrochureDownloadLink";
 import ContinueResearchLink from "@/app/components/ContinueResearchLink";
@@ -37,12 +34,16 @@ import SavedSearchAlertToggle from "./SavedSearchAlertToggle";
 import NotificationPreferencesForm from "./NotificationPreferencesForm";
 import ProfileForm from "./ProfileForm";
 import PropertyPreferencesForm from "./PropertyPreferencesForm";
+import PropertyStatusForm from "./PropertyStatusForm";
+import FamilyForm from "./FamilyForm";
 import BudgetPreferenceForm from "./BudgetPreferenceForm";
 import LocationsPreferenceForm from "./LocationsPreferenceForm";
 import PurposeForm from "./PurposeForm";
-import PhoneVerificationCard from "./PhoneVerificationCard";
 import VerifyEmailButton from "./VerifyEmailButton";
 import ProfileCompletionBar from "@/app/components/ui/ProfileCompletionBar";
+import ProfileMilestoneToast from "@/app/components/ui/ProfileMilestoneToast";
+import StickyCompletionIndicator from "@/app/components/ui/StickyCompletionIndicator";
+import { ProfileCompletionProvider } from "@/lib/profile-completion-client";
 import { getCompletionSections } from "@/lib/profile-completion";
 import { resolveNextAction } from "@/lib/dashboard-next-action";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
@@ -75,28 +76,27 @@ type TabKey = (typeof TABS)[number]["key"];
 export default async function AccountPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const session = await requirePublicSession("/account");
   const sp = await searchParams;
-  // "history" was a top-level tab before Search History moved into Profile
-  // (Section 7) — redirect old bookmarks/links there instead of silently
-  // falling back to Continue Research.
+  // "history" was a top-level tab before Search History was retired from the
+  // dashboard entirely (records are preserved, just no longer surfaced here)
+  // — redirect old bookmarks/links to Profile instead of silently falling
+  // back to Continue Research.
   const requestedTab = sp.tab === "history" ? "profile" : sp.tab;
   const tab = (TABS.some((t) => t.key === requestedTab) ? requestedTab : "research") as TabKey;
 
   // Each query below is gated to the active tab — viewing "Continue Research"
-  // shouldn't also pay for the Wishlist join, Saved Searches, Search History,
-  // Popular Searches, preferences, notification-preferences, and
-  // getLocalitiesForSelect() queries that only the Profile tab needs. `user`
+  // shouldn't also pay for the Wishlist join, Saved Searches, preferences,
+  // notification-preferences, and getLocalitiesForSelect() queries that only
+  // the Profile tab needs. `user`
   // and the next-action signals are the exceptions: the header and the
   // dashboard-wide "what should I do next" card render on every tab.
   // eslint-disable-next-line prefer-const -- `user` is reassigned below by the referralCode lazy-backfill
-  let [user, savedProjects, wishlist, recentViews, savedSearches, searchHistory, popularSearches, preferences, notificationPreferences, localities, nextActionSignals] =
+  let [user, savedProjects, wishlist, recentViews, savedSearches, preferences, notificationPreferences, localities, nextActionSignals] =
     await Promise.all([
     prisma.publicUser.findUnique({ where: { id: session.userId } }),
     tab === "profile" ? getSavedProjectsForUser(session.userId) : Promise.resolve([]),
     tab === "wishlist" ? getWishlistForUser(session.userId) : Promise.resolve([]),
     tab === "research" ? getRecentViewsForUser(session.userId) : Promise.resolve([]),
     tab === "searches" ? getSavedSearchesForUser(session.userId) : Promise.resolve([]),
-    tab === "profile" ? getSearchHistoryForUser(session.userId) : Promise.resolve([]),
-    tab === "profile" ? getPopularSearches(8) : Promise.resolve([]),
     tab === "profile" ? getUserPreferences(session.userId) : Promise.resolve(null),
     tab === "profile" ? getNotificationPreferences(session.userId) : Promise.resolve(null),
     tab === "profile" ? getLocalitiesForSelect() : Promise.resolve([]),
@@ -130,6 +130,8 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
           preferredConfigurations: preferences?.preferredConfigurations ?? [],
           preferredReadiness: preferences?.preferredReadiness ?? [],
           purposes: preferences?.purposes ?? [],
+          familySize: preferences?.familySize ?? null,
+          familyIncomeRange: preferences?.familyIncomeRange ?? null,
         })
       : [];
 
@@ -377,17 +379,18 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
         ) : null}
 
         {tab === "profile" ? (
+          <ProfileCompletionProvider userId={user.id} initialSections={completionSections} initialPercent={user.profileCompletionPercent}>
           <section className="flex flex-col gap-6">
             <p className="text-[11px] text-muted">
               Research freely, with no phone number required and no spam calls. Everything below is private, optional, and never shared with brokers or developers.
             </p>
 
-            <div className="rounded-sm border border-border bg-surface p-4">
-              <ProfileCompletionBar percent={user.profileCompletionPercent} sections={completionSections} />
+            <div id="profile-completion-top" className="rounded-sm border border-border bg-surface p-4">
+              <ProfileCompletionBar />
             </div>
 
             <div id="basic-profile" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
-              <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Basic Profile</h2>
+              <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Personal Details</h2>
               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Fact label="Email" value={user.email} />
                 <Fact
@@ -407,8 +410,13 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                 <VerifyEmailButton verified={user.emailVerifiedAt !== null} />
               </div>
               <div className="mt-4 border-t border-border pt-4">
-                <ProfileForm name={user.name} phone={user.phone} city={user.city} currentLocality={user.currentLocality} />
-                <PhoneVerificationCard verified={user.phoneVerifiedAt !== null} />
+                <ProfileForm
+                  name={user.name}
+                  phone={user.phone}
+                  city={user.city}
+                  currentLocality={user.currentLocality}
+                  phoneVerified={user.phoneVerifiedAt !== null}
+                />
               </div>
             </div>
 
@@ -416,13 +424,14 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               <h2 className="font-mono text-sm font-semibold text-foreground">Research Profile</h2>
               <p className="mt-1 text-xs text-muted">
                 Tell us what you&apos;re looking for and we&apos;ll make your property research more relevant. Answer what&apos;s useful to you, skip
-                the rest, and come back anytime.
+                the rest, and come back anytime. <span className="text-foreground">Why we ask:</span> filling these details helps us recommend
+                properties that are more relevant to you — it&apos;s never used for anything else.
               </p>
             </div>
 
             <div id="budget" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
               <h3 className="font-mono text-xs uppercase tracking-wide text-muted">Budget</h3>
-              <p className="mt-1 text-[11px] text-muted">Drag the range or type an amount. Takes about 20 seconds.</p>
+              <p className="mt-1 text-[11px] text-muted">Type an amount (e.g. &ldquo;1.2 Cr&rdquo; or &ldquo;75 Lakh&rdquo;) or drag the range. Takes about 20 seconds.</p>
               <div className="mt-3">
                 <BudgetPreferenceForm minRupees={preferences?.preferredBudgetMinRupees ?? null} maxRupees={preferences?.preferredBudgetMaxRupees ?? null} />
               </div>
@@ -435,8 +444,15 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                 <PropertyPreferencesForm
                   preferredCategories={preferences?.preferredCategories ?? []}
                   preferredConfigurations={preferences?.preferredConfigurations ?? []}
-                  preferredReadiness={preferences?.preferredReadiness ?? []}
                 />
+              </div>
+            </div>
+
+            <div id="property-status" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
+              <h3 className="font-mono text-xs uppercase tracking-wide text-muted">Property Status</h3>
+              <p className="mt-1 text-[11px] text-muted">What construction stage are you open to? Select any that apply.</p>
+              <div className="mt-3">
+                <PropertyStatusForm preferredReadiness={preferences?.preferredReadiness ?? []} />
               </div>
             </div>
 
@@ -457,6 +473,14 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                   localityFreeText={preferences?.localityFreeText ?? []}
                   localities={localities}
                 />
+              </div>
+            </div>
+
+            <div id="family" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
+              <h3 className="font-mono text-xs uppercase tracking-wide text-muted">Family / Household</h3>
+              <p className="mt-1 text-[11px] text-muted">Optional and private — never shown publicly. Helps us understand space and budget needs.</p>
+              <div className="mt-3">
+                <FamilyForm familySize={preferences?.familySize ?? null} familyIncomeRange={preferences?.familyIncomeRange ?? null} />
               </div>
             </div>
 
@@ -485,58 +509,15 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               )}
             </section>
 
-            <section id="research-activity" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
-              <div className="flex items-center justify-between">
-                <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Research Activity</h2>
-                {searchHistory.length > 0 ? (
-                  <ClearAllButton action={clearSearchHistoryAction} confirmText="Clear your entire search history?" label="Clear History" />
-                ) : null}
-              </div>
-              <div className="mt-3 flex flex-col gap-2">
-                <p className="text-[11px] uppercase tracking-wide text-muted">Recent searches</p>
-                {searchHistory.length === 0 ? (
-                  <p className="text-xs text-muted">Searches you run while signed in will appear here, synced across devices.</p>
-                ) : (
-                  <ul className="flex flex-wrap gap-1.5">
-                    {searchHistory.map((h) => (
-                      <li key={h.id}>
-                        <Link
-                          href={`/projects?q=${encodeURIComponent(h.query)}`}
-                          className="rounded-full border border-border px-3 py-1 text-xs text-muted hover:border-accent hover:text-accent"
-                        >
-                          {h.query}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              {popularSearches.length > 0 ? (
-                <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4">
-                  <p className="text-[11px] uppercase tracking-wide text-muted">Popular searches</p>
-                  <ul className="flex flex-wrap gap-1.5">
-                    {popularSearches.map((p) => (
-                      <li key={p.query}>
-                        <Link
-                          href={`/projects?q=${encodeURIComponent(p.query)}`}
-                          className="rounded-full border border-border px-3 py-1 text-xs text-muted hover:border-accent hover:text-accent"
-                        >
-                          {p.query} <span className="text-muted/60">({p.count})</span>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </section>
-
             <form action={logoutAction}>
               <Button type="submit" variant="danger" size="sm">
                 Logout
               </Button>
             </form>
           </section>
+          <ProfileMilestoneToast />
+          <StickyCompletionIndicator anchorId="profile-completion-top" />
+          </ProfileCompletionProvider>
         ) : null}
       </main>
 

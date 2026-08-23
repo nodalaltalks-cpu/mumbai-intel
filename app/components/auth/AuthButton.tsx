@@ -1,13 +1,19 @@
 "use client";
 
+import { forwardRef } from "react";
 import { useFormStatus } from "react-dom";
 import Button from "@/app/components/ui/Button";
 
-export default function AuthButton({ children, pendingText = "Please wait…" }: { children: React.ReactNode; pendingText?: string }) {
+const AuthButton = forwardRef<HTMLButtonElement, { children: React.ReactNode; pendingText?: string }>(function AuthButton(
+  { children, pendingText = "Please wait…" },
+  ref
+) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" disabled={pending} fullWidth>
+    <Button ref={ref} type="submit" disabled={pending} fullWidth>
       {pending ? pendingText : children}
     </Button>
   );
-}
+});
+
+export default AuthButton;

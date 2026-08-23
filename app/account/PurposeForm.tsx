@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { updatePreferencesAction } from "@/lib/actions/user-preferences";
+import { useProfileCompletion } from "@/lib/profile-completion-client";
+import SkipFieldButton from "./SkipFieldButton";
 
 const PURPOSE_OPTIONS = [
   { value: "SELF_USE", label: "Self Use" },
@@ -14,18 +16,21 @@ export default function PurposeForm({ purposes }: { purposes: string[] }) {
   const [selected, setSelected] = useState(new Set(purposes));
   const [isPending, startTransition] = useTransition();
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const { setFieldComplete, scrollToNextAfter } = useProfileCompletion();
 
   function toggle(value: string) {
     const next = new Set(selected);
     if (next.has(value)) next.delete(value);
     else next.add(value);
     setSelected(next);
+    setFieldComplete("purpose", next.size > 0);
     const fd = new FormData();
     fd.set("purposesSubmitted", "1");
     for (const p of next) fd.append("purposes", p);
     startTransition(async () => {
       await updatePreferencesAction({}, fd);
       setSavedAt(Date.now());
+      if (next.size > 0) scrollToNextAfter("purpose");
     });
   }
 
@@ -39,7 +44,10 @@ export default function PurposeForm({ purposes }: { purposes: string[] }) {
           </label>
         ))}
       </div>
-      <p className="text-[10px] text-muted">{isPending ? "Saving…" : savedAt ? "Saved" : "Select any that apply, saved automatically."}</p>
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] text-muted">{isPending ? "Saving…" : savedAt ? "Saved" : "Select any that apply, saved automatically."}</p>
+        <SkipFieldButton fieldKey="purpose" />
+      </div>
     </div>
   );
 }

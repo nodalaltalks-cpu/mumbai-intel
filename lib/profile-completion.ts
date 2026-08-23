@@ -1,63 +1,11 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { computeProfileCompletionPercent } from "@/lib/profile-completion-shared";
 
-/**
- * Section-weighted completion engine for a public user's profile — mirrors
- * lib/project-completion.ts's shape exactly (a flat list of equally-weighted
- * `isComplete` predicates over real entered values only). `image` (avatar)
- * is deliberately excluded: it only ever comes from Google OAuth today, so
- * scoring it would make 100% unreachable for credentials-only accounts.
- * NotificationPreferences fields are excluded too — they always have a
- * non-null default, so "set" would be meaningless (the same reasoning that
- * fixed the Project 17%-on-a-brand-new-project bug).
- */
-export interface ProfileCompletionInput {
-  name?: string | null;
-  phone?: string | null;
-  emailVerified: boolean;
-  preferredBudgetMinRupees?: number | null;
-  preferredBudgetMaxRupees?: number | null;
-  preferredLocalityIds: string[];
-  localityFreeText: string[];
-  preferredCategories: string[];
-  preferredConfigurations: string[];
-  preferredReadiness: string[];
-  purposes: string[];
-}
-
-interface CompletionSection {
-  key: string;
-  label: string;
-  isComplete: (input: ProfileCompletionInput) => boolean;
-}
-
-export const PROFILE_COMPLETION_SECTIONS: CompletionSection[] = [
-  { key: "name", label: "Name", isComplete: (i) => Boolean(i.name) },
-  { key: "phone", label: "Phone number", isComplete: (i) => Boolean(i.phone) },
-  { key: "emailVerified", label: "Verified email", isComplete: (i) => i.emailVerified },
-  { key: "budget", label: "Budget range", isComplete: (i) => Boolean(i.preferredBudgetMinRupees) || Boolean(i.preferredBudgetMaxRupees) },
-  { key: "localities", label: "Preferred locations", isComplete: (i) => i.preferredLocalityIds.length > 0 || i.localityFreeText.length > 0 },
-  { key: "category", label: "Property type", isComplete: (i) => i.preferredCategories.length > 0 },
-  { key: "configuration", label: "Configuration", isComplete: (i) => i.preferredConfigurations.length > 0 },
-  { key: "readiness", label: "Timeline", isComplete: (i) => i.preferredReadiness.length > 0 },
-  { key: "purpose", label: "Purpose", isComplete: (i) => i.purposes.length > 0 },
-];
-
-export function computeProfileCompletionPercent(input: ProfileCompletionInput): number {
-  const complete = PROFILE_COMPLETION_SECTIONS.filter((s) => s.isComplete(input)).length;
-  return Math.round((complete / PROFILE_COMPLETION_SECTIONS.length) * 100);
-}
-
-export interface CompletionSectionStatus {
-  key: string;
-  label: string;
-  complete: boolean;
-}
-
-/** The per-section checklist ("✓ Name / ○ Budget / ...") behind the completion %, for the progressive-profile checklist UI. */
-export function getCompletionSections(input: ProfileCompletionInput): CompletionSectionStatus[] {
-  return PROFILE_COMPLETION_SECTIONS.map((s) => ({ key: s.key, label: s.label, complete: s.isComplete(input) }));
-}
+// Re-exported so every existing server-side caller (actions, page.tsx) keeps
+// importing from "@/lib/profile-completion" unchanged — only the client
+// components import "@/lib/profile-completion-shared" directly.
+export * from "@/lib/profile-completion-shared";
 
 /**
  * Recomputes and persists `PublicUser.profileCompletionPercent` — the one
@@ -82,6 +30,8 @@ export async function recalculatePublicUserCompletion(publicUserId: string): Pro
           preferredConfigurations: true,
           preferredReadiness: true,
           purposes: true,
+          familySize: true,
+          familyIncomeRange: true,
         },
       },
     },
@@ -100,6 +50,8 @@ export async function recalculatePublicUserCompletion(publicUserId: string): Pro
     preferredConfigurations: user.preferences?.preferredConfigurations ?? [],
     preferredReadiness: user.preferences?.preferredReadiness ?? [],
     purposes: user.preferences?.purposes ?? [],
+    familySize: user.preferences?.familySize ?? null,
+    familyIncomeRange: user.preferences?.familyIncomeRange ?? null,
   });
 
   await prisma.publicUser.update({ where: { id: publicUserId }, data: { profileCompletionPercent: percent } });

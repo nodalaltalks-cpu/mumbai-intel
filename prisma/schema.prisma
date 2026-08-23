@@ -1639,8 +1639,15 @@ model UserPreferences {
   preferredConfigurations  String[]   @default([])
   /// "READY_TO_MOVE" | "UNDER_CONSTRUCTION" | "NEW_LAUNCH" -- multi-select.
   preferredReadiness       String[]   @default([])
-  /// "SELF_USE" | "INVESTMENT" -- multi-select, a user can be both.
+  /// "SELF_USE" | "INVESTMENT" | "RESEARCHING" -- multi-select, a user can be more than one.
   purposes                 String[]   @default([])
+  /// "1"|"2"|"3"|"4"|"5"|"6_PLUS"|"PREFER_NOT_TO_SAY" -- private, optional,
+  /// never exposed publicly. Single value, not multi-select (a household has
+  /// one size, unlike category/configuration where a user researches several).
+  familySize               String?
+  /// A bucketed range key (e.g. "BELOW_5L".."1CR_PLUS"|"PREFER_NOT_TO_SAY"),
+  /// never a raw amount -- private, optional, never exposed publicly.
+  familyIncomeRange        String?
   /// Free-text location interest ("Near Kurla station", "BKC") -- deliberately
   /// separate from preferredLocalityIds (the structured catalog picks) so a
   /// landmark/area with no Locality record yet is never forced into one.
@@ -1851,6 +1858,24 @@ enum ResearchEventType {
   PROFILE_PROMPT_SHOWN
   PROFILE_PROMPT_CLICKED
   PROFILE_PROMPT_DISMISSED
+  /// Guided-completion funnel (metadata never carries the field's actual
+  /// value -- only its key, e.g. { field: "family_income" }, never the
+  /// income bracket itself). STARTED fires once per session the guided flow
+  /// is entered; the rest fire per field/section as the user moves through it.
+  PROFILE_STARTED
+  PROFILE_FIELD_VIEWED
+  PROFILE_FIELD_COMPLETED
+  PROFILE_FIELD_SKIPPED
+  PROFILE_SECTION_COMPLETED
+  /// Fired once per user the FIRST time completion crosses each threshold --
+  /// re-saving while already past a threshold must never re-fire it. 100% is
+  /// PROFILE_COMPLETED above, not duplicated here.
+  PROFILE_COMPLETION_25
+  PROFILE_COMPLETION_50
+  PROFILE_COMPLETION_75
+  PROFILE_COMPLETION_90
+  PHONE_VERIFICATION_REQUESTED
+  PHONE_VERIFICATION_COMPLETED
 }
 
 /// Site-wide "research intent" log — a deliberately generic single table

@@ -1,22 +1,13 @@
+"use client";
+
 import Button from "@/app/components/ui/Button";
-import type { CompletionSectionStatus } from "@/lib/profile-completion";
+import { useProfileCompletion } from "@/lib/profile-completion-client";
+import { getSectionProgress } from "@/lib/profile-completion-shared";
 
-/** Where each incomplete checklist item scrolls to on tap — same-page fragment links, no JS needed. Keys mirror lib/profile-completion.ts's PROFILE_COMPLETION_SECTIONS. */
-const SECTION_ANCHORS: Record<string, string> = {
-  name: "#basic-profile",
-  phone: "#basic-profile",
-  emailVerified: "#basic-profile",
-  budget: "#budget",
-  localities: "#locations",
-  category: "#property-type",
-  configuration: "#property-type",
-  readiness: "#property-type",
-  purpose: "#purpose",
-};
-
-/** The five milestones (0/25/50/75/100) — the nearest-below milestone's copy stays shown until the next one is actually reached, so a user at e.g. 40% still sees "Basic profile" progress framing rather than jumping ahead. */
+/** Milestone framing — the nearest-below milestone's copy stays shown until the next is actually reached. */
 function milestoneLabel(percent: number): string {
   if (percent >= 100) return "Research profile complete";
+  if (percent >= 90) return "Just a little more to go";
   if (percent >= 75) return "Almost there";
   if (percent >= 50) return "Halfway there";
   if (percent >= 25) return "Off to a good start";
@@ -31,16 +22,18 @@ const BENEFITS = [
 ];
 
 /**
- * Public-side profile completion display — the motivational header for the
- * whole "Research Profile" experience. Each incomplete item is a real
- * tappable chip that scrolls straight to the relevant section
- * (SECTION_ANCHORS). At 100% this becomes a one-time elegant success state
- * instead of repeating the same "complete your profile" pitch forever.
+ * Public-side profile completion display — reads live state from
+ * ProfileCompletionProvider (lib/profile-completion-client.tsx), not static
+ * props, so the percent/bar/checklist/section breakdown all update the
+ * instant a field is toggled, no page refresh or server round trip needed.
+ * At 100% this becomes a one-time elegant success state.
  */
-export default function ProfileCompletionBar({ percent, sections }: { percent: number; sections: CompletionSectionStatus[] }) {
-  const clamped = Math.max(0, Math.min(100, percent));
+export default function ProfileCompletionBar() {
+  const { sections, percent, scrollToFirstIncomplete } = useProfileCompletion();
+  const sectionProgress = getSectionProgress(sections);
+  const incomplete = sections.filter((s) => !s.complete);
 
-  if (clamped >= 100) {
+  if (percent >= 100) {
     return (
       <div className="flex flex-col items-start gap-3">
         <div>
@@ -59,13 +52,13 @@ export default function ProfileCompletionBar({ percent, sections }: { percent: n
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <span className="font-mono text-xs uppercase tracking-wide text-muted">Your Research Profile</span>
-          <span className="font-mono text-2xl font-bold text-accent">{clamped}%</span>
+          <span className="font-mono text-2xl font-bold text-accent">{percent}%</span>
         </div>
         <div className="h-2.5 w-full overflow-hidden rounded-full bg-surface-raised">
-          <div className="h-full rounded-full bg-accent transition-[width] duration-500 ease-out" style={{ width: `${clamped}%` }} />
+          <div className="h-full rounded-full bg-accent transition-[width] duration-500 ease-out" style={{ width: `${percent}%` }} />
         </div>
         <p className="text-[11px] text-muted">
-          <span className="font-medium text-foreground">{milestoneLabel(clamped)}.</span> Make your property research more relevant to you.
+          <span className="font-medium text-foreground">{milestoneLabel(percent)}.</span> Make your property research more relevant to you.
         </p>
       </div>
 
@@ -80,39 +73,32 @@ export default function ProfileCompletionBar({ percent, sections }: { percent: n
         ))}
       </ul>
 
-      <ul className="flex flex-wrap gap-1.5">
-        {sections.map((s) => {
-          const href = SECTION_ANCHORS[s.key];
-          const content = (
-            <>
-              <span aria-hidden="true">{s.complete ? "✓" : "○"}</span>
-              {s.label}
-            </>
-          );
-          return (
-            <li key={s.key}>
-              {!s.complete && href ? (
-                <a
-                  href={href}
-                  className="flex min-h-[2rem] items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-[11px] text-muted transition-colors hover:border-accent hover:text-accent"
-                >
-                  {content}
-                </a>
-              ) : (
-                <span
-                  className={`flex min-h-[2rem] items-center gap-1.5 rounded-full border border-transparent px-3 py-1.5 text-[11px] ${
-                    s.complete ? "text-foreground" : "text-muted"
-                  }`}
-                >
-                  {content}
-                </span>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+      {incomplete.length > 0 ? (
+        <div className="rounded-sm border border-border bg-background p-3">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted">What&apos;s left</p>
+          <ul className="mt-1.5 flex flex-col gap-1">
+            {incomplete.map((s) => (
+              <li key={s.key} className="text-xs text-foreground">
+                • {s.label}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
-      <Button href="#basic-profile" variant="primary" size="sm" className="self-start">
+      {/* Section-wise breakdown — grouped from the exact same checklist above, so it can never disagree with the overall percent. */}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {sectionProgress.map((sp) => (
+          <div key={sp.section} className="flex items-center justify-between rounded-sm border border-border px-3 py-2 text-xs">
+            <span className="text-muted">{sp.label}</span>
+            <span className={sp.completeCount === sp.totalCount ? "font-medium text-positive" : "font-medium text-foreground"}>
+              {sp.completeCount === sp.totalCount ? "Complete" : `${sp.completeCount} / ${sp.totalCount}`}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <Button type="button" variant="primary" size="sm" className="self-start" onClick={scrollToFirstIncomplete}>
         Complete my profile
       </Button>
     </div>

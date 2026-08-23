@@ -3,6 +3,7 @@
 import { requirePublicSession } from "@/lib/public-auth/guard";
 import { prisma } from "@/lib/prisma";
 import { notifyAllAdmins } from "@/lib/notifications";
+import { recordResearchEvent } from "@/lib/analytics/research-events";
 
 export interface PhoneVerificationState {
   error?: string;
@@ -23,6 +24,8 @@ export async function requestPhoneVerificationAction(): Promise<PhoneVerificatio
   const user = await prisma.publicUser.findUnique({ where: { id: session.userId }, select: { phone: true, phoneVerifiedAt: true, email: true, name: true } });
   if (!user?.phone) return { error: "Add a phone number above first, then request verification." };
   if (user.phoneVerifiedAt) return { success: "Your phone is already verified." };
+
+  await recordResearchEvent("PHONE_VERIFICATION_REQUESTED", { entityType: "PublicUser", entityId: session.userId });
 
   await notifyAllAdmins({
     type: "ADMIN_PHONE_VERIFICATION_REQUESTED",

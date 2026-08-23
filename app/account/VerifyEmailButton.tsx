@@ -10,7 +10,7 @@ const initialState: EmailVerificationState = {};
 function SubmitButton() {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" variant="secondary" size="sm" disabled={pending}>
+    <Button id="field-emailVerified" type="submit" variant="secondary" size="sm" disabled={pending}>
       {pending ? "Sending…" : "Verify my email"}
     </Button>
   );
