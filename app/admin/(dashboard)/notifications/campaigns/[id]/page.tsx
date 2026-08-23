@@ -3,22 +3,11 @@ import { notFound } from "next/navigation";
 import { requireAdminSession } from "@/lib/auth/guard";
 import { getNotificationCampaignDetail } from "@/lib/analytics/notification-queries";
 import { formatDateTime } from "@/lib/format";
+import { formatNotificationCategory } from "@/lib/notification-category-label";
 import BackButton from "@/app/admin/components/BackButton";
 
 export const metadata: Metadata = { title: "Notification Campaign — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
-
-const CATEGORY_LABEL: Record<string, string> = {
-  NEW_LAUNCH: "New Launch",
-  PRICE_OFFER: "Price / Offer",
-  TRENDING_LOCALITY: "Trending Locality",
-  NEW_REPORT: "New Report",
-  MARKET_INSIGHT: "Market Insight",
-  TRANSACTION_DATA: "Transaction Data",
-  SAVED_SEARCH_ANNOUNCEMENT: "Saved Search",
-  PRODUCT_UPDATE: "Product Update",
-  GENERAL_UPDATE: "General Update",
-};
 
 export default async function NotificationCampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requireAdminSession();
@@ -33,7 +22,7 @@ export default async function NotificationCampaignDetailPage({ params }: { param
       <div>
         <h1 className="font-mono text-lg font-semibold text-foreground">{campaign.title}</h1>
         <p className="text-xs text-muted">
-          {CATEGORY_LABEL[campaign.category] ?? campaign.category} · Created by {campaign.createdByUser?.name ?? campaign.createdByUser?.email ?? "--"}
+          {formatNotificationCategory(campaign.category, campaign.customCategory)} · Created by {campaign.createdByUser?.name ?? campaign.createdByUser?.email ?? "--"}
         </p>
       </div>
 

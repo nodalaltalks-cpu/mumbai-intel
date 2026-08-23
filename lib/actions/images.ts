@@ -66,7 +66,12 @@ export async function addProjectImageAction(
   const errors: string[] = [];
   for (const file of files) {
     try {
-      const uploaded = await uploadImageFile(file, `mumbai-intel/projects/${project.slug}`);
+      // "hero" is the project's Cover Image -- never compressed, per the founder's explicit
+      // instruction that cover images keep their original/high-quality presentation. Every
+      // other kind (gallery/floorplan/masterplan/elevation) compresses by default.
+      const uploaded = await uploadImageFile(file, `mumbai-intel/projects/${project.slug}`, {
+        skipCompression: parsed.data.kind === "hero",
+      });
       await prisma.projectImage.create({
         data: {
           projectId: project.id,

@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { requireSession } from "@/lib/auth/guard";
 import { getSiteSettings } from "@/lib/site-settings";
+import { hasTrashPassword } from "@/lib/actions/trash-auth";
 import ChangePasswordForm from "@/app/admin/components/ChangePasswordForm";
+import ChangeTrashPasswordForm from "@/app/admin/components/ChangeTrashPasswordForm";
 import SiteSettingsForm from "@/app/admin/components/SiteSettingsForm";
 
 export const metadata: Metadata = { title: "Settings — NoDalalTalks Admin" };
@@ -10,6 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function SettingsPage() {
   const session = await requireSession();
   const settings = await getSiteSettings(["review_google_url", "review_appstore_url"]);
+  const trashPasswordSet = session.role === "ADMIN" ? await hasTrashPassword(session.userId) : false;
 
   return (
     <div className="flex max-w-lg flex-col gap-6">
@@ -26,6 +29,14 @@ export default async function SettingsPage() {
         <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">Change password</h2>
         <ChangePasswordForm />
       </div>
+
+      {session.role === "ADMIN" && trashPasswordSet ? (
+        <div className="rounded-sm border border-border bg-surface p-4">
+          <h2 className="mb-1 font-mono text-sm font-semibold text-foreground">Change Trash password</h2>
+          <p className="mb-3 text-xs text-muted">Separate from your login password — required every time you open Trash.</p>
+          <ChangeTrashPasswordForm />
+        </div>
+      ) : null}
 
       {session.role === "ADMIN" ? (
         <div className="rounded-sm border border-border bg-surface p-4">

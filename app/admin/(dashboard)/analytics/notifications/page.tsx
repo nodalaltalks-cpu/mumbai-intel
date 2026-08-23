@@ -4,23 +4,12 @@ import { cookies } from "next/headers";
 import { requireSession } from "@/lib/auth/guard";
 import { getNotificationAnalyticsOverview } from "@/lib/analytics/notification-queries";
 import { ANALYTICS_PERIOD_COOKIE, resolveAnalyticsPeriodFromRequest } from "@/lib/analytics/period";
+import { NOTIFICATION_CATEGORY_LABEL } from "@/lib/notification-category-label";
 import AnalyticsPeriodFilter from "@/app/admin/components/AnalyticsPeriodFilter";
 import AnalyticsStatCard from "@/app/admin/components/AnalyticsStatCard";
 
 export const metadata: Metadata = { title: "Notification Analytics — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
-
-const CATEGORY_LABEL: Record<string, string> = {
-  NEW_LAUNCH: "New Launch",
-  PRICE_OFFER: "Price / Offer",
-  TRENDING_LOCALITY: "Trending Locality",
-  NEW_REPORT: "New Report",
-  MARKET_INSIGHT: "Market Insight",
-  TRANSACTION_DATA: "Transaction Data",
-  SAVED_SEARCH_ANNOUNCEMENT: "Saved Search",
-  PRODUCT_UPDATE: "Product Update",
-  GENERAL_UPDATE: "General Update",
-};
 
 export default async function NotificationAnalyticsPage({ searchParams }: { searchParams: Promise<{ period?: string; from?: string; to?: string }> }) {
   await requireSession();
@@ -79,7 +68,7 @@ export default async function NotificationAnalyticsPage({ searchParams }: { sear
               <tbody>
                 {overview.byCategory.map((row) => (
                   <tr key={row.category} className="border-b border-border last:border-b-0">
-                    <td className="px-3 py-2 text-foreground">{CATEGORY_LABEL[row.category] ?? row.category}</td>
+                    <td className="px-3 py-2 text-foreground">{NOTIFICATION_CATEGORY_LABEL[row.category] ?? row.category}</td>
                     <td className="px-3 py-2 text-right font-mono text-muted">{row.sent}</td>
                     <td className="px-3 py-2 text-right font-mono text-positive">{row.read}</td>
                     <td className="px-3 py-2 text-right font-mono text-accent">{row.clicked}</td>

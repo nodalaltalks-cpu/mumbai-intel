@@ -11,10 +11,6 @@
     {
       "path": "/api/cron/storage-snapshot",
       "schedule": "0 7 * * *"
-    },
-    {
-      "path": "/api/cron/email-queue-drain",
-      "schedule": "0 8 * * *"
     }
   ]
 }

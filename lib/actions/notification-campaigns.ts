@@ -23,6 +23,7 @@ export interface SendNotificationCampaignState {
 
 function parseCampaignForm(formData: FormData): { error: string } | {
   category: NotificationCategory;
+  customCategory: string | null;
   title: string;
   message: string;
   imageUrl: string | null;
@@ -30,6 +31,7 @@ function parseCampaignForm(formData: FormData): { error: string } | {
   actionUrl: string | null;
 } {
   const category = formData.get("category") as NotificationCategory | null;
+  const customCategoryRaw = (formData.get("customCategory") as string | null)?.trim() || null;
   const title = (formData.get("title") as string | null)?.trim();
   const message = (formData.get("message") as string | null)?.trim();
   const imageUrl = (formData.get("imageUrl") as string | null)?.trim() || null;
@@ -37,12 +39,17 @@ function parseCampaignForm(formData: FormData): { error: string } | {
   const actionUrl = (formData.get("actionUrl") as string | null)?.trim() || null;
 
   if (!category) return { error: "Select a category" };
+  if (category === "OTHER" && !customCategoryRaw) return { error: "Enter a name for this custom category" };
   if (!title) return { error: "Title is required" };
   if (!message) return { error: "Message is required" };
   if (actionUrl && !actionLabel) return { error: "Add a button label for the action URL" };
   if (actionLabel && !actionUrl) return { error: "Add a destination URL for the action button" };
 
-  return { category, title, message, imageUrl, actionLabel, actionUrl };
+  // Only meaningful (and only stored) for OTHER -- a stray value entered then abandoned in
+  // favor of a fixed category shouldn't linger in the row.
+  const customCategory = category === "OTHER" ? customCategoryRaw : null;
+
+  return { category, customCategory, title, message, imageUrl, actionLabel, actionUrl };
 }
 
 /**
@@ -80,6 +87,7 @@ export async function sendNotificationCampaignAction(_prevState: SendNotificatio
     const campaign = await prisma.notificationCampaign.create({
       data: {
         category: parsed.category,
+        customCategory: parsed.customCategory,
         title: parsed.title,
         message: parsed.message,
         imageUrl: parsed.imageUrl,
@@ -111,7 +119,7 @@ export async function sendNotificationCampaignAction(_prevState: SendNotificatio
 
     await prisma.notificationCampaign.update({ where: { id: campaign.id }, data: { status: "SENT", sentAt: new Date() } });
     await logAudit(session.userId, "notification_campaign.send", "NotificationCampaign", campaign.id, {
-      after: { category: parsed.category, title: parsed.title, recipientCount: recipients.length },
+      after: { category: parsed.category, customCategory: parsed.customCategory, title: parsed.title, recipientCount: recipients.length },
     });
 
     revalidatePath("/admin/notifications");

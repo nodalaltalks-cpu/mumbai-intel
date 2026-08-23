@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { requireAdminSession } from "@/lib/auth/guard";
 import { hasValidTrashReauth } from "@/lib/auth/trash-reauth";
+import { hasTrashPassword } from "@/lib/actions/trash-auth";
 import { logAudit } from "@/lib/audit";
 import {
   getTrashedProjects,
@@ -9,7 +10,6 @@ import {
   getTrashedLocalities,
   getTrashedTransactions,
   getTrashedContactEnquiries,
-  getTrashedCampaigns,
 } from "@/lib/admin-queries";
 import {
   restoreProjectAction,
@@ -41,12 +41,6 @@ import {
   bulkEnquiryTrashAction,
   emptyEnquiryTrashAction,
 } from "@/lib/actions/contact-enquiries";
-import {
-  restoreCampaignAction,
-  permanentlyDeleteCampaignAction,
-  bulkCampaignTrashAction,
-  emptyCampaignTrashAction,
-} from "@/lib/actions/email-campaigns";
 import { formatPaise } from "@/lib/format";
 import TrashPanel, { type TrashItem } from "@/app/admin/components/TrashPanel";
 import TrashReauthGate from "@/app/admin/components/TrashReauthGate";
@@ -60,7 +54,6 @@ const TABS = [
   { key: "localities", label: "Localities" },
   { key: "transactions", label: "Transactions" },
   { key: "enquiries", label: "Contact Enquiries" },
-  { key: "campaigns", label: "Campaigns" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -77,13 +70,14 @@ export default async function AdminTrashPage({
 
   if (!(await hasValidTrashReauth(session.userId))) {
     await logAudit(session.userId, "trash.access_denied_needs_reauth", "Trash", session.userId);
+    const trashPasswordSet = await hasTrashPassword(session.userId);
     return (
       <div className="flex flex-col gap-4">
         <div>
           <h1 className="font-mono text-lg font-semibold text-foreground">Trash</h1>
           <p className="text-xs text-muted">Soft-deleted records — restore or permanently delete.</p>
         </div>
-        <TrashReauthGate />
+        <TrashReauthGate hasTrashPassword={trashPasswordSet} />
       </div>
     );
   }
@@ -180,7 +174,7 @@ export default async function AdminTrashPage({
         emptyTrashAction={emptyTransactionTrashAction}
       />
     );
-  } else if (tab === "enquiries") {
+  } else {
     const rows = await getTrashedContactEnquiries({ q });
     items = rows.map((r) => ({
       id: r.id,
@@ -197,25 +191,6 @@ export default async function AdminTrashPage({
         permanentDeleteAction={permanentlyDeleteEnquiryAction}
         bulkAction={bulkEnquiryTrashAction}
         emptyTrashAction={emptyEnquiryTrashAction}
-      />
-    );
-  } else {
-    const rows = await getTrashedCampaigns({ q });
-    items = rows.map((r) => ({
-      id: r.id,
-      label: r.subject,
-      sublabel: `${r.type} · ${r.status} · ${r.recipientCount} recipient(s)`,
-      deletedAt: r.deletedAt as Date,
-      deletedByName: r.deletedByName,
-    }));
-    panel = (
-      <TrashPanel
-        items={items}
-        isAdmin={isAdmin}
-        restoreAction={restoreCampaignAction}
-        permanentDeleteAction={permanentlyDeleteCampaignAction}
-        bulkAction={bulkCampaignTrashAction}
-        emptyTrashAction={emptyCampaignTrashAction}
       />
     );
   }

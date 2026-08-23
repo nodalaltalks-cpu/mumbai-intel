@@ -1008,6 +1008,10 @@ model User {
   email                 String                    @unique
   name                  String?
   passwordHash          String
+  /// Separate step-up credential gating Trash (never the same as passwordHash) — null until the
+  /// founder completes first-time setup (lib/actions/trash-auth.ts's setupTrashPasswordAction),
+  /// at which point Trash's reauth prompt switches from "set up" to "enter" mode.
+  trashPasswordHash     String?
   role                  UserRole                  @default(EDITOR)
   /// Fine-grained permission keys (e.g. "projects.edit", "reports.reject") layered
   /// on top of `role` for an EDITOR/VIEWER — see lib/auth/permissions.ts for the
@@ -1262,6 +1266,10 @@ enum NotificationCategory {
   SAVED_SEARCH_ANNOUNCEMENT
   PRODUCT_UPDATE
   GENERAL_UPDATE
+  /// Founder-defined free text lives in NotificationCampaign.customCategory, same split as
+  /// NotificationType.CAMPAIGN_ANNOUNCEMENT (a single generic enum value + the real
+  /// classification stored alongside it) rather than widening this enum per one-off need.
+  OTHER
 }
 
 enum NotificationCampaignStatus {
@@ -1280,6 +1288,10 @@ enum NotificationCampaignStatus {
 model NotificationCampaign {
   id              String                     @id @default(cuid())
   category        NotificationCategory
+  /// Only set (and only meaningful) when category is OTHER -- the founder's own label for a
+  /// notification type that doesn't fit the fixed list, kept for analytics/history exactly like
+  /// the category itself.
+  customCategory  String?
   title           String
   message         String
   imageUrl        String?

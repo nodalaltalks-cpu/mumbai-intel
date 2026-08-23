@@ -6,23 +6,12 @@ import { getLocalitiesForSelect } from "@/lib/admin-queries";
 import { getNotificationCampaigns } from "@/lib/analytics/notification-queries";
 import { ANALYTICS_PERIOD_COOKIE, resolveAnalyticsPeriodFromRequest } from "@/lib/analytics/period";
 import { formatDateTime } from "@/lib/format";
+import { formatNotificationCategory } from "@/lib/notification-category-label";
 import AnalyticsPeriodFilter from "@/app/admin/components/AnalyticsPeriodFilter";
 import NotificationComposer from "@/app/admin/components/NotificationComposer";
 
 export const metadata: Metadata = { title: "Notifications — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
-
-const CATEGORY_LABEL: Record<string, string> = {
-  NEW_LAUNCH: "New Launch",
-  PRICE_OFFER: "Price / Offer",
-  TRENDING_LOCALITY: "Trending Locality",
-  NEW_REPORT: "New Report",
-  MARKET_INSIGHT: "Market Insight",
-  TRANSACTION_DATA: "Transaction Data",
-  SAVED_SEARCH_ANNOUNCEMENT: "Saved Search",
-  PRODUCT_UPDATE: "Product Update",
-  GENERAL_UPDATE: "General Update",
-};
 
 const STATUS_CLASS: Record<string, string> = {
   DRAFT: "border-border bg-surface-raised text-muted",
@@ -80,7 +69,7 @@ export default async function AdminNotificationsPage({ searchParams }: { searchP
                         {c.title}
                       </Link>
                     </td>
-                    <td className="px-3 py-2 text-muted">{CATEGORY_LABEL[c.category] ?? c.category}</td>
+                    <td className="px-3 py-2 text-muted">{formatNotificationCategory(c.category, c.customCategory)}</td>
                     <td className="px-3 py-2">
                       <span className={`rounded-sm border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${STATUS_CLASS[c.status] ?? ""}`}>{c.status}</span>
                     </td>

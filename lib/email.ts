@@ -25,7 +25,14 @@ interface SmtpConfig {
 }
 
 function resolveSmtpConfig(): SmtpConfig | null {
-  const pass = process.env.SMTP_PASSWORD || process.env.RESEND_API_KEY;
+  // process.env.Resend_API_Key is not a typo of the real name -- it's the actual, currently-live
+  // Vercel env var name (Preview + Production), set with that exact casing. Env var lookups are
+  // case-sensitive, so process.env.RESEND_API_KEY alone silently read as undefined in every
+  // deployed environment despite a real key being configured -- this is the same class of bug the
+  // isDeployedEnvironment() check above was added to stop from faking success, except the actual
+  // credential mismatch causing it was never fixed at the source. Both names are checked so this
+  // works regardless of which casing ends up configured, without requiring a Vercel dashboard change.
+  const pass = process.env.SMTP_PASSWORD || process.env.RESEND_API_KEY || process.env.Resend_API_Key;
   const from = process.env.SMTP_FROM || process.env.EMAIL_FROM;
   if (!pass || !from) return null;
   const port = Number(process.env.SMTP_PORT) || 587;
@@ -74,7 +81,7 @@ function isDeployedEnvironment(): boolean {
   return Boolean(process.env.VERCEL_ENV);
 }
 
-export interface SendEmailResult {
+interface SendEmailResult {
   ok: boolean;
   /** Resend's own email id, when the API accepted the send — for traceability, never proof of delivery. */
   providerMessageId?: string;
@@ -82,7 +89,6 @@ export interface SendEmailResult {
   error?: string;
 }
 
-/** Every existing internal caller uses the sendXEmail wrappers below, which only look at the boolean; the in-house email campaign sender (lib/actions/email-campaigns.ts) needs the full result to record an honest per-recipient status. */
 async function sendEmailDetailed(params: { to: string; subject: string; html: string; replyTo?: string }): Promise<SendEmailResult> {
   const config = resolveSmtpConfig();
   if (!config) {
@@ -117,11 +123,6 @@ async function sendEmailDetailed(params: { to: string; subject: string; html: st
 
 async function sendEmail(params: { to: string; subject: string; html: string; replyTo?: string }): Promise<boolean> {
   return (await sendEmailDetailed(params)).ok;
-}
-
-/** Exported for the in-house email campaign sender only — every other email in this file goes through a specific named template function instead. Returns the full result so the campaign sender can store a real provider message id and failure reason per recipient, instead of a bare boolean. */
-export async function sendCampaignEmail(to: string, subject: string, html: string): Promise<SendEmailResult> {
-  return sendEmailDetailed({ to, subject, html });
 }
 
 function escapeHtml(value: string): string {

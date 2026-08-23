@@ -107,7 +107,7 @@ export default function BuilderForm({ builder, amenities }: { builder?: BuilderF
 
       <div className={activeTab === "media" ? "flex flex-col gap-4" : "hidden"}>
         <SingleImageUploadField name="logoUrl" label="Logo" defaultValue={builder?.logoUrl} />
-        <SingleImageUploadField name="coverImageUrl" label="Cover image (profile banner)" defaultValue={builder?.coverImageUrl} />
+        <SingleImageUploadField name="coverImageUrl" label="Cover image (profile banner)" defaultValue={builder?.coverImageUrl} isCoverImage />
         {builder ? (
           <p className="text-xs text-muted">A multi-image gallery is available below, after this form.</p>
         ) : (

@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { addProjectDocumentAction, deleteProjectDocumentAction, type DocumentActionState } from "@/lib/actions/project-documents";
+import { compressPdfFile } from "@/lib/pdf-compress";
 import { Field } from "./FormField";
 import SubmitButton from "./SubmitButton";
 import ConfirmButton from "./ConfirmButton";
@@ -17,6 +18,24 @@ const initialState: DocumentActionState = {};
 export default function DocumentsManager({ projectId, documents }: { projectId: string; documents: ProjectDocumentRow[] }) {
   const action = addProjectDocumentAction.bind(null, projectId);
   const [state, formAction] = useActionState(action, initialState);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isCompressing, setIsCompressing] = useState(false);
+
+  // Same client-side compression as BrochureUploader (lib/pdf-compress.ts) -- reused rather
+  // than duplicated. Skips automatically below 1.5MB or if it wouldn't actually shrink the
+  // file, so small/already-lean PDFs are left untouched.
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const selected = e.target.files?.[0];
+    if (!selected) return;
+    setIsCompressing(true);
+    const result = await compressPdfFile(selected);
+    if (result.compressed && fileInputRef.current) {
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(result.file);
+      fileInputRef.current.files = dataTransfer.files;
+    }
+    setIsCompressing(false);
+  }
 
   return (
     <div className="rounded-sm border border-border bg-surface p-4">
@@ -45,14 +64,16 @@ export default function DocumentsManager({ projectId, documents }: { projectId: 
         <label className="flex flex-1 flex-col gap-1.5">
           <span className="text-[11px] uppercase tracking-wide text-muted">PDF file</span>
           <input
+            ref={fileInputRef}
             type="file"
             name="file"
             accept="application/pdf"
             required
+            onChange={handleFileChange}
             className="rounded-sm border border-border bg-surface px-3 py-2 text-xs text-foreground file:mr-3 file:rounded-sm file:border-0 file:bg-accent file:px-2.5 file:py-1 file:text-xs file:font-mono file:font-semibold file:uppercase file:text-white"
           />
         </label>
-        <SubmitButton pendingText="Uploading...">Upload</SubmitButton>
+        <SubmitButton pendingText="Uploading...">{isCompressing ? "Compressing…" : "Upload"}</SubmitButton>
       </form>
       {state.error ? <p className="mt-2 text-xs text-negative">{state.error}</p> : null}
     </div>

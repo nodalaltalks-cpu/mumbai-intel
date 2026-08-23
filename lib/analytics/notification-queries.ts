@@ -149,6 +149,7 @@ export async function searchNotificationRecipients(filters: NotificationRecipien
 export interface NotificationCampaignSummary {
   id: string;
   category: string;
+  customCategory: string | null;
   title: string;
   status: string;
   recipientCount: number;
@@ -165,6 +166,7 @@ export async function getNotificationCampaigns(limit = 50): Promise<Notification
     select: {
       id: true,
       category: true,
+      customCategory: true,
       title: true,
       status: true,
       recipientCount: true,
@@ -186,6 +188,7 @@ export interface NotificationCampaignRecipientRow {
 export interface NotificationCampaignDetail {
   id: string;
   category: string;
+  customCategory: string | null;
   title: string;
   message: string;
   imageUrl: string | null;
@@ -214,6 +217,7 @@ export async function getNotificationCampaignDetail(campaignId: string): Promise
     select: {
       id: true,
       category: true,
+      customCategory: true,
       title: true,
       message: true,
       imageUrl: true,
@@ -275,7 +279,7 @@ export async function getNotificationAnalyticsOverview(period: AnalyticsPeriod):
   // campaign-history list on the Notifications page already does.
   const notificationsSinceStart = await prisma.notification.findMany({
     where: { campaignId: { not: null }, createdAt: { gte: period.since } },
-    select: { readAt: true, clickedAt: true, createdAt: true, campaign: { select: { id: true, category: true } } },
+    select: { readAt: true, clickedAt: true, createdAt: true, campaign: { select: { id: true, category: true, customCategory: true } } },
   });
   const notifications = notificationsSinceStart.filter((n) => n.createdAt < period.until);
 
@@ -286,7 +290,10 @@ export async function getNotificationAnalyticsOverview(period: AnalyticsPeriod):
 
   const byCategoryMap = new Map<string, { sent: number; read: number; clicked: number }>();
   for (const n of notifications) {
-    const category = n.campaign?.category ?? "GENERAL_UPDATE";
+    // A custom OTHER category gets its own row keyed by the founder's own label, rather than
+    // every custom send getting lumped into one generic "Other" bucket -- matches the ask to
+    // store/track the custom category properly for analytics, not just accept it at send time.
+    const category = n.campaign?.customCategory || n.campaign?.category || "GENERAL_UPDATE";
     const entry = byCategoryMap.get(category) ?? { sent: 0, read: 0, clicked: 0 };
     entry.sent += 1;
     if (n.readAt) entry.read += 1;

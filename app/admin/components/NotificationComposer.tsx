@@ -24,6 +24,7 @@ const NOTIFICATION_CATEGORIES = [
   { value: "SAVED_SEARCH_ANNOUNCEMENT", label: "Saved-Search Related" },
   { value: "PRODUCT_UPDATE", label: "Product Update" },
   { value: "GENERAL_UPDATE", label: "General Important Update" },
+  { value: "OTHER", label: "Other…" },
 ] as const;
 
 const SEGMENTS: { value: NotificationSegment; label: string }[] = [
@@ -57,11 +58,40 @@ export default function NotificationComposer({ localities }: { localities: { id:
   const [selected, setSelected] = useState<Map<string, NotificationRecipientCandidate>>(new Map());
 
   const [notifCategory, setNotifCategory] = useState("");
+  const [customCategory, setCustomCategory] = useState("");
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
   const [actionLabel, setActionLabel] = useState("");
   const [actionUrl, setActionUrl] = useState("");
   const [preview, setPreview] = useState(false);
+  // Bumped on every successful send, forced into SingleImageUploadField's key -- that component
+  // keeps its uploaded url in its own internal state (see the component), so there's no prop to
+  // clear it from outside; remounting is the only way to actually reset it, same trick already
+  // used inside that component for its own file input.
+  const [imageFieldKey, setImageFieldKey] = useState(0);
+  // Tracks which successful send's reset has already been applied -- adjusting state during
+  // render (React's own recommended pattern for "reset state when a value from outside changes",
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes)
+  // rather than in a useEffect, which would fire several setState calls one tick after the
+  // triggering render and briefly flash the old form content first.
+  const [resetForCampaignId, setResetForCampaignId] = useState<string | undefined>(undefined);
+  if (state.success && state.campaignId && state.campaignId !== resetForCampaignId) {
+    setResetForCampaignId(state.campaignId);
+    setSegment("all");
+    setLocalityId("");
+    setCity("");
+    setCategory("");
+    setQ("");
+    setSelected(new Map());
+    setNotifCategory("");
+    setCustomCategory("");
+    setTitle("");
+    setMessage("");
+    setActionLabel("");
+    setActionUrl("");
+    setPreview(false);
+    setImageFieldKey((k) => k + 1);
+  }
 
   useEffect(() => {
     startSearch(async () => {
@@ -219,6 +249,16 @@ export default function NotificationComposer({ localities }: { localities: { id:
                 </option>
               ))}
             </SelectField>
+            {notifCategory === "OTHER" ? (
+              <Field
+                label="Custom category name"
+                name="customCategory"
+                required
+                value={customCategory}
+                onChange={(e) => setCustomCategory(e.target.value)}
+                placeholder='e.g. "Maintenance Notice"'
+              />
+            ) : null}
             <Field label="Title" name="title" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder='e.g. "New Launch in Powai"' />
             <TextareaField
               label="Short message"
@@ -229,7 +269,7 @@ export default function NotificationComposer({ localities }: { localities: { id:
               onChange={(e) => setMessage(e.target.value)}
               placeholder='e.g. "3 new projects added in your preferred locality."'
             />
-            <SingleImageUploadField name="imageUrl" label="Image (optional)" />
+            <SingleImageUploadField key={imageFieldKey} name="imageUrl" label="Image (optional)" />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field
                 label="Action button label (optional)"
@@ -285,6 +325,7 @@ export default function NotificationComposer({ localities }: { localities: { id:
 
       <form action={testFormAction} className="flex flex-wrap items-end gap-2 rounded-sm border border-border bg-surface p-4">
         <input type="hidden" name="category" value={notifCategory} />
+        <input type="hidden" name="customCategory" value={customCategory} />
         <input type="hidden" name="title" value={title} />
         <input type="hidden" name="message" value={message} />
         <input type="hidden" name="actionLabel" value={actionLabel} />

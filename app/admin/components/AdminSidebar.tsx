@@ -63,10 +63,7 @@ const NAV_SECTIONS: { label: string; links: { label: string; href: string }[] }[
   },
   {
     label: "Email",
-    links: [
-      { label: "Campaigns", href: "/admin/email" },
-      { label: "Saved-Search Alerts", href: "/admin/analytics/saved-search-alerts" },
-    ],
+    links: [{ label: "Saved-Search Alerts", href: "/admin/analytics/saved-search-alerts" }],
   },
   {
     label: "Data Sync",

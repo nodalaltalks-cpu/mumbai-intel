@@ -1584,24 +1584,6 @@ async function fetchTrashedContactEnquiries(filters: TrashListFilters) {
   return items.map((i) => ({ ...i, deletedByName: i.deletedByUserId ? deletedByName.get(i.deletedByUserId) ?? null : null }));
 }
 
-export async function getTrashedCampaigns(filters: TrashListFilters = {}) {
-  return safeQuery("getTrashedCampaigns", [] as Awaited<ReturnType<typeof fetchTrashedCampaigns>>, () => fetchTrashedCampaigns(filters));
-}
-
-async function fetchTrashedCampaigns(filters: TrashListFilters) {
-  const where: Prisma.EmailCampaignWhereInput = { deletedAt: { not: null } };
-  if (filters.q) {
-    where.OR = [{ subject: { contains: filters.q, mode: "insensitive" } }];
-  }
-  const items = await prisma.emailCampaign.findMany({
-    where,
-    orderBy: { deletedAt: "desc" },
-    select: { id: true, subject: true, type: true, status: true, recipientCount: true, deletedAt: true, deletedByUserId: true },
-  });
-  const deletedByName = await resolveDeletedByNames(items.map((i) => i.deletedByUserId));
-  return items.map((i) => ({ ...i, deletedByName: i.deletedByUserId ? deletedByName.get(i.deletedByUserId) ?? null : null }));
-}
-
 /** Powers the Contact Enquiry detail page (User / Enquiry / Status panels). */
 export async function getContactEnquiryById(id: string) {
   return safeQuery("getContactEnquiryById", null, () =>
