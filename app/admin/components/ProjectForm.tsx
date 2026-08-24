@@ -51,6 +51,7 @@ import CoverImageUploader from "./CoverImageUploader";
 import type { ProjectImageItem } from "./ImageUploader";
 import PriceAmountField from "./PriceAmountField";
 import { rupeesToAmountUnit, amountUnitToRupees, type PriceUnit } from "@/lib/price-units";
+import { slugify } from "@/lib/slug";
 
 export interface ProjectFormData {
   id: string;
@@ -224,6 +225,13 @@ export default function ProjectForm({
   }
   const [localityOptions, setLocalityOptions] = useState(localities);
   const [builderOptions, setBuilderOptions] = useState(builders);
+  const [nameValue, setNameValue] = useState(project?.name ?? "");
+  const [slugValue, setSlugValue] = useState(project?.slug ?? "");
+  // An existing project's slug is already "manually managed" from the moment the form
+  // loads — editing Project Name must never silently rewrite a live, possibly-indexed
+  // URL. Only a brand-new project (or one whose slug is genuinely still blank) auto-follows
+  // Name as the admin types, and only until they type into Slug themselves.
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(Boolean(project?.slug));
   const [selectedLocalityId, setSelectedLocalityId] = useState(project?.localityId ?? "");
   const [selectedBuilderId, setSelectedBuilderId] = useState(project?.builderId ?? "");
   const [selectedMicroMarketId, setSelectedMicroMarketId] = useState(project?.microMarketId ?? "");
@@ -321,7 +329,7 @@ export default function ProjectForm({
       {
         title: "General",
         rows: [
-          { label: "Name", value: g("name"), important: true },
+          { label: "Project Name", value: g("name"), important: true },
           { label: "Slug", value: g("slug") },
           { label: "Tagline", value: g("tagline") },
           { label: "Builder", value: builderName || "No builder" },
@@ -538,8 +546,42 @@ export default function ProjectForm({
 
       <div className={activeTab === "general" ? "flex flex-col gap-4" : "hidden"}>
         <FieldGroup>
-          <Field label="Name" name="name" important defaultValue={project?.name} placeholder="Lodha Park" />
-          <Field label="Slug (optional)" name="slug" defaultValue={project?.slug} placeholder="auto-generated from name" />
+          <Field
+            label="Project Name"
+            name="name"
+            important
+            value={nameValue}
+            onChange={(e) => {
+              const next = e.target.value;
+              setNameValue(next);
+              if (!slugManuallyEdited) setSlugValue(slugify(next));
+            }}
+            placeholder="Lodha Park"
+          />
+          <div className="flex flex-col gap-1.5">
+            <Field
+              label="Slug (optional)"
+              name="slug"
+              value={slugValue}
+              onChange={(e) => {
+                setSlugValue(e.target.value);
+                setSlugManuallyEdited(true);
+              }}
+              placeholder="auto-generated from project name"
+            />
+            {slugManuallyEdited ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSlugValue(slugify(nameValue));
+                  setSlugManuallyEdited(false);
+                }}
+                className="self-start text-[10px] font-mono uppercase tracking-wide text-accent hover:underline"
+              >
+                Reset to auto slug
+              </button>
+            ) : null}
+          </div>
         </FieldGroup>
         <Field label="Tagline" name="tagline" defaultValue={project?.tagline ?? ""} placeholder="One-line pitch" />
         <FieldGroup>

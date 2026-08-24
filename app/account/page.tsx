@@ -121,6 +121,8 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
       ? getCompletionSections({
           name: user.name,
           phone: user.phone,
+          dateOfBirth: user.dateOfBirth,
+          gender: user.gender,
           emailVerified: user.emailVerifiedAt !== null,
           preferredBudgetMinRupees: preferences?.preferredBudgetMinRupees ?? null,
           preferredBudgetMaxRupees: preferences?.preferredBudgetMaxRupees ?? null,
@@ -416,6 +418,8 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                   city={user.city}
                   currentLocality={user.currentLocality}
                   phoneVerified={user.phoneVerifiedAt !== null}
+                  dateOfBirth={user.dateOfBirth}
+                  gender={user.gender}
                 />
               </div>
             </div>

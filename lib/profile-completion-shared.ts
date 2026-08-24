@@ -20,6 +20,8 @@
 export interface ProfileCompletionInput {
   name?: string | null;
   phone?: string | null;
+  dateOfBirth?: Date | null;
+  gender?: string | null;
   emailVerified: boolean;
   preferredBudgetMinRupees?: number | null;
   preferredBudgetMaxRupees?: number | null;
@@ -56,6 +58,8 @@ export const PROFILE_COMPLETION_SECTIONS: CompletionSection[] = [
   { key: "name", label: "Name", section: "personal", isComplete: (i) => Boolean(i.name) },
   { key: "phone", label: "Phone number", section: "personal", isComplete: (i) => Boolean(i.phone) },
   { key: "emailVerified", label: "Verified email", section: "personal", isComplete: (i) => i.emailVerified },
+  { key: "dateOfBirth", label: "Date of birth", section: "personal", isComplete: (i) => Boolean(i.dateOfBirth) },
+  { key: "gender", label: "Gender", section: "personal", isComplete: (i) => Boolean(i.gender) },
   { key: "category", label: "Property type", section: "property", isComplete: (i) => i.preferredCategories.length > 0 },
   { key: "configuration", label: "Configuration", section: "property", isComplete: (i) => i.preferredConfigurations.length > 0 },
   { key: "budget", label: "Budget range", section: "budget", isComplete: (i) => Boolean(i.preferredBudgetMinRupees) || Boolean(i.preferredBudgetMaxRupees) },

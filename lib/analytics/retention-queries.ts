@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { startOfISOWeek } from "./period";
 import type { AnalyticsPeriod } from "./period";
+import { COMPLETION_BUCKETS } from "./profile-completion-queries";
 
 /**
  * The active-user definition used throughout this app (Dashboard's DAU/WAU/
@@ -125,21 +126,26 @@ export interface FeatureRetentionRow {
   didNotFeatureReturnRate: number | null;
 }
 
-/** "Still had activity 7+ days after signup" — the per-user retention check that getRetentionCohorts applies per-cohort-week, applied here per-user instead, split by whether they ever did a given feature action. Every row is a behavioural comparison (Section 12/25), never framed as causal. */
-async function sevenDayReturnRate(userIds: string[]): Promise<number | null> {
+/** "Still had activity N+ days after signup" — the per-user retention check that getRetentionCohorts applies per-cohort-week, applied here per-user instead, split by whether they ever did a given feature action (or, for getProfileCompletionRetention, which completion bucket they're in). Every row is a behavioural comparison (Section 12/25/11), never framed as causal. */
+async function returnRateAfterDays(userIds: string[], days: number): Promise<number | null> {
   if (userIds.length === 0) return null;
   const [users, lastActiveGroups] = await Promise.all([
     prisma.publicUser.findMany({ where: { id: { in: userIds } }, select: { id: true, createdAt: true } }),
     prisma.researchEvent.groupBy({ by: ["publicUserId"], where: { publicUserId: { in: userIds } }, _max: { createdAt: true } }),
   ]);
   const lastActiveById = new Map(lastActiveGroups.map((g) => [g.publicUserId as string, g._max.createdAt]));
-  const eligible = users.filter((u) => Date.now() - u.createdAt.getTime() >= 7 * 24 * 60 * 60 * 1000);
+  const windowMs = days * 24 * 60 * 60 * 1000;
+  const eligible = users.filter((u) => Date.now() - u.createdAt.getTime() >= windowMs);
   if (eligible.length === 0) return null;
   const retained = eligible.filter((u) => {
     const lastActive = lastActiveById.get(u.id);
-    return lastActive && lastActive.getTime() >= u.createdAt.getTime() + 7 * 24 * 60 * 60 * 1000;
+    return lastActive && lastActive.getTime() >= u.createdAt.getTime() + windowMs;
   }).length;
   return Math.round((retained / eligible.length) * 1000) / 10;
+}
+
+async function sevenDayReturnRate(userIds: string[]): Promise<number | null> {
+  return returnRateAfterDays(userIds, 7);
 }
 
 /** Section 12: does using feature X correlate with a user still being active a week later? */
@@ -196,4 +202,71 @@ export async function getSearchRetentionCorrelation(): Promise<SearchRetentionCo
   const [activeRate, lightRate] = await Promise.all([sevenDayReturnRate(activeIds), sevenDayReturnRate(lightIds)]);
 
   return { activeSearchersReturnRate: activeRate, activeSearchersCount: activeIds.length, lightSearchersReturnRate: lightRate, lightSearchersCount: lightIds.length };
+}
+
+export interface ProfileCompletionRetentionRow {
+  bucketKey: string;
+  bucketLabel: string;
+  userCount: number;
+  sevenDayReturnRate: number | null;
+  thirtyDayReturnRate: number | null;
+  avgProjectViews: number;
+  avgSearches: number;
+  avgSavedProjects: number;
+  avgSavedSearches: number;
+  avgContactEnquiries: number;
+}
+
+/**
+ * Section 11 — does a more-complete research profile correlate with a user
+ * coming back more, searching more, saving more? Buckets every registered
+ * user by the exact same 0–25/26–50/51–75/76–99/100 ranges the Profile
+ * Completion page already uses (COMPLETION_BUCKETS, imported rather than
+ * redefined), then reuses this file's existing return-rate helper per
+ * bucket — same event pipeline, same "correlation not causation" framing as
+ * getFeatureRetention/getSearchRetentionCorrelation above, not a new
+ * analytics system.
+ */
+export async function getProfileCompletionRetention(): Promise<ProfileCompletionRetentionRow[]> {
+  const users = await prisma.publicUser.findMany({ select: { id: true, profileCompletionPercent: true } });
+  if (users.length === 0) return [];
+
+  const allIds = users.map((u) => u.id);
+  const [viewGroups, searchGroups, savedProjectGroups, savedSearchGroups, enquiryGroups] = await Promise.all([
+    prisma.recentView.groupBy({ by: ["publicUserId"], where: { publicUserId: { in: allIds }, entityType: "Project" }, _count: { _all: true } }),
+    prisma.searchHistory.groupBy({ by: ["publicUserId"], where: { publicUserId: { in: allIds } }, _count: { _all: true } }),
+    prisma.savedProject.groupBy({ by: ["publicUserId"], where: { publicUserId: { in: allIds } }, _count: { _all: true } }),
+    prisma.savedSearch.groupBy({ by: ["publicUserId"], where: { publicUserId: { in: allIds } }, _count: { _all: true } }),
+    prisma.contactEnquiry.groupBy({ by: ["publicUserId"], where: { publicUserId: { in: allIds } }, _count: { _all: true } }),
+  ]);
+  const viewCountById = new Map(viewGroups.map((g) => [g.publicUserId, g._count._all]));
+  const searchCountById = new Map(searchGroups.map((g) => [g.publicUserId, g._count._all]));
+  const savedProjectCountById = new Map(savedProjectGroups.map((g) => [g.publicUserId, g._count._all]));
+  const savedSearchCountById = new Map(savedSearchGroups.map((g) => [g.publicUserId, g._count._all]));
+  const enquiryCountById = new Map(enquiryGroups.map((g) => [g.publicUserId as string, g._count._all]));
+
+  function average(ids: string[], byId: Map<string, number>): number {
+    if (ids.length === 0) return 0;
+    const total = ids.reduce((sum, id) => sum + (byId.get(id) ?? 0), 0);
+    return Math.round((total / ids.length) * 10) / 10;
+  }
+
+  return Promise.all(
+    COMPLETION_BUCKETS.map(async (bucket) => {
+      const idsInBucket = users.filter((u) => u.profileCompletionPercent >= bucket.min && u.profileCompletionPercent <= bucket.max).map((u) => u.id);
+      const [sevenDay, thirtyDay] = await Promise.all([returnRateAfterDays(idsInBucket, 7), returnRateAfterDays(idsInBucket, 30)]);
+      return {
+        bucketKey: bucket.key,
+        bucketLabel: bucket.label,
+        userCount: idsInBucket.length,
+        sevenDayReturnRate: sevenDay,
+        thirtyDayReturnRate: thirtyDay,
+        avgProjectViews: average(idsInBucket, viewCountById),
+        avgSearches: average(idsInBucket, searchCountById),
+        avgSavedProjects: average(idsInBucket, savedProjectCountById),
+        avgSavedSearches: average(idsInBucket, savedSearchCountById),
+        avgContactEnquiries: average(idsInBucket, enquiryCountById),
+      };
+    })
+  );
 }

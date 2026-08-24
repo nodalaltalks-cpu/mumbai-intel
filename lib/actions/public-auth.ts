@@ -137,6 +137,12 @@ export async function loginAction(_prevState: PublicAuthState, formData: FormDat
     await setSessionCookie({ userId: admin.id, email: admin.email, name: admin.name, role: admin.role });
     redirect("/admin");
   }
+  // A wrong-password (or deactivated-account) attempt against a real founder/employee
+  // email, specifically — not every mistyped consumer login — is the signal worth a
+  // founder-visible audit trail entry (Activity Feed already surfaces AuditLog rows).
+  if (admin) {
+    await logAudit(null, "login.failed", "User", admin.id);
+  }
 
   const user = await prisma.publicUser.findUnique({ where: { email } });
   if (!user || !user.passwordHash || !(await verifyPassword(password, user.passwordHash))) {

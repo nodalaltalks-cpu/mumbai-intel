@@ -1210,6 +1210,11 @@ enum NotificationType {
   /// NotificationCampaign.category instead, so this stays a single generic value rather
   /// than one enum member per category (which NotificationCategory already covers).
   CAMPAIGN_ANNOUNCEMENT
+  /// A single, personalized "complete your profile" nudge sent from a user's admin detail
+  /// page (lib/actions/profile-analytics.ts) -- distinct from CAMPAIGN_ANNOUNCEMENT since it
+  /// isn't a NotificationCampaign bulk send (no campaignId), so the founder can tell the two
+  /// apart in Activity/analytics without a schema change to Notification itself.
+  PROFILE_COMPLETION_REMINDER
 }
 
 /// One shared table for both audiences (public researcher + founder admin)
@@ -1337,6 +1342,12 @@ model PublicUser {
   /// and from preferences (what they're researching). Free text, optional.
   city                     String?
   currentLocality          String?
+  /// Private, optional, never exposed publicly -- date only (no time
+  /// component; stored via Date.UTC so a stray timezone offset can never
+  /// shift the calendar day). Personal Details section only.
+  dateOfBirth              DateTime?    @db.Date
+  /// "MALE" | "FEMALE" | "PREFER_NOT_TO_SAY" -- private, optional, never exposed publicly.
+  gender                   String?
   /// Null for OAuth-only accounts (e.g. Google sign-up with no password set).
   passwordHash             String?
   provider                 AuthProvider @default(CREDENTIALS)
@@ -1874,6 +1885,17 @@ enum ResearchEventType {
   PROFILE_COMPLETION_50
   PROFILE_COMPLETION_75
   PROFILE_COMPLETION_90
+  /// Client-fired (navigator.sendBeacon-style, via /api/analytics/research) when a visitor
+  /// leaves the page mid-guided-flow without reaching 100% -- best-effort funnel-drop-off
+  /// signal, not a precise "abandoned forever" determination.
+  PROFILE_COMPLETION_ABANDONED
+  /// Founder/admin sent a personalized "complete your profile" reminder from the user's
+  /// admin detail page (lib/actions/profile-analytics.ts). metadata carries the completion
+  /// percent and missing-field keys at send time, never any field's actual value.
+  ADMIN_PROFILE_REMINDER_SENT
+  /// Fired the next time this same user's completion percent increases after receiving a
+  /// reminder -- lets the founder see whether a specific reminder actually worked.
+  PROFILE_COMPLETION_AFTER_REMINDER
   PHONE_VERIFICATION_REQUESTED
   PHONE_VERIFICATION_COMPLETED
 }

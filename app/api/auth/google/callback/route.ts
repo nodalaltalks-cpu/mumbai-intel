@@ -67,6 +67,15 @@ export async function GET(request: NextRequest) {
       // A CREDENTIALS account may already own this email — link Google to it
       // rather than erroring, so the same person can sign in either way.
       const existingByEmail = await prisma.publicUser.findUnique({ where: { email: profile.email } });
+      if (existingByEmail && !profile.email_verified) {
+        // Same guard the admin branch above already applies: linking by email
+        // alone, without Google itself having verified that email, would let
+        // anyone who controls an OAuth identity with an *unverified* email
+        // claim someone else's existing password-based account just by
+        // clicking "Continue with Google". Refuse the link instead of
+        // silently taking over the account.
+        return failure(origin, "google_email_unverified");
+      }
       if (existingByEmail) {
         // Previously nulled passwordHash here whenever the existing account was
         // "unverified" -- but email verification was never actually wired up

@@ -130,6 +130,38 @@ button:focus-visible,
   animation: fade-in 120ms ease-out;
 }
 
+/* One-time 100%-profile-completion celebration (ProfileMilestoneToast) — a
+   brief, tasteful burst of small pieces, not a full-screen confetti cannon.
+   Each piece's own left/delay/color/rotation comes from an inline style, this
+   just defines the shared rise-fade-rotate motion. */
+@keyframes mi-confetti-fall {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--mi-confetti-x, 0), 90px, 0) rotate(var(--mi-confetti-rotate, 180deg));
+  }
+}
+.mi-confetti-piece {
+  position: absolute;
+  top: -10px;
+  width: 6px;
+  height: 10px;
+  border-radius: 1px;
+  animation: mi-confetti-fall 900ms ease-in forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mi-confetti-piece {
+    animation: none;
+    display: none;
+  }
+}
+
 /* ── Map (Leaflet) — custom marker/cluster icons ──
    No tile filter: the base OpenStreetMap tileset is already light and now
    matches the app's theme natively (the dark theme used to invert it). */

@@ -9,6 +9,8 @@ export const FIELD_ANCHORS: Record<string, string> = {
   name: "basic-profile",
   phone: "basic-profile",
   emailVerified: "basic-profile",
+  dateOfBirth: "basic-profile",
+  gender: "basic-profile",
   budget: "budget",
   localities: "locations",
   category: "property-type",
@@ -77,6 +79,7 @@ export function ProfileCompletionProvider({
   const [celebration, setCelebration] = useState<Milestone | null>(null);
   const seenMilestoneKey = `mi_profile_milestones_${userId}`;
   const lastPercentRef = useRef(initialPercent);
+  const abandonedFiredRef = useRef(false);
 
   const percent = useMemo(() => {
     const complete = sections.filter((s) => s.complete).length;
@@ -108,6 +111,29 @@ export function ProfileCompletionProvider({
       // best-effort only
     }
   }, [percent, seenMilestoneKey]);
+
+  // Best-effort funnel-drop-off signal (Part 5) — fires once, the first time
+  // the page is hidden (tab switch, navigation, or close) while the user is
+  // mid-guided-flow and hasn't reached 100%. `visibilitychange` -> "hidden"
+  // is the reliable cross-platform signal recommended over `beforeunload`
+  // (which mobile Safari/Chrome frequently never fire at all); sendBeacon
+  // is used specifically because a normal fetch can be cancelled by the
+  // browser mid-navigation.
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState !== "hidden") return;
+      if (abandonedFiredRef.current || !guidedActive || percent >= 100) return;
+      abandonedFiredRef.current = true;
+      try {
+        const payload = JSON.stringify({ eventType: "PROFILE_COMPLETION_ABANDONED", entityType: "PublicUser", entityId: userId, metadata: { percent } });
+        navigator.sendBeacon?.("/api/analytics/research", new Blob([payload], { type: "application/json" }));
+      } catch {
+        // best-effort only
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [guidedActive, percent, userId]);
 
   const setFieldComplete = useCallback((key: string, complete: boolean) => {
     setSections((prev) => prev.map((s) => (s.key === key ? { ...s, complete } : s)));

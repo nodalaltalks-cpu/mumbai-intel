@@ -1,6 +1,9 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { requireSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import {
   getMostSharedProjects,
   getReferralChannelBreakdown,
@@ -17,6 +20,8 @@ export const metadata: Metadata = { title: "Referral Analytics — NoDalalTalks 
 export const dynamic = "force-dynamic";
 
 export default async function ReferralAnalyticsPage({ searchParams }: { searchParams: Promise<{ period?: string; from?: string; to?: string }> }) {
+  const session = await requireSession();
+  if (!(await hasPermission(session, "users.view"))) redirect("/admin");
   const params = await searchParams;
   const cookieStore = await cookies();
   const period = resolveAnalyticsPeriodFromRequest(params, cookieStore.get(ANALYTICS_PERIOD_COOKIE)?.value);

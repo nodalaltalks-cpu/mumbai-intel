@@ -8,6 +8,7 @@ import {
   getRetentionCohorts,
   getFeatureRetention,
   getSearchRetentionCorrelation,
+  getProfileCompletionRetention,
   ACTIVE_USER_DEFINITION,
 } from "@/lib/analytics/retention-queries";
 import { ANALYTICS_PERIOD_COOKIE, resolveAnalyticsPeriodFromRequest } from "@/lib/analytics/period";
@@ -28,11 +29,12 @@ export default async function UserRetentionPage({ searchParams }: { searchParams
   const period = resolveAnalyticsPeriodFromRequest(params, cookieStore.get(ANALYTICS_PERIOD_COOKIE)?.value);
 
   const growth = await getUserGrowthStats();
-  const [snapshot, cohorts, featureRetention, searchCorrelation] = await Promise.all([
+  const [snapshot, cohorts, featureRetention, searchCorrelation, completionRetention] = await Promise.all([
     getRetentionSnapshot(period, growth.dau, growth.wau, growth.mau),
     getRetentionCohorts(8),
     getFeatureRetention(),
     getSearchRetentionCorrelation(),
+    getProfileCompletionRetention(),
   ]);
 
   return (
@@ -164,6 +166,50 @@ export default async function UserRetentionPage({ searchParams }: { searchParams
                   <RateCell percent={searchCorrelation.lightSearchersReturnRate} /> <span className="text-muted">({searchCorrelation.lightSearchersCount})</span>
                 </td>
               </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-1 font-mono text-sm font-semibold text-foreground">Retention by profile completion</h2>
+        <p className="mb-3 text-[11px] text-muted">
+          Do users with a more complete research profile come back more, and research more? Same buckets as the Profile
+          Completion page, same behavioural-comparison framing as above — not a causal claim.
+        </p>
+        <div className="overflow-x-auto rounded-sm border border-border">
+          <table className="w-full min-w-[760px] border-collapse text-left text-xs">
+            <thead>
+              <tr className="border-b border-border bg-background text-[10px] uppercase tracking-wide text-muted">
+                <th className="px-3 py-2 font-medium">Completion</th>
+                <th className="px-3 py-2 font-medium text-right">Users</th>
+                <th className="px-3 py-2 font-medium text-right">7d return</th>
+                <th className="px-3 py-2 font-medium text-right">30d return</th>
+                <th className="px-3 py-2 font-medium text-right">Avg. views</th>
+                <th className="px-3 py-2 font-medium text-right">Avg. searches</th>
+                <th className="px-3 py-2 font-medium text-right">Avg. saved</th>
+                <th className="px-3 py-2 font-medium text-right">Avg. saved searches</th>
+                <th className="px-3 py-2 font-medium text-right">Avg. enquiries</th>
+              </tr>
+            </thead>
+            <tbody>
+              {completionRetention.map((row) => (
+                <tr key={row.bucketKey} className="border-b border-border last:border-b-0 hover:bg-surface-raised">
+                  <td className="px-3 py-2 font-mono text-foreground">{row.bucketLabel}</td>
+                  <td className="px-3 py-2 text-right font-mono text-muted">{row.userCount}</td>
+                  <td className="px-3 py-2 text-right">
+                    <RateCell percent={row.sevenDayReturnRate} />
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <RateCell percent={row.thirtyDayReturnRate} />
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono text-muted">{row.avgProjectViews}</td>
+                  <td className="px-3 py-2 text-right font-mono text-muted">{row.avgSearches}</td>
+                  <td className="px-3 py-2 text-right font-mono text-muted">{row.avgSavedProjects}</td>
+                  <td className="px-3 py-2 text-right font-mono text-muted">{row.avgSavedSearches}</td>
+                  <td className="px-3 py-2 text-right font-mono text-muted">{row.avgContactEnquiries}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

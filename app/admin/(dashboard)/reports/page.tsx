@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { getReportAggregates, getReportPeriodStats, getReportResolutionStats, getReportsQueue, getReportStatusCounts } from "@/lib/analytics/report-queries";
 import ReportQueueList from "@/app/admin/components/ReportQueueList";
 import { formatDate } from "@/lib/format";
@@ -27,6 +29,7 @@ export default async function AdminReportsPage({
   searchParams: Promise<{ status?: string; period?: string; from?: string; to?: string }>;
 }) {
   const session = await requireSession();
+  if (!(await hasPermission(session, "reports.view"))) redirect("/admin");
   const params = await searchParams;
   const activeStatus = (STATUS_TABS.find((t) => t.key === params.status)?.key ?? "ALL") as ReportStatus | "ALL";
   const cookieStore = await cookies();

@@ -126,7 +126,7 @@ export default function ProjectsTable({ projects, isAdmin }: { projects: Project
                   <input type="checkbox" checked={selected.size === projects.length} onChange={toggleAll} className="h-3.5 w-3.5 accent-accent" />
                 </th>
               ) : null}
-              <th className="px-3 py-2 font-medium">Name</th>
+              <th className="px-3 py-2 font-medium">Project Name</th>
               <th className="px-3 py-2 font-medium">Locality</th>
               <th className="px-3 py-2 font-medium">Status</th>
               <th className="px-3 py-2 font-medium">Price band</th>

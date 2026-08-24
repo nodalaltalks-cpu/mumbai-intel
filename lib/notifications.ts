@@ -15,6 +15,8 @@ export async function createNotification(params: {
   recipientAdminUserId?: string | null;
   entityType?: string;
   entityId?: string;
+  actionLabel?: string;
+  actionUrl?: string;
 }): Promise<void> {
   try {
     await prisma.notification.create({ data: params });

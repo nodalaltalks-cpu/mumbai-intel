@@ -21,6 +21,7 @@ import ProjectTimelineManager from "@/app/admin/components/ProjectTimelineManage
 import ProjectFaqsManager from "@/app/admin/components/ProjectFaqsManager";
 import InvestmentNotesManager from "@/app/admin/components/InvestmentNotesManager";
 import DocumentsManager from "@/app/admin/components/DocumentsManager";
+import FloorPlanUploader from "@/app/admin/components/FloorPlanUploader";
 
 export const metadata: Metadata = { title: "Edit Project — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
@@ -49,6 +50,12 @@ export default async function EditProjectPage({
   ]);
 
   if (!project) notFound();
+
+  // Floor Plan is stored as a ProjectDocument with kind="floor_plan" -- its own dedicated
+  // slot/UI, but the same underlying model as the generic Documents list, so it's filtered
+  // out of that list here (it has its own section below) rather than shown twice.
+  const floorPlanDoc = project.documents.find((d) => d.kind === "floor_plan") ?? null;
+  const otherDocuments = project.documents.filter((d) => d.kind !== "floor_plan");
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
@@ -92,7 +99,9 @@ export default async function EditProjectPage({
 
       <ImageUploader projectId={project.id} images={project.images} />
 
-      <DocumentsManager projectId={project.id} documents={project.documents} />
+      <DocumentsManager projectId={project.id} documents={otherDocuments} />
+
+      <FloorPlanUploader projectId={project.id} floorPlanUrl={floorPlanDoc?.url ?? null} floorPlanUploadedAt={floorPlanDoc?.createdAt ?? null} />
 
       <BrochureUploader
         projectId={project.id}

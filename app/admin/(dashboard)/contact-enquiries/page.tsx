@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { requireSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { getContactEnquiries } from "@/lib/admin-queries";
 import ContactEnquiryRow from "@/app/admin/components/ContactEnquiryRow";
 
@@ -17,6 +20,8 @@ const TABS = [
 const VALID_STATUSES = new Set(["NEW", "IN_PROGRESS", "WAITING_FOR_USER", "RESOLVED", "CLOSED"]);
 
 export default async function ContactEnquiriesPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
+  const session = await requireSession();
+  if (!(await hasPermission(session, "support.manage_enquiries"))) redirect("/admin");
   const sp = await searchParams;
   const status = sp.status && VALID_STATUSES.has(sp.status) ? (sp.status as Parameters<typeof getContactEnquiries>[0]) : undefined;
   const enquiries = await getContactEnquiries(status);

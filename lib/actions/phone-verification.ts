@@ -4,6 +4,7 @@ import { requirePublicSession } from "@/lib/public-auth/guard";
 import { prisma } from "@/lib/prisma";
 import { notifyAllAdmins } from "@/lib/notifications";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export interface PhoneVerificationState {
   error?: string;
@@ -21,6 +22,9 @@ export interface PhoneVerificationState {
  */
 export async function requestPhoneVerificationAction(): Promise<PhoneVerificationState> {
   const session = await requirePublicSession("/account");
+  const limit = checkRateLimit(`phone-verify-request:${session.userId}`, 5, 60 * 15);
+  if (!limit.allowed) return { error: "Too many requests. Please try again in a few minutes." };
+
   const user = await prisma.publicUser.findUnique({ where: { id: session.userId }, select: { phone: true, phoneVerifiedAt: true, email: true, name: true } });
   if (!user?.phone) return { error: "Add a phone number above first, then request verification." };
   if (user.phoneVerifiedAt) return { success: "Your phone is already verified." };

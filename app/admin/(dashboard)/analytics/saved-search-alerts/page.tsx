@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { requireSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { getSavedSearchNotificationEligibility } from "@/lib/admin-queries";
 import { formatDate, formatDateTime } from "@/lib/format";
 
@@ -6,6 +9,8 @@ export const metadata: Metadata = { title: "Saved-Search Alerts — NoDalalTalks
 export const dynamic = "force-dynamic";
 
 export default async function SavedSearchAlertsPage() {
+  const session = await requireSession();
+  if (!(await hasPermission(session, "users.view_activity"))) redirect("/admin");
   const rows = await getSavedSearchNotificationEligibility();
 
   return (

@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/guard";
+import { hasPermission } from "@/lib/auth/permissions";
 import { getRegisteredUsersPage, getRegisteredUsersPeriodStats } from "@/lib/admin-queries";
 import { formatDate, formatRelativeTime } from "@/lib/format";
 import { ANALYTICS_PERIOD_COOKIE, computeChange, resolveAnalyticsPeriodFromRequest } from "@/lib/analytics/period";
@@ -24,7 +27,8 @@ export default async function RegisteredUsersPage({
 }: {
   searchParams: Promise<{ page?: string; period?: string; from?: string; to?: string }>;
 }) {
-  await requireSession();
+  const session = await requireSession();
+  if (!(await hasPermission(session, "users.view"))) redirect("/admin");
   const params = await searchParams;
   const page = Math.max(1, Number(params.page ?? 1) || 1);
   const cookieStore = await cookies();
@@ -82,8 +86,12 @@ export default async function RegisteredUsersPage({
           </thead>
           <tbody>
             {users.map((user) => (
-              <tr key={user.id} className="border-b border-border last:border-b-0 hover:bg-surface-raised">
-                <td className="px-3 py-2 font-mono text-foreground">{user.email}</td>
+              <tr key={user.id} className="cursor-pointer border-b border-border last:border-b-0 hover:bg-surface-raised">
+                <td className="px-3 py-2 font-mono text-foreground">
+                  <Link href={`/admin/analytics/registered-users/${user.id}`} className="hover:text-accent hover:underline">
+                    {user.email}
+                  </Link>
+                </td>
                 <td className="px-3 py-2 text-foreground">{user.name ?? "--"}</td>
                 <td className="px-3 py-2 text-foreground">{user.phone ?? "--"}</td>
                 <td className="px-3 py-2 text-muted">{formatDate(user.createdAt)}</td>
