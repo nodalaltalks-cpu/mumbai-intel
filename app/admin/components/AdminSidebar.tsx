@@ -33,6 +33,7 @@ const NAV_SECTIONS: { label: string; links: { label: string; href: string }[] }[
     label: "Analytics",
     links: [
       { label: "Overview", href: "/admin/analytics" },
+      { label: "Visitors", href: "/admin/analytics/visitors" },
       { label: "User Retention", href: "/admin/analytics/user-retention" },
       { label: "Search Analytics", href: "/admin/analytics/search" },
       { label: "Research Intent", href: "/admin/analytics/research" },

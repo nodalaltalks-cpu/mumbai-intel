@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth/token";
 import { REFERRAL_COOKIE_MAX_AGE_SECONDS, REFERRAL_COOKIE_NAME } from "@/lib/referral-constants";
 import { TRASH_REAUTH_COOKIE, TRASH_REAUTH_COOKIE_PATH } from "@/lib/auth/trash-reauth-constants";
+import { CONSENT_COOKIE_NAME } from "@/lib/analytics/consent-constants";
 
 export const config = {
   matcher: ["/admin/:path*", "/"],
@@ -21,7 +22,12 @@ export function proxy(request: NextRequest) {
   // credit for a signup that happens much later.
   if (pathname === "/") {
     const ref = request.nextUrl.searchParams.get("ref");
-    if (ref && !request.cookies.get(REFERRAL_COOKIE_NAME)) {
+    // Referral attribution is an analytics/research cookie (Section 3 of the
+    // cookie-categories work) -- only set it once the visitor has explicitly
+    // granted analytics consent, same gate lib/analytics/session-id.ts
+    // applies to mi_anon_id.
+    const hasConsent = request.cookies.get(CONSENT_COOKIE_NAME)?.value === "granted";
+    if (ref && hasConsent && !request.cookies.get(REFERRAL_COOKIE_NAME)) {
       // Cookie value is "code|channel" -- channel comes from the share
       // link's own ?src= (set by ShareReferralCard, e.g. "whatsapp" /
       // "copy_link" / "native_share"), empty when unknown (a bare /?ref=

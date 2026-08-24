@@ -1898,6 +1898,12 @@ enum ResearchEventType {
   PROFILE_COMPLETION_AFTER_REMINDER
   PHONE_VERIFICATION_REQUESTED
   PHONE_VERIFICATION_COMPLETED
+  /// A visitor made an explicit choice on the cookie consent banner
+  /// (lib/actions/cookie-consent.ts). Recorded via the mi_anon_id cookie when
+  /// granted -- since a decline means no anon cookie exists yet, that event is
+  /// written with sessionId null (identified only by the request, not stored).
+  COOKIE_CONSENT_GRANTED
+  COOKIE_CONSENT_DECLINED
 }
 
 /// Site-wide "research intent" log — a deliberately generic single table
@@ -1932,6 +1938,10 @@ model ResearchEvent {
   /// keeps that cheap as the event log grows past the small early-stage
   /// volume it's at today.
   @@index([createdAt, publicUserId])
+  /// Supports the admin Visitors page (lib/analytics/visitor-queries.ts) --
+  /// anonymous-visitor/returning-visitor/anon-to-registered aggregates all
+  /// group or filter by sessionId within a date range.
+  @@index([sessionId, createdAt])
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

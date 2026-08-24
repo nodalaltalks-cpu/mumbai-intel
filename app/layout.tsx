@@ -3,8 +3,10 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { GoogleAnalytics } from "@next/third-parties/google";
 import PremiumGateProvider from "@/app/components/premium/PremiumGateProvider";
 import GoogleLoginPing from "@/app/components/analytics/GoogleLoginPing";
+import CookieConsentBanner from "@/app/components/CookieConsentBanner";
 import { getSession } from "@/lib/auth/session";
 import { getPublicSession } from "@/lib/public-auth/session";
+import { peekCookieConsent } from "@/lib/analytics/consent";
 import "./globals.css";
 
 // Public by design — a GA4 Measurement ID is not a secret (it's visible in
@@ -68,8 +70,12 @@ export default async function RootLayout({
   // Read once here (in addition to Navbar's own read — cheap, JWT-only, no DB
   // call) so the 60s guest research nudge knows to stay off for anyone
   // already signed in, founder or public, on every route including /admin.
-  const [founderSession, publicSession] = await Promise.all([getSession(), getPublicSession()]);
+  const [founderSession, publicSession, consent] = await Promise.all([getSession(), getPublicSession(), peekCookieConsent()]);
   const isGuest = !founderSession && !publicSession;
+  // Google Analytics is a third-party analytics cookie (Section 1) — only load its
+  // script once the visitor has explicitly granted consent, not merely because a
+  // Measurement ID is configured.
+  const analyticsConsented = consent === "granted";
 
   return (
     <html
@@ -85,7 +91,8 @@ export default async function RootLayout({
         </a>
         <PremiumGateProvider isGuest={isGuest}>{children}</PremiumGateProvider>
         <GoogleLoginPing />
-        {GA_MEASUREMENT_ID ? <GoogleAnalytics gaId={GA_MEASUREMENT_ID} /> : null}
+        {GA_MEASUREMENT_ID && analyticsConsented ? <GoogleAnalytics gaId={GA_MEASUREMENT_ID} /> : null}
+        {consent === null ? <CookieConsentBanner /> : null}
       </body>
     </html>
   );

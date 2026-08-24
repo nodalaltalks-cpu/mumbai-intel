@@ -5,6 +5,7 @@ import { hasTrashPassword } from "@/lib/actions/trash-auth";
 import ChangePasswordForm from "@/app/admin/components/ChangePasswordForm";
 import ChangeTrashPasswordForm from "@/app/admin/components/ChangeTrashPasswordForm";
 import SiteSettingsForm from "@/app/admin/components/SiteSettingsForm";
+import CacheManagementCard from "@/app/admin/components/CacheManagementCard";
 
 export const metadata: Metadata = { title: "Settings — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
@@ -49,6 +50,8 @@ export default async function SettingsPage() {
           </div>
         </div>
       ) : null}
+
+      {session.role === "ADMIN" ? <CacheManagementCard /> : null}
     </div>
   );
 }
