@@ -150,11 +150,9 @@ export default function ProfileForm({
   const lastSavedDobRef = useRef(`${dobDay}-${dobMonth}-${dobYear}`);
   function commitDob(day: string, month: string, year: string) {
     const key = `${day}-${month}-${year}`;
-    document.title = "DBG:commitDob:" + key + ":ref=" + lastSavedDobRef.current;
     if (key === lastSavedDobRef.current) return;
     if (!day || !month || !year) return; // partial selection -- wait for all three, same as the original combined-form validation
     lastSavedDobRef.current = key;
-    document.title = "DBG:commitDob-proceeding:" + key;
     void persist(
       "dob",
       (fd) => {
