@@ -62,6 +62,42 @@ export interface ActivityDeletionResult {
   deletedCount?: number;
 }
 
+/** Read-only count for a custom [from, to] date range (Section 17's "Delete custom date range") — same AuditLog table, same requireAdminSession gate, just an explicit range instead of one of the fixed relative windows above. */
+export async function previewCustomActivityDeletionAction(fromIso: string, toIso: string): Promise<{ count: number } | { error: string }> {
+  try {
+    await requireAdminSession();
+  } catch {
+    return { error: "You don't have permission to do this." };
+  }
+  const from = new Date(fromIso);
+  const to = new Date(toIso);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) return { error: "Enter a valid date range." };
+  const count = await prisma.auditLog.count({ where: { at: { gte: from, lte: to } } });
+  return { count };
+}
+
+/** Deletes AuditLog rows within a custom [from, to] date range — same shape/guarantees as deleteActivityOlderThanAction (Founder-only, AuditLog-only, audit-logged after the fact). */
+export async function deleteCustomActivityRangeAction(fromIso: string, toIso: string): Promise<ActivityDeletionResult> {
+  let session;
+  try {
+    session = await requireAdminSession();
+  } catch {
+    return { error: "You don't have permission to do this." };
+  }
+  const from = new Date(fromIso);
+  const to = new Date(toIso);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) return { error: "Enter a valid date range." };
+
+  const result = await prisma.auditLog.deleteMany({ where: { at: { gte: from, lte: to } } });
+
+  await logAudit(session.userId, "activity.cleanup", "System", "activity_feed", {
+    after: { retention: `custom range ${from.toISOString().slice(0, 10)} to ${to.toISOString().slice(0, 10)}`, deletedCount: result.count },
+  });
+
+  revalidatePath("/admin/activity");
+  return { success: `${result.count.toLocaleString("en-IN")} activity record${result.count === 1 ? "" : "s"} removed.`, deletedCount: result.count };
+}
+
 /**
  * Deletes AuditLog rows older than the chosen cutoff (or all of them).
  * A single `deleteMany` — the `at` index (prisma/schema.prisma) keeps this

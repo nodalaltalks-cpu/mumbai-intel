@@ -36,6 +36,20 @@ export async function getPublicNotifications(publicUserId: string, limit = 15): 
 }
 
 /**
+ * Older notifications than `before`, same shape/table as getPublicNotifications
+ * — backs the notification center's "load more" (Section 4: "the user should
+ * be able to scroll through older notifications"), reusing the existing
+ * Notification data rather than a second history table or a duplicated query.
+ */
+export async function getOlderPublicNotifications(publicUserId: string, before: Date, limit = 20): Promise<PublicNotificationItem[]> {
+  return prisma.notification.findMany({
+    where: { recipientPublicUserId: publicUserId, createdAt: { lt: before } },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+}
+
+/**
  * The real unread total, separate from getPublicNotifications' capped list
  * of 15 rows — a cheap indexed COUNT, not the length of the (possibly
  * truncated) display list, so the bell badge stays correct once a visitor

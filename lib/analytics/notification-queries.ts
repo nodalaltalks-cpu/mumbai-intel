@@ -38,6 +38,8 @@ export interface NotificationRecipientFilters {
   category?: string;
   budgetMinRupees?: number;
   budgetMaxRupees?: number;
+  /** Free-text landmark/area interest — matched against UserPreferences.localityFreeText (the same field LocationsPreferenceForm's "Add a location or landmark" free-text entry writes to), independent of the structured preferredLocalityIds catalog picks used by `localityId` above. */
+  landmark?: string;
   /** Only used with segment "specific". */
   userIds?: string[];
 }
@@ -122,6 +124,12 @@ export async function searchNotificationRecipients(filters: NotificationRecipien
 
   if (and.length > 0) where.AND = and;
 
+  // landmark is free text matched against an array of free-text entries --
+  // Prisma's String[] filters only support exact-membership (`has`), not a
+  // substring match within array elements, so this one filter is applied in
+  // JS after the fetch rather than in the WHERE clause. Modest admin-tool
+  // data volumes (a few hundred/thousand users, `limit` already capping the
+  // query) make this an acceptable, simple approach over raw SQL.
   const users = await prisma.publicUser.findMany({
     where,
     orderBy: { createdAt: "desc" },
@@ -133,10 +141,16 @@ export async function searchNotificationRecipients(filters: NotificationRecipien
       city: true,
       notificationPreferences: { select: { productUpdates: true } },
       researchEvents: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
+      preferences: filters.landmark ? { select: { localityFreeText: true } } : false,
     },
   });
 
-  return users.map((u) => ({
+  const landmarkNeedle = filters.landmark?.trim().toLowerCase();
+  const filtered = landmarkNeedle
+    ? users.filter((u) => (u.preferences?.localityFreeText ?? []).some((t) => t.toLowerCase().includes(landmarkNeedle)))
+    : users;
+
+  return filtered.map((u) => ({
     id: u.id,
     name: u.name,
     email: u.email,

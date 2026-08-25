@@ -30,9 +30,9 @@ export default function PropertyPreferencesForm({
   const [configurations, setConfigurations] = useState(new Set(preferredConfigurations));
   const [isPending, startTransition] = useTransition();
   const [savedAt, setSavedAt] = useState<number | null>(null);
-  const { setFieldComplete, scrollToNextAfter } = useProfileCompletion();
+  const { setFieldComplete, isFieldComplete, scrollToNextAfter } = useProfileCompletion();
 
-  function save(next: { categories?: Set<string>; configurations?: Set<string> }) {
+  function save(next: { categories?: Set<string>; configurations?: Set<string> }, wasComplete: { category: boolean; configuration: boolean }) {
     const fd = new FormData();
     fd.set("categoriesSubmitted", "1");
     for (const c of next.categories ?? categories) fd.append("preferredCategories", c);
@@ -41,27 +41,29 @@ export default function PropertyPreferencesForm({
     startTransition(async () => {
       await updatePreferencesAction({}, fd);
       setSavedAt(Date.now());
-      if ((next.categories ?? categories).size > 0) scrollToNextAfter("category");
-      if ((next.configurations ?? configurations).size > 0) scrollToNextAfter("configuration");
+      if (!wasComplete.category && (next.categories ?? categories).size > 0) scrollToNextAfter("category");
+      if (!wasComplete.configuration && (next.configurations ?? configurations).size > 0) scrollToNextAfter("configuration");
     });
   }
 
   function toggleCategory(value: string) {
+    const wasComplete = { category: isFieldComplete("category"), configuration: isFieldComplete("configuration") };
     const next = new Set(categories);
     if (next.has(value)) next.delete(value);
     else next.add(value);
     setCategories(next);
     setFieldComplete("category", next.size > 0);
-    save({ categories: next });
+    save({ categories: next }, wasComplete);
   }
 
   function toggleConfiguration(value: string) {
+    const wasComplete = { category: isFieldComplete("category"), configuration: isFieldComplete("configuration") };
     const next = new Set(configurations);
     if (next.has(value)) next.delete(value);
     else next.add(value);
     setConfigurations(next);
     setFieldComplete("configuration", next.size > 0);
-    save({ configurations: next });
+    save({ configurations: next }, wasComplete);
   }
 
   return (

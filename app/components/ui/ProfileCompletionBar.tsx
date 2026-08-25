@@ -38,8 +38,11 @@ export default function ProfileCompletionBar() {
     return (
       <div className="flex flex-col items-start gap-3">
         <div>
-          <p className="font-mono text-xs uppercase tracking-wide text-positive">Research profile complete</p>
-          <p className="mt-1 text-sm text-foreground">Your preferences are saved. NoDalalTalks can now make your research more relevant.</p>
+          {/* Deliberately says "Research Profile Complete", never "Verified" -- Section 14: must never imply identity/KYC/phone verification that hasn't actually happened. */}
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-positive/40 bg-positive/10 px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-wide text-positive">
+            <span aria-hidden="true">✓</span> Research Profile Complete
+          </span>
+          <p className="mt-2 text-sm text-foreground">Your preferences are saved. NoDalalTalks can now make your research more relevant.</p>
         </div>
         <Button href="/projects" variant="secondary" size="sm">
           Continue research

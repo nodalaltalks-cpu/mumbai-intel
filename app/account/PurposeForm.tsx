@@ -16,9 +16,10 @@ export default function PurposeForm({ purposes }: { purposes: string[] }) {
   const [selected, setSelected] = useState(new Set(purposes));
   const [isPending, startTransition] = useTransition();
   const [savedAt, setSavedAt] = useState<number | null>(null);
-  const { setFieldComplete, scrollToNextAfter } = useProfileCompletion();
+  const { setFieldComplete, isFieldComplete, scrollToNextAfter } = useProfileCompletion();
 
   function toggle(value: string) {
+    const wasComplete = isFieldComplete("purpose");
     const next = new Set(selected);
     if (next.has(value)) next.delete(value);
     else next.add(value);
@@ -30,7 +31,7 @@ export default function PurposeForm({ purposes }: { purposes: string[] }) {
     startTransition(async () => {
       await updatePreferencesAction({}, fd);
       setSavedAt(Date.now());
-      if (next.size > 0) scrollToNextAfter("purpose");
+      if (!wasComplete && next.size > 0) scrollToNextAfter("purpose");
     });
   }
 

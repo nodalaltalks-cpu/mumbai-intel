@@ -55,10 +55,21 @@ export interface ProfileFormState {
 }
 
 /**
- * Saves the two core PublicUser identity fields this app lets a user edit
- * themselves — email/password stay out of scope (auth surface). Recomputes
- * profileCompletionPercent afterward via lib/profile-completion.ts, the one
- * place that ever writes that column.
+ * Saves the PublicUser identity/personal fields this app lets a user edit
+ * themselves — email/password stay out of scope (auth surface). Called as a
+ * per-field auto-save (Section 9): each call only ever includes the FormData
+ * keys for the ONE field that just changed (plus "dobSubmitted", since the
+ * three day/month/year selects are one logical field), gated by
+ * `formData.has(...)` the same way lib/actions/user-preferences.ts already
+ * gates its independent preference cards — a save for "gender" alone must
+ * never blank out "name"/"phone"/etc. that a different, earlier auto-save
+ * already persisted (this was the actual root cause of Section 8's "Personal
+ * Details save error... previously filled information disappears" bug: the
+ * old version always wrote every field, defaulting anything absent from the
+ * current submission to null).
+ *
+ * Recomputes profileCompletionPercent afterward via lib/profile-completion.ts,
+ * the one place that ever writes that column.
  */
 export async function updatePublicProfileAction(_prevState: ProfileFormState, formData: FormData): Promise<ProfileFormState> {
   const session = await getPublicSession();
@@ -76,42 +87,44 @@ export async function updatePublicProfileAction(_prevState: ProfileFormState, fo
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 
-  const dob = parseDateOfBirth(parsed.data.dobDay, parsed.data.dobMonth, parsed.data.dobYear);
-  if ("error" in dob) return { error: dob.error };
+  let dobValue: Date | null | undefined; // undefined = day/month/year weren't part of this particular save
+  if (formData.has("dobSubmitted")) {
+    const dob = parseDateOfBirth(parsed.data.dobDay, parsed.data.dobMonth, parsed.data.dobYear);
+    if ("error" in dob) return { error: dob.error };
+    dobValue = dob.value;
+  }
 
   const before = await prisma.publicUser.findUnique({
     where: { id: session.userId },
     select: { profileCompletionPercent: true, name: true, phone: true, dateOfBirth: true, gender: true },
   });
 
-  const nextValues = {
-    name: parsed.data.name ?? null,
-    phone: parsed.data.phone ?? null,
-    dateOfBirth: dob.value,
-    gender: parsed.data.gender ?? null,
-  };
+  const data: { name?: string | null; phone?: string | null; city?: string | null; currentLocality?: string | null; dateOfBirth?: Date | null; gender?: string | null } = {};
+  if (formData.has("name")) data.name = parsed.data.name ?? null;
+  if (formData.has("phone")) data.phone = parsed.data.phone ?? null;
+  if (formData.has("city")) data.city = parsed.data.city ?? null;
+  if (formData.has("currentLocality")) data.currentLocality = parsed.data.currentLocality ?? null;
+  if (dobValue !== undefined) data.dateOfBirth = dobValue;
+  if (formData.has("gender")) data.gender = parsed.data.gender ?? null;
 
   try {
-    await prisma.publicUser.update({
-      where: { id: session.userId },
-      data: {
-        ...nextValues,
-        city: parsed.data.city ?? null,
-        currentLocality: parsed.data.currentLocality ?? null,
-      },
-    });
+    await prisma.publicUser.update({ where: { id: session.userId }, data });
   } catch (error) {
     return { error: friendlyPrismaError(error) };
   }
 
   const completionPercent = await recalculatePublicUserCompletion(session.userId);
-  await recordResearchEvent("PROFILE_UPDATED", { entityType: "PublicUser", entityId: session.userId, metadata: { section: "basic_profile" } });
+  if (Object.keys(data).length > 0) {
+    await recordResearchEvent("PROFILE_UPDATED", { entityType: "PublicUser", entityId: session.userId, metadata: { section: "basic_profile" } });
+  }
 
   // Field-level completion analytics (Part 10) — one event per field that just
-  // transitioned from empty to filled in this save, field key only, never the value.
+  // transitioned from empty to filled in THIS save, field key only, never the
+  // value. Only checks fields this save actually touched.
   for (const field of ["name", "phone", "dateOfBirth", "gender"] as const) {
+    if (!(field in data)) continue;
     const wasEmpty = !before?.[field];
-    const isFilledNow = Boolean(nextValues[field]);
+    const isFilledNow = Boolean(data[field]);
     if (wasEmpty && isFilledNow) {
       await recordResearchEvent("PROFILE_FIELD_COMPLETED", { entityType: "PublicUser", entityId: session.userId, metadata: { field } });
     }

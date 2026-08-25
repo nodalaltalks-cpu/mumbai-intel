@@ -31,9 +31,10 @@ export default function FamilyForm({ familySize, familyIncomeRange }: { familySi
   const [income, setIncome] = useState(familyIncomeRange ?? "");
   const [isPending, startTransition] = useTransition();
   const [savedAt, setSavedAt] = useState<number | null>(null);
-  const { setFieldComplete, scrollToNextAfter } = useProfileCompletion();
+  const { setFieldComplete, isFieldComplete, scrollToNextAfter } = useProfileCompletion();
 
   function pickSize(value: string) {
+    const wasComplete = isFieldComplete("familySize");
     const next = size === value ? "" : value;
     setSize(next);
     setFieldComplete("familySize", Boolean(next));
@@ -42,11 +43,12 @@ export default function FamilyForm({ familySize, familyIncomeRange }: { familySi
     startTransition(async () => {
       await updatePreferencesAction({}, fd);
       setSavedAt(Date.now());
-      if (next) scrollToNextAfter("familySize");
+      if (!wasComplete && next) scrollToNextAfter("familySize");
     });
   }
 
   function pickIncome(value: string) {
+    const wasComplete = isFieldComplete("familyIncome");
     const next = income === value ? "" : value;
     setIncome(next);
     setFieldComplete("familyIncome", Boolean(next));
@@ -55,7 +57,7 @@ export default function FamilyForm({ familySize, familyIncomeRange }: { familySi
     startTransition(async () => {
       await updatePreferencesAction({}, fd);
       setSavedAt(Date.now());
-      if (next) scrollToNextAfter("familyIncome");
+      if (!wasComplete && next) scrollToNextAfter("familyIncome");
     });
   }
 

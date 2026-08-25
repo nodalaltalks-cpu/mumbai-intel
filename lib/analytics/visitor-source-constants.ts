@@ -54,6 +54,30 @@ function classifyByUtmSource(utmSource: string): VisitorSource | null {
  * completion"). A link shared without any UTM tag still correctly falls
  * through to "direct" when there's also no referrer.
  */
+/**
+ * Higher-level grouping over the same VISITOR_SOURCES buckets (visitor
+ * analytics Section 3) — e.g. Instagram/LinkedIn/Facebook/YouTube all roll
+ * up to SOCIAL. Deliberately excludes EMAIL/PAID: nothing in this app
+ * currently captures an email-campaign click-through or a paid-ad UTM
+ * distinctly from an organic one, and inventing a bucket with zero real
+ * traffic in it would violate the "don't manufacture insights" rule below.
+ */
+export const CHANNEL_GROUPS = ["organic_search", "social", "direct", "whatsapp", "referral", "other"] as const;
+export type ChannelGroup = (typeof CHANNEL_GROUPS)[number];
+
+export const VISITOR_SOURCE_CHANNEL_GROUP: Record<VisitorSource, ChannelGroup> = {
+  google: "organic_search",
+  instagram: "social",
+  linkedin: "social",
+  facebook: "social",
+  youtube: "social",
+  whatsapp: "whatsapp",
+  direct: "direct",
+  referral: "referral",
+  other_website: "referral",
+  unknown: "other",
+};
+
 export function classifyVisitorSource(referrerHost: string | null, utmSource: string | null): VisitorSource {
   if (utmSource) {
     const byUtm = classifyByUtmSource(utmSource);

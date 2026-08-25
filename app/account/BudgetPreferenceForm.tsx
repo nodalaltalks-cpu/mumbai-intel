@@ -11,9 +11,14 @@ import SkipFieldButton from "./SkipFieldButton";
 export default function BudgetPreferenceForm({ minRupees, maxRupees }: { minRupees: number | null; maxRupees: number | null }) {
   const [saved, setSaved] = useState<{ min: number | null; max: number | null } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { setFieldComplete, scrollToNextAfter } = useProfileCompletion();
+  const { setFieldComplete, isFieldComplete, scrollToNextAfter } = useProfileCompletion();
 
   function handleCommit(min: number | null, max: number | null) {
+    // Read BEFORE the optimistic flip below: only a genuine incomplete -> complete
+    // transition should auto-advance the user away. Without this, every further
+    // edit to an already-set budget (nudging the slider, refining the range)
+    // would yank them straight to the next section before they're done (Section 18).
+    const wasComplete = isFieldComplete("budget");
     setFieldComplete("budget", min !== null || max !== null); // optimistic — real value still comes from the server action below
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
@@ -26,7 +31,7 @@ export default function BudgetPreferenceForm({ minRupees, maxRupees }: { minRupe
       if (max === null) fd.set("preferredBudgetMaxRupees", "");
       void updatePreferencesAction({}, fd).then(() => {
         setSaved({ min, max });
-        if (min !== null || max !== null) scrollToNextAfter("budget");
+        if (!wasComplete && (min !== null || max !== null)) scrollToNextAfter("budget");
       });
     }, 400);
   }

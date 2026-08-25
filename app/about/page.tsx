@@ -24,14 +24,6 @@ export default function AboutPage() {
         leads for anyone.
       </p>
 
-      <h2>What&apos;s on the platform today</h2>
-      <ul>
-        <li>Project, builder and locality profiles with sourced pricing, configuration and construction-status data</li>
-        <li>A registered-transaction database with price trends, configuration mix and volume analytics</li>
-        <li>An interactive map to explore inventory by location, price band and status</li>
-        <li>Market Data and Insights views summarizing city- and locality-level trends</li>
-      </ul>
-
       <h2>Where the data comes from</h2>
       <p>We use multiple reliable sources and cross-check important information before publishing it.</p>
 

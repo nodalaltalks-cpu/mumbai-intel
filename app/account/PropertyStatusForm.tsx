@@ -18,9 +18,10 @@ export default function PropertyStatusForm({ preferredReadiness }: { preferredRe
   const [readiness, setReadiness] = useState(new Set(preferredReadiness));
   const [isPending, startTransition] = useTransition();
   const [savedAt, setSavedAt] = useState<number | null>(null);
-  const { setFieldComplete, scrollToNextAfter } = useProfileCompletion();
+  const { setFieldComplete, isFieldComplete, scrollToNextAfter } = useProfileCompletion();
 
   function toggle(value: string) {
+    const wasComplete = isFieldComplete("readiness");
     const next = new Set(readiness);
     if (next.has(value)) next.delete(value);
     else next.add(value);
@@ -32,7 +33,7 @@ export default function PropertyStatusForm({ preferredReadiness }: { preferredRe
     startTransition(async () => {
       await updatePreferencesAction({}, fd);
       setSavedAt(Date.now());
-      if (next.size > 0) scrollToNextAfter("readiness");
+      if (!wasComplete && next.size > 0) scrollToNextAfter("readiness");
     });
   }
 

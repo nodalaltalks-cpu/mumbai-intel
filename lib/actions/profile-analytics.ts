@@ -20,6 +20,23 @@ export async function recordProfileStartedAction(alreadyInProgress = false): Pro
   });
 }
 
+/**
+ * Fired when a whole profile section (Personal Details, Budget, ...)
+ * genuinely transitions from incomplete to complete -- reactivates the
+ * PROFILE_SECTION_COMPLETED event type, which was already declared in the
+ * schema/event taxonomy but never actually fired anywhere until now (no new
+ * event type introduced). The client is the source of truth for this
+ * transition since it already tracks per-section complete/incomplete state
+ * locally in real time; this call is purely the durable analytics record of
+ * something the client just observed, the same pattern already used for
+ * PROFILE_FIELD_SKIPPED and PROFILE_SECTION_CLICKED below.
+ */
+export async function recordSectionCompletedAction(section: string): Promise<void> {
+  const session = await getPublicSession();
+  if (!session) return;
+  await recordResearchEvent("PROFILE_SECTION_COMPLETED", { entityType: "PublicUser", entityId: session.userId, metadata: { section } });
+}
+
 /** Fired when the user explicitly skips a field during guided completion — a real "chose not to fill this" signal, distinct from PROFILE_FIELD_COMPLETED. */
 export async function recordFieldSkippedAction(field: string): Promise<void> {
   const session = await getPublicSession();

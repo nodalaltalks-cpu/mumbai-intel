@@ -27,7 +27,7 @@ export default function LocationsPreferenceForm({
   const [draft, setDraft] = useState("");
   const [isPending, startTransition] = useTransition();
   const [savedAt, setSavedAt] = useState<number | null>(null);
-  const { setFieldComplete, scrollToNextAfter } = useProfileCompletion();
+  const { setFieldComplete, isFieldComplete, scrollToNextAfter } = useProfileCompletion();
 
   const nameById = new Map(localities.map((l) => [l.id, l.name]));
   function selectedLabels(ids: Set<string>, freeTextList: string[]): string[] {
@@ -35,6 +35,9 @@ export default function LocationsPreferenceForm({
   }
 
   function saveIds(next: Set<string>) {
+    // Only auto-advance on a genuine incomplete -> complete transition, not on
+    // every checkbox toggle once the field is already complete (Section 12/18).
+    const wasComplete = isFieldComplete("localities");
     setFieldComplete("localities", next.size > 0 || freeText.length > 0);
     const fd = new FormData();
     fd.set("localityIdsSubmitted", "1");
@@ -42,11 +45,12 @@ export default function LocationsPreferenceForm({
     startTransition(async () => {
       await updatePreferencesAction({}, fd);
       setSavedAt(Date.now());
-      if (next.size > 0) scrollToNextAfter("localities");
+      if (!wasComplete && next.size > 0) scrollToNextAfter("localities");
     });
   }
 
   function saveFreeText(next: string[]) {
+    const wasComplete = isFieldComplete("localities");
     setFieldComplete("localities", next.length > 0 || checkedIds.size > 0);
     const fd = new FormData();
     fd.set("localityFreeTextSubmitted", "1");
@@ -54,7 +58,7 @@ export default function LocationsPreferenceForm({
     startTransition(async () => {
       await updatePreferencesAction({}, fd);
       setSavedAt(Date.now());
-      if (next.length > 0) scrollToNextAfter("localities");
+      if (!wasComplete && next.length > 0) scrollToNextAfter("localities");
     });
   }
 

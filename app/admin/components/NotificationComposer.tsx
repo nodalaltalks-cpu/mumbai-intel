@@ -10,6 +10,8 @@ import {
 } from "@/lib/actions/notification-campaigns";
 import type { NotificationRecipientCandidate, NotificationSegment } from "@/lib/analytics/notification-queries";
 import { CATEGORY_LABEL } from "@/lib/project-meta";
+import { formatIndianPriceCompact } from "@/lib/price-range";
+import PriceRangeFilter from "@/app/components/PriceRangeFilter";
 import { SelectField, Field, TextareaField } from "./FormField";
 import SingleImageUploadField from "./SingleImageUploadField";
 import SubmitButton from "./SubmitButton";
@@ -53,6 +55,9 @@ export default function NotificationComposer({ localities }: { localities: { id:
   const [localityId, setLocalityId] = useState("");
   const [city, setCity] = useState("");
   const [category, setCategory] = useState("");
+  const [landmark, setLandmark] = useState("");
+  const [budgetMin, setBudgetMin] = useState<number | null>(null);
+  const [budgetMax, setBudgetMax] = useState<number | null>(null);
   const [q, setQ] = useState("");
   const [candidates, setCandidates] = useState<NotificationRecipientCandidate[]>([]);
   const [selected, setSelected] = useState<Map<string, NotificationRecipientCandidate>>(new Map());
@@ -81,6 +86,9 @@ export default function NotificationComposer({ localities }: { localities: { id:
     setLocalityId("");
     setCity("");
     setCategory("");
+    setLandmark("");
+    setBudgetMin(null);
+    setBudgetMax(null);
     setQ("");
     setSelected(new Map());
     setNotifCategory("");
@@ -98,13 +106,16 @@ export default function NotificationComposer({ localities }: { localities: { id:
       const results = await searchNotificationRecipientsAction({
         q: q || undefined,
         segment,
-        localityId: segment === "locality" ? localityId || undefined : undefined,
+        localityId: localityId || undefined,
         city: city || undefined,
         category: category || undefined,
+        landmark: landmark || undefined,
+        budgetMinRupees: budgetMin ?? undefined,
+        budgetMaxRupees: budgetMax ?? undefined,
       });
       setCandidates(results);
     });
-  }, [q, segment, localityId, city, category]);
+  }, [q, segment, localityId, city, category, landmark, budgetMin, budgetMax]);
 
   function toggle(candidate: NotificationRecipientCandidate) {
     setSelected((prev) => {
@@ -135,7 +146,18 @@ export default function NotificationComposer({ localities }: { localities: { id:
     }
   }
 
-  const targetFiltersJson = JSON.stringify({ segment, localityId, city, category });
+  const targetFiltersJson = JSON.stringify({ segment, localityId, city, category, landmark, budgetMin, budgetMax });
+  const localityName = localities.find((l) => l.id === localityId)?.name;
+  const activeFilters: string[] = [];
+  if (city) activeFilters.push(`City: ${city}`);
+  if (localityId) activeFilters.push(`Locality: ${localityName ?? localityId}`);
+  if (landmark) activeFilters.push(`Landmark: ${landmark}`);
+  if (category) activeFilters.push(`Property type: ${CATEGORY_LABEL[category as keyof typeof CATEGORY_LABEL] ?? category}`);
+  if (budgetMin !== null || budgetMax !== null) {
+    activeFilters.push(
+      `Budget: ${budgetMin !== null ? formatIndianPriceCompact(budgetMin) : "Any"} – ${budgetMax !== null ? formatIndianPriceCompact(budgetMax) : "Any"}`
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -159,20 +181,6 @@ export default function NotificationComposer({ localities }: { localities: { id:
                 </option>
               ))}
             </select>
-            {segment === "locality" ? (
-              <select
-                value={localityId}
-                onChange={(e) => setLocalityId(e.target.value)}
-                className="rounded-sm border border-border bg-background px-2 py-2 text-xs text-foreground focus:border-accent focus:outline-none"
-              >
-                <option value="">Choose locality…</option>
-                {localities.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
-              </select>
-            ) : null}
             {segment === "specific" ? (
               <input
                 value={q}
@@ -181,24 +189,87 @@ export default function NotificationComposer({ localities }: { localities: { id:
                 className="min-w-0 flex-1 rounded-sm border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
               />
             ) : null}
-            <input
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              placeholder="Narrow by city (optional)"
-              className="rounded-sm border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
-            />
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="rounded-sm border border-border bg-background px-2 py-2 text-xs text-foreground focus:border-accent focus:outline-none"
-            >
-              <option value="">Any property type</option>
-              {Object.entries(CATEGORY_LABEL).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
+          </div>
+
+          {/* Optional narrowing filters (Section 1) — every one independent of segment and of each
+              other, reusing the exact Research Profile fields (city/preferredLocalityIds/
+              localityFreeText/preferredBudget*) an existing user already filled in. None required;
+              leaving all of them blank preserves the segment's normal audience untouched. */}
+          <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-border pt-3">
+            <div>
+              <label className="mb-1 block text-[10px] uppercase tracking-wide text-muted">City (optional)</label>
+              <input
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                placeholder="e.g. Mumbai"
+                className="w-36 rounded-sm border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] uppercase tracking-wide text-muted">Locality (optional)</label>
+              <select
+                value={localityId}
+                onChange={(e) => setLocalityId(e.target.value)}
+                className="rounded-sm border border-border bg-background px-2 py-2 text-xs text-foreground focus:border-accent focus:outline-none"
+              >
+                <option value="">Any locality</option>
+                {localities.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] uppercase tracking-wide text-muted">Landmark / area (optional)</label>
+              <input
+                value={landmark}
+                onChange={(e) => setLandmark(e.target.value)}
+                placeholder="e.g. Kurla station"
+                className="w-40 rounded-sm border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] uppercase tracking-wide text-muted">Property type (optional)</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="rounded-sm border border-border bg-background px-2 py-2 text-xs text-foreground focus:border-accent focus:outline-none"
+              >
+                <option value="">Any property type</option>
+                {Object.entries(CATEGORY_LABEL).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="min-w-[220px] flex-1">
+              <label className="mb-1 block text-[10px] uppercase tracking-wide text-muted">Budget range (optional)</label>
+              <PriceRangeFilter minRupees={budgetMin} maxRupees={budgetMax} onCommit={(min, max) => { setBudgetMin(min); setBudgetMax(max); }} />
+            </div>
+          </div>
+
+          <div className="mt-3 rounded-sm border border-border bg-background p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">Targeting</p>
+            <p className="mt-1 text-xs text-foreground">
+              Audience: <span className="font-medium">{SEGMENTS.find((s) => s.value === segment)?.label ?? "All users"}</span>
+            </p>
+            {activeFilters.length > 0 ? (
+              <ul className="mt-1 flex flex-col gap-0.5">
+                {activeFilters.map((f) => (
+                  <li key={f} className="text-xs text-foreground">
+                    <span className="text-positive">✓</span> {f}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-1 text-xs text-muted">No filters — reaches every eligible user in the selected audience.</p>
+            )}
+            <p className="mt-2 text-xs text-muted">
+              Estimated recipients: <span className="font-semibold text-foreground">{isSearching ? "…" : candidates.length}</span>
+              {candidates.length === 500 ? " (showing/estimating first 500)" : ""}
+            </p>
           </div>
 
           <div className="mt-3 flex items-center justify-between text-[11px] text-muted">

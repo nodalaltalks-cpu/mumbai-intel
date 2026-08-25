@@ -5,7 +5,7 @@ import { requireSession } from "@/lib/auth/guard";
 import { getPublicSession } from "@/lib/public-auth/session";
 import { prisma } from "@/lib/prisma";
 import { updateManyByRow } from "@/lib/actions/errors";
-import { getPublicNotifications, getPublicUnreadNotificationCount, type PublicNotificationItem } from "@/lib/queries/dashboard";
+import { getOlderPublicNotifications, getPublicNotifications, getPublicUnreadNotificationCount, type PublicNotificationItem } from "@/lib/queries/dashboard";
 
 /**
  * Marks every unread notification for the signed-in admin as read. Per-row
@@ -80,4 +80,13 @@ export async function fetchPublicNotificationsAction(): Promise<PublicNotificati
   if (!session) return { items: [], unreadCount: 0 };
   const [items, unreadCount] = await Promise.all([getPublicNotifications(session.userId), getPublicUnreadNotificationCount(session.userId)]);
   return { items, unreadCount };
+}
+
+/** Backs the notification center's "load more" — one older page beyond whatever the bell already has, scoped to the signed-in visitor's own notifications. */
+export async function fetchOlderPublicNotificationsAction(beforeIso: string): Promise<PublicNotificationItem[]> {
+  const session = await getPublicSession();
+  if (!session) return [];
+  const before = new Date(beforeIso);
+  if (Number.isNaN(before.getTime())) return [];
+  return getOlderPublicNotifications(session.userId, before);
 }

@@ -2,8 +2,13 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import type { CompletionSectionStatus, ProfileSectionKey } from "@/lib/profile-completion-shared";
-import { recordFieldSkippedAction, recordProfileStartedAction, recordSectionClickedAction } from "@/lib/actions/profile-analytics";
+import { getSectionProgress, type CompletionSectionStatus, type ProfileSectionKey } from "@/lib/profile-completion-shared";
+import {
+  recordFieldSkippedAction,
+  recordProfileStartedAction,
+  recordSectionClickedAction,
+  recordSectionCompletedAction,
+} from "@/lib/actions/profile-analytics";
 
 /** Where each field's card lives on the page — used both for the checklist chips and for guided auto-scroll. Keep in sync with the section ids rendered in app/account/page.tsx. */
 export const FIELD_ANCHORS: Record<string, string> = {
@@ -22,17 +27,19 @@ export const FIELD_ANCHORS: Record<string, string> = {
   familyIncome: "family",
 };
 
-const MILESTONES = [25, 50, 75, 90, 100] as const;
-type Milestone = (typeof MILESTONES)[number];
+/** A whole section (Personal Details, Budget, ...) just transitioned incomplete -> complete, or the overall profile just reached 100% -- the two celebration moments Section 12/13 ask to distinguish. Replaces the old numeric 25/50/75/90 percent-bracket toast, which fired on arbitrary percent crossings that didn't correspond to anything the user could point to ("what did I just finish?"); a named section is more legible and matches the spec's own examples verbatim. The server-side PROFILE_COMPLETION_25/50/75/90 analytics events (fired from the save actions, unrelated to this UI trigger) are untouched. */
+type Celebration = { kind: "section"; section: ProfileSectionKey; label: string } | { kind: "complete" };
 
 interface ProfileCompletionContextValue {
   sections: CompletionSectionStatus[];
   percent: number;
   guidedActive: boolean;
-  celebration: Milestone | null;
+  celebration: Celebration | null;
   dismissCelebration: () => void;
   /** Optimistically flips a field's local status the instant the user acts — the real persisted value still comes from the server action running in parallel; this is purely so the visible % and checklist never wait on a round trip. */
   setFieldComplete: (key: string, complete: boolean) => void;
+  /** Current complete/incomplete state of one field, read BEFORE a caller's own optimistic setFieldComplete call — lets a card tell "this field just became complete for the first time" apart from "already complete, just being edited/adjusted," so it only auto-advances on a genuine transition (Section 12/18/19). */
+  isFieldComplete: (key: string) => boolean;
   startGuided: () => void;
   firstIncompleteAnchor: () => string | null;
   scrollToFirstIncomplete: (source?: string) => void;
@@ -112,9 +119,7 @@ export function ProfileCompletionProvider({
 }) {
   const [sections, setSections] = useState(initialSections);
   const [guidedActive, setGuidedActive] = useState(false);
-  const [celebration, setCelebration] = useState<Milestone | null>(null);
-  const seenMilestoneKey = `mi_profile_milestones_${userId}`;
-  const lastPercentRef = useRef(initialPercent);
+  const [celebration, setCelebration] = useState<Celebration | null>(null);
   const abandonedFiredRef = useRef(false);
 
   const percent = useMemo(() => {
@@ -122,31 +127,38 @@ export function ProfileCompletionProvider({
     return sections.length ? Math.round((complete / sections.length) * 100) : 0;
   }, [sections]);
 
-  // Fires a one-time-per-user, per-milestone celebration purely client-side
-  // (localStorage dedup) — the real, authoritative PROFILE_COMPLETION_XX
-  // analytics event is fired server-side in the save actions themselves
-  // (lib/profile-completion.ts's getMilestoneCrossed), so this local
-  // celebration never needs to be the source of truth, only the UI trigger.
+  // Per-section completion tracking (Section 12) — a ref, not localStorage:
+  // seeded from the sections the page actually loaded with, so a section
+  // that's already complete on arrival never "celebrates" itself, and a
+  // section only celebrates once per session the instant it genuinely
+  // transitions incomplete -> complete (never on a mere revisit or a further
+  // edit to an already-complete section, since neither changes isComplete).
+  const prevSectionCompleteRef = useRef<Partial<Record<ProfileSectionKey, boolean>>>(
+    Object.fromEntries(getSectionProgress(initialSections).map((sp) => [sp.section, sp.totalCount > 0 && sp.completeCount === sp.totalCount]))
+  );
   useEffect(() => {
-    const before = lastPercentRef.current;
-    lastPercentRef.current = percent;
-    if (percent <= before) return;
-    const crossed = [...MILESTONES].reverse().find((m) => before < m && percent >= m);
-    if (!crossed) return;
-    let seen: number[] = [];
-    try {
-      seen = JSON.parse(localStorage.getItem(seenMilestoneKey) ?? "[]");
-    } catch {
-      seen = [];
+    for (const sp of getSectionProgress(sections)) {
+      const isComplete = sp.totalCount > 0 && sp.completeCount === sp.totalCount;
+      const wasComplete = prevSectionCompleteRef.current[sp.section] ?? false;
+      prevSectionCompleteRef.current[sp.section] = isComplete;
+      if (isComplete && !wasComplete) {
+        void recordSectionCompletedAction(sp.section);
+        setCelebration({ kind: "section", section: sp.section, label: sp.label });
+        break; // one celebration at a time even if two sections complete in the same update
+      }
     }
-    if (seen.includes(crossed)) return;
-    setCelebration(crossed);
-    try {
-      localStorage.setItem(seenMilestoneKey, JSON.stringify([...seen, crossed]));
-    } catch {
-      // best-effort only
+  }, [sections]);
+
+  // 100% is its own distinct, larger celebration (Section 13), decoupled
+  // from the per-section one above — same self-seeding-ref pattern so a
+  // profile that's already 100% on load never re-celebrates.
+  const celebratedCompleteRef = useRef(initialPercent >= 100);
+  useEffect(() => {
+    if (percent >= 100 && !celebratedCompleteRef.current) {
+      celebratedCompleteRef.current = true;
+      setCelebration({ kind: "complete" });
     }
-  }, [percent, seenMilestoneKey]);
+  }, [percent]);
 
   // Best-effort funnel-drop-off signal (Part 5) — fires once, the first time
   // the page is hidden (tab switch, navigation, or close) while the user is
@@ -174,6 +186,8 @@ export function ProfileCompletionProvider({
   const setFieldComplete = useCallback((key: string, complete: boolean) => {
     setSections((prev) => prev.map((s) => (s.key === key ? { ...s, complete } : s)));
   }, []);
+
+  const isFieldComplete = useCallback((key: string) => sections.find((s) => s.key === key)?.complete ?? false, [sections]);
 
   const firstIncompleteAnchor = useCallback((): string | null => {
     const next = sections.find((s) => !s.complete);
@@ -308,6 +322,7 @@ export function ProfileCompletionProvider({
     celebration,
     dismissCelebration: () => setCelebration(null),
     setFieldComplete,
+    isFieldComplete,
     startGuided: () => setGuidedActive(true),
     firstIncompleteAnchor,
     scrollToFirstIncomplete,
