@@ -111,7 +111,7 @@ export default async function PlatformHealthPage() {
           <DataBadge kind="instance-sampled" />
         </div>
         <p className="mb-2 text-[11px] text-muted">
-          Database timings are sampled in-process from every Prisma query this serverless instance has handled since its last cold start or the last hourly snapshot — real numbers, not a fleet-wide aggregate (this app has no APM/observability vendor wired up).
+          Database timings are sampled in-process from every Prisma query this serverless instance has handled since its last cold start or the last daily snapshot — real numbers, not a fleet-wide aggregate (this app has no APM/observability vendor wired up).
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-sm border border-border bg-surface p-4">
@@ -181,11 +181,11 @@ export default async function PlatformHealthPage() {
 
       <section className="rounded-sm border border-border bg-surface p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-mono text-sm font-semibold text-foreground">72-hour history</h2>
+          <h2 className="font-mono text-sm font-semibold text-foreground">History (one snapshot/day — Vercel Hobby plan cron limit)</h2>
           <DataBadge kind="instance-sampled" />
         </div>
         {history.length === 0 ? (
-          <p className="text-xs text-muted">No snapshots yet — the first is captured by the platform-metrics cron&apos;s next hourly run.</p>
+          <p className="text-xs text-muted">No snapshots yet — the first is captured by the platform-metrics cron&apos;s next daily run (8:00 AM UTC).</p>
         ) : (
           <div className="overflow-x-auto rounded-sm border border-border">
             <table className="w-full min-w-[680px] border-collapse text-left text-xs">

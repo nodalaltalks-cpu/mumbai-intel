@@ -14,7 +14,7 @@
     },
     {
       "path": "/api/cron/platform-metrics",
-      "schedule": "0 * * * *"
+      "schedule": "0 8 * * *"
     }
   ]
 }
