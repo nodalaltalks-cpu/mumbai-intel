@@ -89,7 +89,14 @@ function scrollToAnchor(anchorId: string, fieldKey?: string) {
   document.title = "DBG:scrollToAnchor:" + anchorId + ":" + fieldKey;
   const fieldEl = fieldKey ? document.getElementById(`field-${fieldKey}`) : null;
   if (fieldEl) {
+    (window as unknown as { __DBG__: unknown[] }).__DBG__ = (window as unknown as { __DBG__: unknown[] }).__DBG__ || [];
+    const dbg = (window as unknown as { __DBG__: unknown[] }).__DBG__;
+    dbg.push({ t: "pre-scroll", top: fieldEl.getBoundingClientRect().top, scrollY: window.scrollY, docScrollHeight: document.documentElement.scrollHeight });
     fieldEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    dbg.push({ t: "post-scrollIntoView-call", top: fieldEl.getBoundingClientRect().top, scrollY: window.scrollY });
+    [100, 300, 600, 1000, 1600].forEach((ms) =>
+      window.setTimeout(() => dbg.push({ t: "at+" + ms, top: fieldEl.getBoundingClientRect().top, scrollY: window.scrollY }), ms)
+    );
     focusAfterScroll(fieldEl);
     return;
   }
