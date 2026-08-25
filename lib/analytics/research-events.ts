@@ -17,6 +17,15 @@ export interface ResearchEventInput {
    * render — passed through here so there's still exactly one write path.
    */
   sessionId?: string | null;
+  /**
+   * Only set by callers writing from inside Next's `after()` (e.g.
+   * lib/recommendations/impressions.ts) — `cookies()`, and therefore
+   * getPublicSession(), is not callable inside an `after()` callback
+   * (Next.js throws "used cookies() inside after()"). Such callers resolve
+   * the session BEFORE scheduling the callback and pass the id through
+   * here, same reasoning as sessionId above.
+   */
+  publicUserId?: string | null;
 }
 
 /**
@@ -29,14 +38,22 @@ export interface ResearchEventInput {
  */
 export async function recordResearchEvent(eventType: ResearchEventType, input: ResearchEventInput = {}): Promise<void> {
   try {
-    const [session, peekedSessionId] = await Promise.all([getPublicSession(), peekAnonSessionId()]);
+    // Skip both cookie reads entirely when the caller already resolved both
+    // identities (the after()-callback case) -- cookies() throws in that
+    // context, so it must never be reached at all, not just have its result overridden.
+    const needsSession = input.publicUserId === undefined;
+    const needsSessionId = input.sessionId === undefined;
+    const [session, peekedSessionId] = await Promise.all([
+      needsSession ? getPublicSession() : Promise.resolve(null),
+      needsSessionId ? peekAnonSessionId() : Promise.resolve(null),
+    ]);
     await prisma.researchEvent.create({
       data: {
         eventType,
         entityType: input.entityType ?? null,
         entityId: input.entityId ?? null,
-        publicUserId: session?.userId ?? null,
-        sessionId: input.sessionId !== undefined ? input.sessionId : peekedSessionId,
+        publicUserId: needsSession ? (session?.userId ?? null) : input.publicUserId,
+        sessionId: needsSessionId ? peekedSessionId : input.sessionId,
         metadata: input.metadata ? (input.metadata as object) : undefined,
         resultCount: input.resultCount,
       },

@@ -133,9 +133,12 @@ export interface RecentRecommendationRow {
   score: number | null;
   surface: string | null;
   isRegistered: boolean;
+  /** Phase 2 — present only when ML shadow/active scoring ran for this impression. */
+  mlScore: number | null;
+  mlModelVersion: string | null;
 }
 
-/** Part 30 "why was this recommended" — recent impressions with their reasons, no per-user drill-down UI in Phase 1 (deferred; see final report). */
+/** Part 30/Phase 2 Part 15 "why was this recommended" — recent impressions with their reasons (and ML score/version when shadow-scored), no per-user drill-down UI yet (deferred; see final report). */
 export async function getRecentRecommendationImpressions(limit = 25): Promise<RecentRecommendationRow[]> {
   const rows = await prisma.researchEvent.findMany({
     where: { eventType: "RECOMMENDATION_IMPRESSION" },
@@ -148,7 +151,7 @@ export async function getRecentRecommendationImpressions(limit = 25): Promise<Re
   const nameById = new Map(projects.map((p) => [p.id, p.name]));
 
   return rows.map((r) => {
-    const meta = (r.metadata ?? {}) as { reasons?: string[]; candidateSources?: string[]; score?: number; surface?: string };
+    const meta = (r.metadata ?? {}) as { reasons?: string[]; candidateSources?: string[]; score?: number; surface?: string; mlScore?: number; mlModelVersion?: string };
     return {
       id: r.id,
       createdAt: r.createdAt,
@@ -158,6 +161,8 @@ export async function getRecentRecommendationImpressions(limit = 25): Promise<Re
       score: meta.score ?? null,
       surface: meta.surface ?? null,
       isRegistered: r.publicUserId !== null,
+      mlScore: meta.mlScore ?? null,
+      mlModelVersion: meta.mlModelVersion ?? null,
     };
   });
 }

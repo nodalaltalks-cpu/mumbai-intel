@@ -648,7 +648,11 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             </div>
           ) : null}
 
-          <SimilarProjectsRecommended project={{ id: project.id, localityId: project.localityId, builderId: project.builderId }} locked={locked} />
+          <SimilarProjectsRecommended
+            project={{ id: project.id, localityId: project.localityId, builderId: project.builderId }}
+            locked={locked}
+            publicUserId={publicSession?.userId ?? null}
+          />
 
           <div>
             <h2 className="font-mono text-lg font-semibold text-foreground">Nearby Builders</h2>

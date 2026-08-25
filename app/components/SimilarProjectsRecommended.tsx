@@ -14,14 +14,16 @@ import RecommendationGrid from "@/app/components/RecommendationGrid";
 export default async function SimilarProjectsRecommended({
   project,
   locked,
+  publicUserId,
 }: {
   project: { id: string; localityId: string; builderId: string | null };
   locked: boolean;
+  publicUserId: string | null;
 }) {
   const [items, sessionId] = await Promise.all([getSimilarToProject(project, 4), peekAnonSessionId()]);
   if (items.length === 0) return null;
 
-  recordRecommendationImpressions(items, "project_detail_similar", sessionId);
+  recordRecommendationImpressions(items, "project_detail_similar", publicUserId, sessionId);
 
   const cardItems = items.map((item) => ({
     projectId: item.project.id,

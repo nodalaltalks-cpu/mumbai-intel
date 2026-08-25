@@ -5,6 +5,7 @@ import type { UserInterferenceInput } from "./types-internal";
 import { explorationCandidates, newCandidates, profileMatchCandidates, recentBehaviorCandidates, similarProjectCandidates, trendingCandidates, type RawCandidate } from "./candidates";
 import { rankAndDiversify } from "./rank";
 import type { ScoredProject, UserInterestSnapshot } from "./types";
+import { applyMlScoring, type MlScoredItem } from "./ml/score";
 
 /**
  * Fetches everything buildUserInterestSnapshot needs for a signed-in user.
@@ -68,10 +69,12 @@ async function loadInterestInput(publicUserId: string | null): Promise<UserInter
 }
 
 export interface RecommendationSet {
-  items: ScoredProject[];
+  items: MlScoredItem[];
   interestState: UserInterestSnapshot["state"];
   /** True when this list is the cold-start (no profile, no behavior) fallback — surfaced so the UI can label it "Popular right now" instead of implying real personalization. */
   isColdStart: boolean;
+  /** Phase 2 — which ranking system actually produced this order (Part 18: always inspectable, never hidden). */
+  ranking: { mode: "PHASE1_ONLY" | "ML_SHADOW" | "ML_ENABLED"; modelVersion: string | null; mlReordered: boolean };
 }
 
 /**
@@ -100,8 +103,12 @@ export async function getRecommendationsForUser(publicUserId: string | null, lim
   }
   pool.push(...(await explorationCandidates(interest, [...excludeIds, ...pool.map((c) => c.project.id)], 3)));
 
-  const items = rankAndDiversify(pool, limit);
-  return { items, interestState: interest.state, isColdStart };
+  const phase1Items = rankAndDiversify(pool, limit);
+  // Phase 2, Part 8/9 — ML never replaces this call, only observes/reorders
+  // its output. Defaults to a pure no-op (PHASE1_ONLY) until a Founder
+  // explicitly changes the ranking mode.
+  const ml = await applyMlScoring(phase1Items, interest);
+  return { items: ml.items, interestState: interest.state, isColdStart, ranking: { mode: ml.mode, modelVersion: ml.modelVersion, mlReordered: ml.reordered } };
 }
 
 /** Project-detail-page "You may also consider" — seeded from ONE project (the one being viewed), not the visitor's whole history. Distinct from the existing "Nearby Projects" (getRelatedProjects, locality/builder only) — this adds price-band awareness and a human reason. */

@@ -1004,32 +1004,33 @@ enum UserRole {
 }
 
 model User {
-  id                    String                    @id @default(cuid())
-  email                 String                    @unique
+  id                    String                       @id @default(cuid())
+  email                 String                       @unique
   name                  String?
   passwordHash          String
   /// Separate step-up credential gating Trash (never the same as passwordHash) — null until the
   /// founder completes first-time setup (lib/actions/trash-auth.ts's setupTrashPasswordAction),
   /// at which point Trash's reauth prompt switches from "set up" to "enter" mode.
   trashPasswordHash     String?
-  role                  UserRole                  @default(EDITOR)
+  role                  UserRole                     @default(EDITOR)
   /// Fine-grained permission keys (e.g. "projects.edit", "reports.reject") layered
   /// on top of `role` for an EDITOR/VIEWER — see lib/auth/permissions.ts for the
   /// full key list and hasPermission()'s enforcement. ADMIN always bypasses this
   /// (role check alone is sufficient), so the array is only ever consulted for
   /// non-ADMIN accounts. Ignored entirely until a non-ADMIN user actually exists.
-  permissions           String[]                  @default([])
-  isActive              Boolean                   @default(true)
+  permissions           String[]                     @default([])
+  isActive              Boolean                      @default(true)
   lastLoginAt           DateTime?
   auditLogs             AuditLog[]
   resetTokens           AdminPasswordResetToken[]
   notifications         Notification[]
   emailCampaigns        EmailCampaign[]
   notificationCampaigns NotificationCampaign[]
-  pendingChanges        PendingChange[]           @relation("PendingChangeActor")
-  reviewedChanges       PendingChange[]           @relation("PendingChangeReviewer")
-  createdAt             DateTime                  @default(now())
-  updatedAt             DateTime                  @updatedAt
+  pendingChanges        PendingChange[]              @relation("PendingChangeActor")
+  reviewedChanges       PendingChange[]              @relation("PendingChangeReviewer")
+  trainedModelVersions  RecommendationModelVersion[]
+  createdAt             DateTime                     @default(now())
+  updatedAt             DateTime                     @updatedAt
 }
 
 enum PendingChangeStatus {
@@ -1181,6 +1182,77 @@ enum PlatformLoadState {
   WATCH
   WARNING
   CRITICAL
+}
+
+enum RecommendationModelStatus {
+  /// Training was attempted but the dataset didn't meet the documented
+  /// minimum thresholds (lib/recommendations/ml/train.ts) -- datasetSize
+  /// and the threshold check are still recorded, weightsJson is null.
+  INSUFFICIENT_DATA
+  TRAINING
+  /// Trained and holdout-evaluated, not yet running anywhere.
+  EVALUATED
+  /// Scoring candidates in the background alongside Phase 1 on every
+  /// recommendation request, but Phase 1 remains what the user sees
+  /// (Part 9 of the Phase 2 spec) -- outcomes are logged for comparison.
+  SHADOW
+  /// Actually re-ranking what the user sees, subject to per-request
+  /// confidence fallback to Phase 1 (Part 13).
+  ACTIVE
+  /// Superseded by a newer version, or manually retired by the Founder.
+  ARCHIVED
+  FAILED
+}
+
+/// Recommendation ML model registry (Phase 2, Part 17) -- every training
+/// run creates a NEW row here, never overwrites a previous one, so model
+/// history is always inspectable. Phase 1's deterministic ranker
+/// (lib/recommendations/rank.ts) needs no row here -- it isn't versioned
+/// this way, it's the permanent code-level fallback (Part 18). Which mode
+/// is currently active (PHASE1_ONLY / ML_SHADOW / ML_ENABLED) is a
+/// SiteSetting key ("recommendation_ranking_mode"), not a column here, so
+/// switching modes is a Founder admin action, never a deployment
+/// (Part 18: "rollback must not depend on a code deployment").
+model RecommendationModelVersion {
+  id        String                    @id @default(cuid())
+  /// Monotonically increasing per model type ("v1", "v2", ...) -- see
+  /// nextModelVersionLabel() in lib/recommendations/ml/train.ts.
+  version   String
+  modelType String // "LOGISTIC_REGRESSION" today; a new value, not a new column, for a future model type.
+  status    RecommendationModelStatus
+
+  trainingPeriodStart  DateTime?
+  trainingPeriodEnd    DateTime?
+  /// Labeled (impression -> outcome) examples actually used for training
+  /// (after the time-based holdout split) -- see Part 3/11.
+  datasetSize          Int
+  /// Raw RECOMMENDATION_IMPRESSION rows the dataset was built from, before
+  /// any filtering -- lets "insufficient data" show real numbers even when
+  /// datasetSize is 0.
+  interactionCount     Int
+  distinctUserCount    Int
+  distinctProjectCount Int
+
+  /// Identifies the exact feature extraction logic used (lib/recommendations/ml/features.ts's
+  /// FEATURE_VERSION constant) -- a later feature-engineering change bumps this, so an old
+  /// model's weights are never silently scored against features they weren't trained on.
+  featureVersion String
+  /// { featureNames: string[], weights: number[], bias: number, normalization: {...} } --
+  /// null while status is INSUFFICIENT_DATA/TRAINING/FAILED.
+  weightsJson    Json?
+  /// { holdout: { precisionAtK, recallAtK, ndcgAtK, ctr, saveRate, compareRate, enquiryRate },
+  ///   phase1Comparison: {...} | null, thresholdsUsed: {...} } -- see lib/recommendations/ml/evaluate.ts.
+  metricsJson    Json?
+
+  trainedAt       DateTime @default(now())
+  /// Null for an automatic/scheduled run (none exist yet in Phase 2 -- see
+  /// lib/recommendations/ml/train.ts's doc comment); set for a Founder-triggered manual run.
+  trainedByUserId String?
+  trainedByUser   User?    @relation(fields: [trainedByUserId], references: [id])
+  notes           String?
+
+  @@index([status])
+  @@index([trainedAt])
 }
 
 enum ReportStatus {

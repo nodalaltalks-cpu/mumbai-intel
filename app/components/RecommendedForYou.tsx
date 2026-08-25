@@ -19,7 +19,7 @@ export default async function RecommendedForYou({ surface = "homepage" }: { surf
   const { items, isColdStart } = await getRecommendationsForUser(session?.userId ?? null, 8);
   if (items.length === 0) return null;
 
-  recordRecommendationImpressions(items, surface, sessionId);
+  recordRecommendationImpressions(items, surface, session?.userId ?? null, sessionId);
 
   const locked = session === null;
   const cardItems = items.map((item) => ({

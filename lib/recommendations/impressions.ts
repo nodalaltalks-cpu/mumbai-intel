@@ -2,6 +2,7 @@ import "server-only";
 import { after } from "next/server";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
 import type { ScoredProject } from "./types";
+import type { MlScoredItem } from "./ml/score";
 
 /**
  * Part 15/16 — one RECOMMENDATION_IMPRESSION row per project actually shown,
@@ -13,14 +14,22 @@ import type { ScoredProject } from "./types";
  * new event volume (unlike a heartbeat), so it must not block, per Part 38,
  * while still landing reliably (after() runs post-response on Vercel, not
  * best-effort client-side).
+ *
+ * `publicUserId` and `sessionId` MUST both be resolved by the caller before
+ * this is invoked, not looked up inside the callback — `cookies()` (and
+ * therefore getPublicSession()/peekAnonSessionId()) throws when called
+ * inside `after()`. Every caller here already has both on hand from its
+ * own top-level `getPublicSession()`/`peekAnonSessionId()` read.
  */
-export function recordRecommendationImpressions(items: ScoredProject[], surface: string, sessionId?: string | null) {
+export function recordRecommendationImpressions(items: (ScoredProject | MlScoredItem)[], surface: string, publicUserId: string | null, sessionId: string | null) {
   after(async () => {
     await Promise.all(
-      items.map((item, position) =>
-        recordResearchEvent("RECOMMENDATION_IMPRESSION", {
+      items.map((item, position) => {
+        const ml = "mlScore" in item ? item : null;
+        return recordResearchEvent("RECOMMENDATION_IMPRESSION", {
           entityType: "Project",
           entityId: item.project.id,
+          publicUserId,
           sessionId,
           metadata: {
             surface,
@@ -28,9 +37,14 @@ export function recordRecommendationImpressions(items: ScoredProject[], surface:
             score: Math.round(item.score),
             reasons: item.reasons.map((r) => r.label),
             candidateSources: item.sources,
+            // Phase 2 shadow logging (Part 8/9) — null/absent whenever ML
+            // scoring didn't run (mode PHASE1_ONLY), so this stays a no-op
+            // addition to every existing impression row shape.
+            ...(ml?.mlScore !== null && ml?.mlScore !== undefined ? { mlScore: Math.round(ml.mlScore * 1000) / 1000 } : {}),
+            ...(ml?.mlModelVersion ? { mlModelVersion: ml.mlModelVersion } : {}),
           },
-        })
-      )
+        });
+      })
     );
   });
 }
