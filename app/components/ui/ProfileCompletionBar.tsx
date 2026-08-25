@@ -29,9 +29,10 @@ const BENEFITS = [
  * At 100% this becomes a one-time elegant success state.
  */
 export default function ProfileCompletionBar() {
-  const { sections, percent, scrollToFirstIncomplete } = useProfileCompletion();
+  const { sections, percent, scrollToFirstIncomplete, scrollToSection, scrollToField } = useProfileCompletion();
   const sectionProgress = getSectionProgress(sections);
   const incomplete = sections.filter((s) => !s.complete);
+  const singleRemaining = incomplete.length === 1 ? incomplete[0] : null;
 
   if (percent >= 100) {
     return (
@@ -78,28 +79,48 @@ export default function ProfileCompletionBar() {
           <p className="text-[11px] font-medium uppercase tracking-wide text-muted">What&apos;s left</p>
           <ul className="mt-1.5 flex flex-col gap-1">
             {incomplete.map((s) => (
-              <li key={s.key} className="text-xs text-foreground">
-                • {s.label}
+              <li key={s.key}>
+                <button
+                  type="button"
+                  onClick={() => scrollToField(s.key, "whats_left_row")}
+                  className="w-full rounded-sm px-1 py-0.5 text-left text-xs text-foreground transition-colors hover:bg-surface-raised hover:text-accent"
+                >
+                  • {s.label}
+                </button>
               </li>
             ))}
           </ul>
         </div>
       ) : null}
 
-      {/* Section-wise breakdown — grouped from the exact same checklist above, so it can never disagree with the overall percent. */}
+      {/* Section-wise breakdown — grouped from the exact same checklist above, so it can never disagree with the overall percent. Every row jumps straight to that section's first incomplete field (Part 2). */}
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {sectionProgress.map((sp) => (
-          <div key={sp.section} className="flex items-center justify-between rounded-sm border border-border px-3 py-2 text-xs">
-            <span className="text-muted">{sp.label}</span>
-            <span className={sp.completeCount === sp.totalCount ? "font-medium text-positive" : "font-medium text-foreground"}>
-              {sp.completeCount === sp.totalCount ? "Complete" : `${sp.completeCount} / ${sp.totalCount}`}
-            </span>
-          </div>
-        ))}
+        {sectionProgress.map((sp) => {
+          const isComplete = sp.completeCount === sp.totalCount;
+          return (
+            <button
+              key={sp.section}
+              type="button"
+              onClick={() => scrollToSection(sp.section, "section_grid")}
+              className="flex items-center justify-between rounded-sm border border-border px-3 py-2 text-xs transition-colors hover:border-accent/50 hover:bg-surface-raised"
+            >
+              <span className="text-muted">{sp.label}</span>
+              <span className={isComplete ? "font-medium text-positive" : "font-medium text-foreground"}>
+                {isComplete ? "Complete" : `${sp.completeCount} / ${sp.totalCount}`}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
-      <Button type="button" variant="primary" size="sm" className="self-start" onClick={scrollToFirstIncomplete}>
-        Complete my profile
+      <Button
+        type="button"
+        variant="primary"
+        size="sm"
+        className="self-start"
+        onClick={() => (singleRemaining ? scrollToField(singleRemaining.key, "completion_bar_cta") : scrollToFirstIncomplete("completion_bar"))}
+      >
+        {singleRemaining ? `Complete ${singleRemaining.label}` : "Complete my profile"}
       </Button>
     </div>
   );

@@ -97,6 +97,12 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   ]);
 
   const locked = publicSession === null;
+  // Floor Plan is a ProjectDocument row (kind "floor_plan" PDF or "floor_plan_image")
+  // — filtered out of the generic Downloads list into its own View/Download block
+  // below, same reasoning as the admin edit page's own floorPlanDoc split.
+  const FLOOR_PLAN_KINDS = ["floor_plan", "floor_plan_image"];
+  const floorPlanDoc = project.documents.find((d) => FLOOR_PLAN_KINDS.includes(d.kind)) ?? null;
+  const otherDocuments = project.documents.filter((d) => !FLOOR_PLAN_KINDS.includes(d.kind));
   const otherNearbyBuilders = nearbyBuilders.filter((b) => b.slug !== project.builder?.slug);
   const summaryNotes = project.investmentNotes.filter((n) => n.kind === "summary");
   const proNotes = project.investmentNotes.filter((n) => n.kind === "pro");
@@ -675,7 +681,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         {/* Downloads */}
         <section id="downloads" className="scroll-mt-32">
           <h2 className="font-mono text-lg font-semibold text-foreground">Downloads</h2>
-          {project.brochureUrl || project.documents.length > 0 ? (
+          {project.brochureUrl || floorPlanDoc || otherDocuments.length > 0 ? (
             <div className="mt-3 flex flex-col gap-3">
               {project.brochureUrl ? (
                 <BrochureDownloadLink
@@ -707,10 +713,50 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                   </span>
                 </BrochureDownloadLink>
               ) : null}
+              {floorPlanDoc ? (
+                <div className="flex items-center justify-between gap-3 rounded-sm border border-border bg-surface p-4">
+                  <div className="min-w-0">
+                    <span className="block font-mono text-[10px] uppercase tracking-wide text-muted">Floor Plan</span>
+                    <span className="mt-0.5 block text-sm font-semibold text-foreground">
+                      {floorPlanDoc.kind === "floor_plan_image" ? "Image" : "PDF"}
+                    </span>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <a
+                      href={
+                        floorPlanDoc.kind === "floor_plan_image"
+                          ? floorPlanDoc.url
+                          : `/api/brochure-download?url=${encodeURIComponent(floorPlanDoc.url)}&filename=${encodeURIComponent(`${project.name} Floor Plan.pdf`)}&inline=1`
+                      }
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+                    >
+                      View
+                    </a>
+                    <a
+                      href={
+                        floorPlanDoc.kind === "floor_plan_image"
+                          ? floorPlanDoc.url
+                          : `/api/brochure-download?url=${encodeURIComponent(floorPlanDoc.url)}&filename=${encodeURIComponent(`${project.name} Floor Plan.pdf`)}`
+                      }
+                      download={floorPlanDoc.kind === "floor_plan_image" ? "" : undefined}
+                      className="rounded-sm border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-mono uppercase tracking-wide text-accent hover:bg-accent/20"
+                    >
+                      Download
+                    </a>
+                  </div>
+                </div>
+              ) : null}
               <ul className="flex flex-col gap-1.5">
-              {project.documents.map((doc) => (
+              {otherDocuments.map((doc) => (
                 <li key={doc.id}>
-                  <a href={doc.url} target="_blank" rel="noreferrer" className="text-sm text-accent hover:underline">
+                  <a
+                    href={`/api/brochure-download?url=${encodeURIComponent(doc.url)}&filename=${encodeURIComponent(doc.title || "document.pdf")}&inline=1`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm text-accent hover:underline"
+                  >
                     {doc.title}
                   </a>
                 </li>

@@ -49,35 +49,38 @@ export default function ProfileMenu({ user }: { user: NavbarPublicUser }) {
             <p className="truncate text-xs font-semibold text-foreground">{user.name ?? "NoDalalTalks user"}</p>
             <p className="truncate text-[11px] text-muted">{user.email}</p>
           </div>
-          <div className="flex flex-col p-1.5">
+          {/* My Profile is the primary, visually-strongest action (Section 8) — bold, accent-tinted, listed first, distinct from the plain secondary links below it. */}
+          <div className="p-1.5">
             <Link
-              href="/account"
+              href="/account?tab=profile"
               onClick={() => setOpen(false)}
-              className="rounded-sm px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-surface-raised"
+              className="block rounded-sm bg-accent/10 px-2.5 py-2.5 text-left text-sm font-semibold text-accent transition-colors hover:bg-accent/20"
             >
               My Profile
             </Link>
+          </div>
+          <div className="flex flex-col gap-0.5 border-t border-border p-1.5">
             <Link
-              href="/account#saved-projects"
+              href="/account?tab=profile#saved-projects"
               onClick={() => setOpen(false)}
               className="rounded-sm px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-surface-raised"
             >
               Saved Projects
             </Link>
-            <button
-              type="button"
-              disabled
-              className="flex items-center justify-between rounded-sm px-2.5 py-2 text-left text-xs text-muted/60 cursor-not-allowed"
+            <Link
+              href="/account?tab=searches"
+              onClick={() => setOpen(false)}
+              className="rounded-sm px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-surface-raised"
             >
               Saved Searches
-              <span className="rounded-sm border border-border px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-muted/60">Soon</span>
-            </button>
+            </Link>
           </div>
+          {/* Logout stays easy to find and tap (no dark patterns) but visually secondary — smaller and muted rather than the dominant action. */}
           <div className="border-t border-border p-1.5">
             <form action={logoutAction}>
               <button
                 type="submit"
-                className="w-full rounded-sm px-2.5 py-2 text-left text-xs text-negative transition-colors hover:bg-negative/10"
+                className="w-full rounded-sm px-2.5 py-1.5 text-left text-[11px] text-muted transition-colors hover:bg-negative/10 hover:text-negative"
               >
                 Logout
               </button>

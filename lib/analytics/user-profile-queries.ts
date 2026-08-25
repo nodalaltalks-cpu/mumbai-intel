@@ -1,7 +1,7 @@
 import "server-only";
 import type { ResearchEventType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCompletionSections, type CompletionSectionStatus } from "@/lib/profile-completion";
+import { getCompletionSections, type CompletionSectionStatus, type ProfileSectionKey } from "@/lib/profile-completion";
 
 const PROFILE_COMPLETION_EVENT_TYPES: ResearchEventType[] = [
   "PROFILE_VIEWED",
@@ -70,9 +70,13 @@ export interface PublicUserProfileDetail {
     profileCompletionEvents: number;
   };
   completionSections: CompletionSectionStatus[];
+  /** Field keys the user has explicitly skipped (PROFILE_FIELD_SKIPPED) and still hasn't completed since -- lets the admin page show "— Skipped" as a third state distinct from "○ Incomplete" (Section 20). A field that was skipped and later filled in is "✓ Completed", not "— Skipped". */
+  skippedFieldKeys: string[];
   /** Most recent ADMIN_PROFILE_REMINDER_SENT event, if any -- for "last reminded" + the after-reminder outcome check on the page. */
   lastReminder: { sentAt: Date; completionPercentAtSend: number | null } | null;
   completionIncreasedSinceLastReminder: boolean;
+  /** Per-section reminder history (Section 29) -- same ADMIN_PROFILE_REMINDER_SENT event log, grouped by metadata.section, so the founder sees "reminded 2x, last on <date>" before sending another one for that specific section and doesn't accidentally spam. */
+  sectionReminders: Partial<Record<ProfileSectionKey, { lastSentAt: Date; sentCount: number }>>;
 }
 
 const EMPTY_ACTIVITY = {
@@ -114,6 +118,7 @@ export async function getPublicUserProfileDetail(publicUserId: string): Promise<
       profileCompletionEvents,
       localities,
       lastReminderEvent,
+      fieldSkippedEvents,
     ] = await Promise.all([
       prisma.researchEvent.findFirst({ where: { publicUserId }, orderBy: { createdAt: "desc" }, select: { createdAt: true } }),
       prisma.searchHistory.count({ where: { publicUserId } }),
@@ -133,7 +138,26 @@ export async function getPublicUserProfileDetail(publicUserId: string): Promise<
         orderBy: { createdAt: "desc" },
         select: { createdAt: true, metadata: true },
       }),
+      prisma.researchEvent.findMany({
+        where: { eventType: "PROFILE_FIELD_SKIPPED", entityType: "PublicUser", entityId: publicUserId },
+        select: { metadata: true },
+      }),
     ]);
+
+    const allReminderEvents = await prisma.researchEvent.findMany({
+      where: { eventType: "ADMIN_PROFILE_REMINDER_SENT", entityType: "PublicUser", entityId: publicUserId },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true, metadata: true },
+    });
+    const sectionReminders: Partial<Record<ProfileSectionKey, { lastSentAt: Date; sentCount: number }>> = {};
+    for (const event of allReminderEvents) {
+      const section = (event.metadata as { section?: ProfileSectionKey } | null)?.section;
+      if (!section) continue; // the overall (non-section-scoped) reminder -- already covered by lastReminder above
+      const existing = sectionReminders[section];
+      sectionReminders[section] = existing
+        ? { lastSentAt: existing.lastSentAt, sentCount: existing.sentCount + 1 }
+        : { lastSentAt: event.createdAt, sentCount: 1 };
+    }
 
     const completionIncreasedSinceLastReminder = lastReminderEvent
       ? (await prisma.researchEvent.count({
@@ -158,6 +182,12 @@ export async function getPublicUserProfileDetail(publicUserId: string): Promise<
       familySize: user.preferences?.familySize ?? null,
       familyIncomeRange: user.preferences?.familyIncomeRange ?? null,
     });
+
+    const skippedKeysEverSeen = new Set(
+      fieldSkippedEvents.map((e) => (e.metadata as { field?: string } | null)?.field).filter((k): k is string => Boolean(k))
+    );
+    const completeKeys = new Set(completionSections.filter((s) => s.complete).map((s) => s.key));
+    const skippedFieldKeys = [...skippedKeysEverSeen].filter((k) => !completeKeys.has(k));
 
     const reminderMetadata = lastReminderEvent?.metadata as { completionPercent?: number } | null;
 
@@ -203,8 +233,10 @@ export async function getPublicUserProfileDetail(publicUserId: string): Promise<
         profileCompletionEvents,
       },
       completionSections,
+      skippedFieldKeys,
       lastReminder: lastReminderEvent ? { sentAt: lastReminderEvent.createdAt, completionPercentAtSend: reminderMetadata?.completionPercent ?? null } : null,
       completionIncreasedSinceLastReminder,
+      sectionReminders,
     };
   });
 }

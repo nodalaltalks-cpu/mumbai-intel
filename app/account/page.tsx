@@ -53,15 +53,13 @@ import ShareReferralCard from "@/app/components/ShareReferralCard";
 export const metadata: Metadata = { title: "My Dashboard - NoDalalTalks" };
 export const dynamic = "force-dynamic";
 
+/** Profile listed first and given its own visually-stronger pill style with a completion badge (Section 6/7) — all four fit one row on a narrow mobile viewport without horizontal scrolling, using the short label below <640px. Search History deliberately isn't a top-level tab — it's folded into the Profile tab (#research-activity) since it's reference material, not a primary action surface. */
 const TABS = [
-  { key: "research", label: "Continue Research" },
-  { key: "wishlist", label: "Wishlist" },
-  { key: "searches", label: "Saved Searches" },
-  { key: "profile", label: "Profile" },
+  { key: "profile", label: "Profile", shortLabel: "Profile" },
+  { key: "research", label: "Continue Research", shortLabel: "Continue" },
+  { key: "wishlist", label: "Wishlist", shortLabel: "Wishlist" },
+  { key: "searches", label: "Saved Searches", shortLabel: "Saved" },
 ] as const;
-
-/** Profile gets its own visually-stronger pill style below with a completion badge, rather than blending into the plain tab row, to nudge profile completion without reading as an ad. Search History deliberately isn't a top-level tab — it's folded into the Profile tab (#research-activity) since it's reference material, not a primary action surface. */
-const PRIMARY_TAB_KEYS = ["research", "wishlist", "searches"] as const;
 
 function greeting(): string {
   const hourIst = (new Date().getUTCHours() + 5.5) % 24;
@@ -170,35 +168,40 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
 
         <ShareReferralCard referralCode={user.referralCode as string} />
 
-        <div className="flex items-center gap-2 overflow-x-auto border-b border-border pb-px">
-          {TABS.filter((t) => (PRIMARY_TAB_KEYS as readonly string[]).includes(t.key)).map((t) => (
-            <Link
-              key={t.key}
-              href={tabHref(t.key)}
-              className={`shrink-0 rounded-t-sm border-b-2 px-3 py-2 text-xs font-mono uppercase tracking-wide transition-colors ${
-                tab === t.key ? "border-accent text-accent" : "border-transparent text-muted hover:text-foreground"
-              }`}
-            >
-              {t.label}
-            </Link>
-          ))}
-          <Link
-            href={tabHref("profile")}
-            className={`ml-auto flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-mono font-semibold uppercase tracking-wide transition-colors ${
-              tab === "profile" ? "bg-accent text-white" : "bg-accent/10 text-accent hover:bg-accent/20"
-            }`}
-          >
-            Profile
-            {user.profileCompletionPercent < 100 ? (
-              <span className={`rounded-full px-1.5 py-0.5 text-[9px] ${tab === "profile" ? "bg-white/20" : "bg-accent/15"}`}>
-                {user.profileCompletionPercent}%
-              </span>
+        <div className="grid grid-cols-4 gap-1.5 border-b border-border pb-3 sm:flex sm:items-center sm:gap-2 sm:pb-px">
+          {TABS.map((t) =>
+            t.key === "profile" ? (
+              <Link
+                key={t.key}
+                href={tabHref("profile")}
+                className={`flex min-w-0 items-center justify-center gap-1 rounded-full px-2 py-1.5 text-[11px] font-mono font-semibold uppercase tracking-wide transition-colors sm:px-3.5 sm:py-1.5 sm:text-xs ${
+                  tab === "profile" ? "bg-accent text-white" : "bg-accent/10 text-accent hover:bg-accent/20"
+                }`}
+              >
+                <span className="truncate">{t.label}</span>
+                {user.profileCompletionPercent < 100 ? (
+                  <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] ${tab === "profile" ? "bg-white/20" : "bg-accent/15"}`}>
+                    {user.profileCompletionPercent}%
+                  </span>
+                ) : (
+                  <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] ${tab === "profile" ? "bg-white/20" : "bg-accent/15"}`} aria-label="Complete">
+                    ✓
+                  </span>
+                )}
+              </Link>
             ) : (
-              <span className={`rounded-full px-1.5 py-0.5 text-[9px] ${tab === "profile" ? "bg-white/20" : "bg-accent/15"}`} aria-label="Complete">
-                ✓
-              </span>
-            )}
-          </Link>
+              <Link
+                key={t.key}
+                href={tabHref(t.key)}
+                className={`min-w-0 truncate rounded-sm border-b-2 px-1.5 py-2 text-center text-[11px] font-mono uppercase tracking-wide transition-colors sm:px-3 sm:text-xs ${
+                  tab === t.key ? "border-accent text-accent" : "border-transparent text-muted hover:text-foreground"
+                }`}
+              >
+                <span className="sm:hidden">{t.shortLabel}</span>
+                <span className="hidden sm:inline">{t.label}</span>
+              </Link>
+            )
+          )}
         </div>
 
         {tab === "research" ? (

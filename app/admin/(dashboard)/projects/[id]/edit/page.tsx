@@ -51,11 +51,14 @@ export default async function EditProjectPage({
 
   if (!project) notFound();
 
-  // Floor Plan is stored as a ProjectDocument with kind="floor_plan" -- its own dedicated
-  // slot/UI, but the same underlying model as the generic Documents list, so it's filtered
-  // out of that list here (it has its own section below) rather than shown twice.
-  const floorPlanDoc = project.documents.find((d) => d.kind === "floor_plan") ?? null;
-  const otherDocuments = project.documents.filter((d) => d.kind !== "floor_plan");
+  // Floor Plan is stored as a ProjectDocument with kind="floor_plan" (PDF) or
+  // "floor_plan_image" (PNG/JPG/WEBP) -- its own dedicated slot/UI, but the
+  // same underlying model as the generic Documents list, so both kinds are
+  // filtered out of that list here (it has its own section below) rather
+  // than shown twice.
+  const FLOOR_PLAN_KINDS = ["floor_plan", "floor_plan_image"];
+  const floorPlanDoc = project.documents.find((d) => FLOOR_PLAN_KINDS.includes(d.kind)) ?? null;
+  const otherDocuments = project.documents.filter((d) => !FLOOR_PLAN_KINDS.includes(d.kind));
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
@@ -101,7 +104,12 @@ export default async function EditProjectPage({
 
       <DocumentsManager projectId={project.id} documents={otherDocuments} />
 
-      <FloorPlanUploader projectId={project.id} floorPlanUrl={floorPlanDoc?.url ?? null} floorPlanUploadedAt={floorPlanDoc?.createdAt ?? null} />
+      <FloorPlanUploader
+        projectId={project.id}
+        floorPlanUrl={floorPlanDoc?.url ?? null}
+        floorPlanKind={floorPlanDoc?.kind ?? null}
+        floorPlanUploadedAt={floorPlanDoc?.createdAt ?? null}
+      />
 
       <BrochureUploader
         projectId={project.id}

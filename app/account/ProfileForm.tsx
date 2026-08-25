@@ -156,7 +156,10 @@ export default function ProfileForm({
         verified={phoneVerified}
         savedPhone={phone}
         currentPhoneValue={phoneValue}
-        onFocusPhoneField={() => phoneInputRef.current?.focus()}
+        onFocusPhoneField={() => {
+          phoneInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+          phoneInputRef.current?.focus({ preventScroll: true });
+        }}
         onFocusSaveButton={() => submitButtonRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}
       />
     </div>

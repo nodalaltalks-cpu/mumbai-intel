@@ -125,7 +125,6 @@ export default function PriceRangeFilter({
             }}
             onBlur={(e) => commitText("min", e.target.value)}
             placeholder="e.g. 50 Lakh"
-            inputMode="decimal"
             aria-invalid={ambiguousField === "min"}
             className={`w-full rounded-sm border bg-surface px-3 py-2.5 text-sm text-foreground placeholder:text-muted focus:outline-none ${
               ambiguousField === "min" ? "border-negative focus:border-negative" : "border-border focus:border-accent"
@@ -142,7 +141,6 @@ export default function PriceRangeFilter({
             }}
             onBlur={(e) => commitText("max", e.target.value)}
             placeholder="e.g. 5 Cr"
-            inputMode="decimal"
             aria-invalid={ambiguousField === "max"}
             className={`w-full rounded-sm border bg-surface px-3 py-2.5 text-sm text-foreground placeholder:text-muted focus:outline-none ${
               ambiguousField === "max" ? "border-negative focus:border-negative" : "border-border focus:border-accent"

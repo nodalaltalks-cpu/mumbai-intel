@@ -1,8 +1,9 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type { CompletionSectionStatus, ProfileSectionKey } from "@/lib/profile-completion-shared";
-import { recordFieldSkippedAction, recordProfileStartedAction } from "@/lib/actions/profile-analytics";
+import { recordFieldSkippedAction, recordProfileStartedAction, recordSectionClickedAction } from "@/lib/actions/profile-analytics";
 
 /** Where each field's card lives on the page — used both for the checklist chips and for guided auto-scroll. Keep in sync with the section ids rendered in app/account/page.tsx. */
 export const FIELD_ANCHORS: Record<string, string> = {
@@ -34,9 +35,13 @@ interface ProfileCompletionContextValue {
   setFieldComplete: (key: string, complete: boolean) => void;
   startGuided: () => void;
   firstIncompleteAnchor: () => string | null;
-  scrollToFirstIncomplete: () => void;
+  scrollToFirstIncomplete: (source?: string) => void;
   scrollToNextAfter: (key: string) => void;
   skipField: (key: string) => void;
+  /** Jumps to a whole section — its first incomplete field if one exists, otherwise just the section itself (still useful navigation for an already-complete section). */
+  scrollToSection: (section: ProfileSectionKey, source?: string) => void;
+  /** Jumps to one specific field by key (e.g. a single "What's left" row) — used when exactly one thing remains, or the user picks a specific item rather than "the first incomplete one." */
+  scrollToField: (key: string, source?: string) => void;
 }
 
 const ProfileCompletionContext = createContext<ProfileCompletionContextValue | null>(null);
@@ -53,14 +58,19 @@ function scrollToAnchor(anchorId: string, fieldKey?: string) {
   const fieldEl = fieldKey ? document.getElementById(`field-${fieldKey}`) : null;
   if (fieldEl) {
     fieldEl.scrollIntoView({ behavior: "smooth", block: "center" });
-    fieldEl.focus({ preventScroll: true });
+    // Calling focus() right after starting a smooth scrollIntoView aborts the
+    // in-progress scroll animation in Chromium even with preventScroll:true
+    // (live-verified: focus landed on the field correctly but the viewport
+    // never visibly moved) -- give the animation time to actually finish
+    // before moving focus onto the target.
+    window.setTimeout(() => fieldEl.focus({ preventScroll: true }), 500);
     return;
   }
   const el = document.getElementById(anchorId);
   if (!el) return;
   el.scrollIntoView({ behavior: "smooth", block: "start" });
   const focusable = el.querySelector<HTMLElement>("input, select, textarea, button, [tabindex]");
-  focusable?.focus({ preventScroll: true });
+  if (focusable) window.setTimeout(() => focusable.focus({ preventScroll: true }), 500);
 }
 
 export function ProfileCompletionProvider({
@@ -144,13 +154,43 @@ export function ProfileCompletionProvider({
     return next ? FIELD_ANCHORS[next.key] ?? null : null;
   }, [sections]);
 
-  const scrollToFirstIncomplete = useCallback(() => {
-    if (!guidedActive) void recordProfileStartedAction();
-    setGuidedActive(true);
-    const next = sections.find((s) => !s.complete);
-    const anchor = next ? FIELD_ANCHORS[next.key] : null;
-    if (anchor) scrollToAnchor(anchor, next?.key);
-  }, [guidedActive, sections]);
+  const scrollToFirstIncomplete = useCallback(
+    (source = "completion_bar") => {
+      if (!guidedActive) void recordProfileStartedAction(percent > 0);
+      setGuidedActive(true);
+      void recordSectionClickedAction({ trigger: "cta", source });
+      const next = sections.find((s) => !s.complete);
+      const anchor = next ? FIELD_ANCHORS[next.key] : null;
+      if (anchor) scrollToAnchor(anchor, next?.key);
+    },
+    [guidedActive, sections, percent]
+  );
+
+  const scrollToSection = useCallback(
+    (section: ProfileSectionKey, source = "section_row") => {
+      void recordSectionClickedAction({ section, trigger: "click", source });
+      const firstIncompleteInSection = sections.find((s) => s.section === section && !s.complete);
+      if (firstIncompleteInSection) {
+        const anchor = FIELD_ANCHORS[firstIncompleteInSection.key];
+        if (anchor) scrollToAnchor(anchor, firstIncompleteInSection.key);
+        return;
+      }
+      // Section already complete -- still navigate there via its first field's anchor.
+      const anyInSection = sections.find((s) => s.section === section);
+      const anchor = anyInSection ? FIELD_ANCHORS[anyInSection.key] : null;
+      if (anchor) scrollToAnchor(anchor);
+    },
+    [sections]
+  );
+
+  const scrollToField = useCallback(
+    (key: string, source = "whats_left_row") => {
+      void recordSectionClickedAction({ field: key, trigger: "click", source });
+      const anchor = FIELD_ANCHORS[key];
+      if (anchor) scrollToAnchor(anchor, key);
+    },
+    []
+  );
 
   const scrollToNextAfter = useCallback(
     (key: string) => {
@@ -160,6 +200,7 @@ export function ProfileCompletionProvider({
       const next = rest.find((s) => !s.complete) ?? sections.find((s) => !s.complete);
       const anchor = next ? FIELD_ANCHORS[next.key] : null;
       if (anchor && next && next.key !== key) {
+        void recordSectionClickedAction({ section: next.section, field: next.key, trigger: "auto_advance" });
         window.setTimeout(() => scrollToAnchor(anchor, next.key), 550); // let the "Saved" micro-feedback register before moving on
       }
     },
@@ -174,6 +215,46 @@ export function ProfileCompletionProvider({
     [scrollToNextAfter]
   );
 
+  // Cross-page arrival signal (Part 1's critical fix): a CTA rendered on a
+  // *different* tab (the dashboard's NextActionCard, on Continue Research/
+  // Wishlist/Saved Searches) can't call scrollToFirstIncomplete() directly —
+  // there's no shared React tree between that tab and this one. It instead
+  // links to /account?tab=profile&guide=1. Tab switches on this page are
+  // same-route client-side navigations (a <Link> changing only the search
+  // params), so ProfileCompletionProvider is NOT remounted when the user
+  // arrives here from another tab -- a plain mount-only effect (`useEffect(
+  // ..., [])`) would only ever fire once, on the account page's very first
+  // load, and silently miss every later arrival via this CTA. Watching
+  // Next's reactive useSearchParams() instead of a one-shot window.location
+  // read is what makes this fire on every arrival, not just the first.
+  //
+  // The param is stripped via a plain history.replaceState, deliberately NOT
+  // router.replace(): this page is `export const dynamic = "force-dynamic"`,
+  // so a real router navigation re-fetches the route from the server even
+  // for a searchParams-only change, and that round-trip's DOM patch was
+  // observed (live-tested) to reset window.scrollY back to 0 shortly after
+  // the guided scroll ran, undoing it. history.replaceState only rewrites
+  // the address bar -- no server round-trip, no re-render, nothing to race.
+  const searchParams = useSearchParams();
+  const guideParam = searchParams.get("guide");
+  useEffect(() => {
+    if (guideParam !== "1") return;
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      params.delete("guide");
+      const nextSearch = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (nextSearch ? `?${nextSearch}` : "") + window.location.hash);
+    }
+    // Small delay: lets the tab's own content (images, lazy sections) settle
+    // before measuring scroll position, and matches the "Saved" micro-feedback
+    // timing used elsewhere in this same guided flow.
+    const t = window.setTimeout(() => {
+      if (sections.some((s) => !s.complete)) scrollToFirstIncomplete("next_action_card");
+    }, 200);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run when the guide param itself flips to "1"
+  }, [guideParam]);
+
   const value: ProfileCompletionContextValue = {
     sections,
     percent,
@@ -186,6 +267,8 @@ export function ProfileCompletionProvider({
     scrollToFirstIncomplete,
     scrollToNextAfter,
     skipField,
+    scrollToSection,
+    scrollToField,
   };
 
   return <ProfileCompletionContext.Provider value={value}>{children}</ProfileCompletionContext.Provider>;

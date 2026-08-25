@@ -1904,6 +1904,26 @@ enum ResearchEventType {
   /// written with sessionId null (identified only by the request, not stored).
   COOKIE_CONSENT_GRANTED
   COOKIE_CONSENT_DECLINED
+  /// Fired when a "Complete my profile" / "Complete <field>" CTA is clicked,
+  /// wherever it appears (dashboard next-action card, in-page completion bar).
+  /// metadata: { source: "next_action_card" | "completion_bar" }.
+  PROFILE_CTA_CLICKED
+  /// Fired when a section row or a specific "What's left" item is clicked to
+  /// jump there -- also covers the guided flow's automatic advance to the
+  /// next field (metadata.trigger distinguishes "click" from "auto_advance"
+  /// rather than adding separate event types for what is the same signal at
+  /// a different trigger). metadata: { section, field?, trigger }.
+  PROFILE_SECTION_CLICKED
+  /// Guided completion started while some progress already existed (percent
+  /// > 0) -- distinguishes a returning user picking back up from a
+  /// first-time PROFILE_STARTED.
+  PROFILE_COMPLETION_RESUMED
+  /// First-touch acquisition source (Section 30) -- captured once per
+  /// anonymous session at the moment analytics consent is granted (the
+  /// earliest point a session id exists), from document.referrer/UTM params
+  /// read client-side on first page load. metadata: { source, referrerHost,
+  /// utmSource, utmMedium, utmCampaign } -- never any personal data.
+  VISITOR_SOURCE_IDENTIFIED
 }
 
 /// Site-wide "research intent" log — a deliberately generic single table

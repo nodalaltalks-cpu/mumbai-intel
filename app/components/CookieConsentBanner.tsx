@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Button from "@/app/components/ui/Button";
-import { acceptCookiesAction, declineCookiesAction } from "@/lib/actions/cookie-consent";
+import { acceptCookiesAction, declineCookiesAction, type VisitorSourceInput } from "@/lib/actions/cookie-consent";
 
 /**
  * Bottom bar, not a modal — deliberately never blocks search/filter/navigation
@@ -17,10 +17,29 @@ export default function CookieConsentBanner() {
   const [visible, setVisible] = useState(true);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
+  // Captured once on module init (this component only mounts once, in the root
+  // layout, and persists across client-side navigations) — the earliest and
+  // most reliable read of document.referrer/UTM params, since it reflects
+  // whatever page the visitor actually first landed on rather than whichever
+  // page happened to be showing when they clicked Accept (Section 30/31).
+  const sourceInfo = useRef<VisitorSourceInput>(
+    typeof window === "undefined"
+      ? { referrerHost: null, utmSource: null, utmMedium: null, utmCampaign: null }
+      : (() => {
+          let referrerHost: string | null = null;
+          try {
+            referrerHost = document.referrer ? new URL(document.referrer).hostname : null;
+          } catch {
+            referrerHost = null;
+          }
+          const params = new URLSearchParams(window.location.search);
+          return { referrerHost, utmSource: params.get("utm_source"), utmMedium: params.get("utm_medium"), utmCampaign: params.get("utm_campaign") };
+        })()
+  );
 
   function handleAccept() {
     startTransition(async () => {
-      await acceptCookiesAction();
+      await acceptCookiesAction(sourceInfo.current);
       setVisible(false);
       router.refresh();
     });

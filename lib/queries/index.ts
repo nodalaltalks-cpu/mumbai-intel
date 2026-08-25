@@ -711,6 +711,9 @@ export async function getPublicProjectsPaged(filters: PublicProjectFilters) {
         builder: true,
         images: { orderBy: { sortOrder: "asc" }, take: 8 },
         configurations: { select: { bedrooms: true, carpetSqft: true, priceMinPaise: true } },
+        // Floor Plan (Section 34) — at most one row per project with either kind,
+        // same "reuse the generic document model" approach as the admin side.
+        documents: { where: { kind: { in: ["floor_plan", "floor_plan_image"] } }, take: 1 },
       },
     }),
     prisma.project.count({ where }),
@@ -719,6 +722,7 @@ export async function getPublicProjectsPaged(filters: PublicProjectFilters) {
   return {
     items: items.map((project) => {
       const { configurationSummary, pricePerSqftPaise } = deriveProjectCardFields(project.configurations);
+      const floorPlanDoc = project.documents[0] ?? null;
       return {
         id: project.id,
         slug: project.slug,
@@ -747,6 +751,8 @@ export async function getPublicProjectsPaged(filters: PublicProjectFilters) {
         brochureUrl: project.brochureUrl,
         brochureFileName: project.brochureFileName,
         brochureThumbnailUrl: project.brochureThumbnailUrl,
+        floorPlanUrl: floorPlanDoc?.url ?? null,
+        floorPlanKind: floorPlanDoc?.kind ?? null,
       };
     }),
     total,

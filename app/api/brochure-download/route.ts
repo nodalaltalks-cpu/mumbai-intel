@@ -18,6 +18,10 @@ import { generateDocumentDownloadUrl } from "@/lib/cloudinary";
 export async function GET(request: NextRequest) {
   const url = request.nextUrl.searchParams.get("url");
   const filename = request.nextUrl.searchParams.get("filename") || "brochure.pdf";
+  // Optional: renders in-browser (a real "View" action, e.g. Floor Plan's
+  // View/Download pair) instead of forcing a save-as dialog. Every existing
+  // caller omits this and keeps today's attachment/download behavior.
+  const inline = request.nextUrl.searchParams.get("inline") === "1";
   if (!url) {
     return NextResponse.json({ error: "Missing url" }, { status: 400 });
   }
@@ -35,7 +39,7 @@ export async function GET(request: NextRequest) {
   return new NextResponse(upstream.body, {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${filename.replace(/["\\]/g, "")}"`,
+      "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${filename.replace(/["\\]/g, "")}"`,
       ...(upstream.headers.get("content-length") ? { "Content-Length": upstream.headers.get("content-length")! } : {}),
     },
   });

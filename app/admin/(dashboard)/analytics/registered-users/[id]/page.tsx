@@ -8,6 +8,7 @@ import { formatIndianPriceCompact } from "@/lib/price-range";
 import { CATEGORY_LABEL, CONFIGURATION_FILTER_OPTIONS } from "@/lib/project-meta";
 import BackButton from "@/app/admin/components/BackButton";
 import ProfileReminderCard from "@/app/admin/components/ProfileReminderCard";
+import SectionReminderButton from "@/app/admin/components/SectionReminderButton";
 
 export const metadata: Metadata = { title: "User Profile — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
@@ -69,8 +70,10 @@ export default async function PublicUserProfilePage({ params }: { params: Promis
   const detail = await getPublicUserProfileDetail(id);
   if (!detail) notFound();
 
-  const { overview, personal, preferences, activity, completionSections } = detail;
+  const { overview, personal, preferences, activity, completionSections, sectionReminders, skippedFieldKeys } = detail;
+  const skippedFieldKeySet = new Set(skippedFieldKeys);
   const nextAction = nextBestActionText(completionSections);
+  const canRemind = await hasPermission(session, "users.manage_notifications");
   const dob = personal.dateOfBirth ? formatDate(personal.dateOfBirth) : null;
 
   const budgetLabel =
@@ -199,19 +202,29 @@ export default async function PublicUserProfilePage({ params }: { params: Promis
           {sectionOrder.map((sectionKey) => {
             const fields = completionSections.filter((s) => s.section === sectionKey);
             if (fields.length === 0) return null;
+            const sectionIncomplete = fields.some((f) => !f.complete);
             return (
               <div key={sectionKey}>
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">{sectionLabel[sectionKey]}</p>
                 <ul className="mt-1 flex flex-col gap-0.5">
-                  {fields.map((f) => (
-                    <li key={f.key} className="flex items-center gap-1.5 text-xs">
-                      <span aria-hidden="true" className={f.complete ? "text-positive" : "text-muted"}>
-                        {f.complete ? "✓" : "○"}
-                      </span>
-                      <span className={f.complete ? "text-foreground" : "text-muted"}>{f.label}</span>
-                    </li>
-                  ))}
+                  {fields.map((f) => {
+                    const skipped = !f.complete && skippedFieldKeySet.has(f.key);
+                    return (
+                      <li key={f.key} className="flex items-center gap-1.5 text-xs">
+                        <span aria-hidden="true" className={f.complete ? "text-positive" : "text-muted"}>
+                          {f.complete ? "✓" : skipped ? "—" : "○"}
+                        </span>
+                        <span className={f.complete ? "text-foreground" : "text-muted"}>
+                          {f.label}
+                          {skipped ? <span className="ml-1 text-[9px] uppercase tracking-wide text-muted">Skipped</span> : null}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
+                {sectionIncomplete && canRemind ? (
+                  <SectionReminderButton publicUserId={overview.id} section={sectionKey} history={sectionReminders[sectionKey]} />
+                ) : null}
               </div>
             );
           })}
@@ -230,7 +243,7 @@ export default async function PublicUserProfilePage({ params }: { params: Promis
         </div>
       ) : null}
 
-      {await hasPermission(session, "users.manage_notifications") ? <ProfileReminderCard publicUserId={overview.id} /> : null}
+      {canRemind ? <ProfileReminderCard publicUserId={overview.id} /> : null}
     </div>
   );
 }

@@ -61,6 +61,16 @@ export interface ProjectCardData {
   brochureAvailable?: boolean;
   /** True when a real pricePerSqftPaise exists but was nulled out server-side for a guest (see lib/premium/mask.ts's maskProjectBrochure) — shows the masked placeholder instead of hiding the row entirely. */
   pricePerSqftMasked?: boolean;
+  /** Optional — absent/null on most listing queries today, which is exactly "no floor plan uploaded" from the card's point of view (Section 34: the button simply doesn't render). Only wired where a query explicitly joins it in. */
+  floorPlanUrl?: string | null;
+  /** "floor_plan" (PDF, routed through the signed inline-view proxy) or "floor_plan_image" (opened directly — Cloudinary images aren't delivery-restricted). */
+  floorPlanKind?: string | null;
+}
+
+/** Floor Plan's one View link (Section 34) — a PDF goes through the same signed proxy Brochure/Downloads use (raw/PDF delivery is restricted on this Cloudinary account); an image is unrestricted and opens directly. */
+function floorPlanHref(url: string, kind: string | null | undefined): string {
+  if (kind === "floor_plan_image") return url;
+  return `/api/brochure-download?url=${encodeURIComponent(url)}&filename=${encodeURIComponent("Floor Plan.pdf")}&inline=1`;
 }
 
 function initials(name: string): string {
@@ -186,6 +196,17 @@ export default function ProjectCard({ project }: { project: ProjectCardData }) {
                   >
                     Brochure
                   </BrochureDownloadLink>
+                ) : null}
+                {project.floorPlanUrl ? (
+                  <a
+                    href={floorPlanHref(project.floorPlanUrl, project.floorPlanKind)}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="rounded-sm border border-border px-2 py-1.5 text-[10px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+                  >
+                    Floor Plan
+                  </a>
                 ) : null}
               </div>
             </div>
@@ -316,6 +337,16 @@ function QuickViewModal({ project, onClose }: { project: ProjectCardData; onClos
               >
                 Brochure
               </BrochureDownloadLink>
+            ) : null}
+            {project.floorPlanUrl ? (
+              <a
+                href={floorPlanHref(project.floorPlanUrl, project.floorPlanKind)}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-border bg-transparent px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:border-accent hover:text-accent"
+              >
+                Floor Plan
+              </a>
             ) : null}
           </div>
           {project.brochureAvailable && project.brochureThumbnailUrl ? (

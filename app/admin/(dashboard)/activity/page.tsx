@@ -6,6 +6,7 @@ import { ANALYTICS_PERIOD_COOKIE, resolveAnalyticsPeriodFromRequest } from "@/li
 import AnalyticsPeriodFilter from "@/app/admin/components/AnalyticsPeriodFilter";
 import AuditHistory from "@/app/admin/components/AuditHistory";
 import ActivityActorFilter from "@/app/admin/components/ActivityActorFilter";
+import ActivityRetentionCard from "@/app/admin/components/ActivityRetentionCard";
 
 export const metadata: Metadata = { title: "Activity — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
@@ -23,7 +24,7 @@ export default async function AdminActivityPage({
 }: {
   searchParams: Promise<{ period?: string; from?: string; to?: string; entityType?: string; actorId?: string }>;
 }) {
-  await requireSession();
+  const session = await requireSession();
   const params = await searchParams;
   const cookieStore = await cookies();
   const period = resolveAnalyticsPeriodFromRequest(params, cookieStore.get(ANALYTICS_PERIOD_COOKIE)?.value);
@@ -98,6 +99,8 @@ export default async function AdminActivityPage({
           <AuditHistory logs={logs} />
         </>
       )}
+
+      {session.role === "ADMIN" ? <ActivityRetentionCard /> : null}
     </div>
   );
 }

@@ -15,14 +15,19 @@ type CompressionStatus =
   | { status: "compressing" }
   | { status: "done"; compressed: boolean; originalBytes: number; compressedBytes: number };
 
-/** Optional single-slot PDF upload — same client-side auto-compression as BrochureUploader (lib/pdf-compress.ts), same upload/replace/remove pattern, reused rather than duplicated. */
+const IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+
+/** Optional single-slot upload accepting either a PDF or an image (Section 33) — PDFs get the same client-side compression already built for Brochure (lib/pdf-compress.ts); images are compressed server-side on upload (lib/cloudinary.ts's uploadImageFile, same path as gallery images) so no client step is needed for them. */
 export default function FloorPlanUploader({
   projectId,
   floorPlanUrl,
+  floorPlanKind,
   floorPlanUploadedAt,
 }: {
   projectId: string;
   floorPlanUrl: string | null;
+  /** "floor_plan" (PDF) or "floor_plan_image" — decides whether Preview routes through the signed PDF proxy or loads the (unrestricted) image URL directly. */
+  floorPlanKind: string | null;
   floorPlanUploadedAt: Date | null;
 }) {
   const action = uploadProjectFloorPlanAction.bind(null, projectId);
@@ -34,6 +39,11 @@ export default function FloorPlanUploader({
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const selected = e.target.files?.[0];
     if (!selected) {
+      setCompression({ status: "idle" });
+      return;
+    }
+    if (IMAGE_MIME_TYPES.has(selected.type)) {
+      // Images compress server-side at upload time — nothing to do client-side.
       setCompression({ status: "idle" });
       return;
     }
@@ -50,18 +60,24 @@ export default function FloorPlanUploader({
   return (
     <div className="rounded-sm border border-border bg-surface p-4">
       <h3 className="font-mono text-sm font-semibold text-foreground">Floor Plan</h3>
-      <p className="mt-1 text-xs text-muted">Optional — a PDF floor plan attached to this project. PDFs are optimized automatically for storage efficiency.</p>
+      <p className="mt-1 text-xs text-muted">Optional — a PDF or image floor plan attached to this project. PDFs are optimized automatically for storage efficiency.</p>
 
       {floorPlanUrl ? (
         <div className="mt-3 flex items-center justify-between gap-2 rounded-sm border border-border bg-background px-3 py-2">
           <div className="min-w-0">
-            <p className="truncate font-mono text-xs text-foreground">Floor Plan.pdf</p>
+            <p className="truncate font-mono text-xs text-foreground">Floor Plan</p>
             <p className="text-[10px] text-muted">{floorPlanUploadedAt ? `Uploaded ${formatDate(floorPlanUploadedAt)}` : null}</p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             <button
               type="button"
-              onClick={() => setPreviewUrl(floorPlanUrl)}
+              onClick={() =>
+                setPreviewUrl(
+                  floorPlanKind === "floor_plan_image"
+                    ? floorPlanUrl
+                    : `/api/brochure-download?url=${encodeURIComponent(floorPlanUrl)}&filename=${encodeURIComponent("Floor Plan.pdf")}&inline=1`
+                )
+              }
               className="rounded-sm border border-border px-2 py-1 text-[11px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
             >
               Preview
@@ -76,12 +92,12 @@ export default function FloorPlanUploader({
       <form action={formAction} className="mt-3">
         <fieldset disabled={compression.status === "compressing"} className="flex items-end gap-3 border-0 p-0">
           <label className="flex flex-1 flex-col gap-1.5">
-            <span className="text-[11px] uppercase tracking-wide text-muted">{floorPlanUrl ? "Replace with new PDF" : "Choose PDF"}</span>
+            <span className="text-[11px] uppercase tracking-wide text-muted">{floorPlanUrl ? "Replace with new file" : "Choose PDF or image"}</span>
             <input
               ref={fileInputRef}
               type="file"
               name="file"
-              accept="application/pdf"
+              accept="application/pdf,image/png,image/jpeg,image/webp"
               required
               onChange={handleFileChange}
               className="rounded-sm border border-border bg-surface px-3 py-2 text-xs text-foreground file:mr-3 file:rounded-sm file:border-0 file:bg-accent file:px-2.5 file:py-1 file:text-xs file:font-mono file:font-semibold file:uppercase file:text-white disabled:opacity-60"

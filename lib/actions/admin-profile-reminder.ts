@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireMutateSession } from "@/lib/auth/guard";
 import { hasPermission } from "@/lib/auth/permissions";
-import { getCompletionSections, type ProfileCompletionInput } from "@/lib/profile-completion";
+import { getCompletionSections, PROFILE_SECTION_LABELS, type ProfileCompletionInput, type ProfileSectionKey } from "@/lib/profile-completion";
 import { createNotification } from "@/lib/notifications";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
 import { logAudit } from "@/lib/audit";
@@ -126,7 +126,7 @@ export async function sendProfileReminderAction(publicUserId: string): Promise<{
     entityType: "PublicUser",
     entityId: publicUserId,
     actionLabel: "Complete profile",
-    actionUrl: "/account?tab=profile",
+    actionUrl: "/account?tab=profile&guide=1",
   });
 
   await recordResearchEvent("ADMIN_PROFILE_REMINDER_SENT", {
@@ -138,4 +138,68 @@ export async function sendProfileReminderAction(publicUserId: string): Promise<{
 
   revalidatePath(`/admin/analytics/registered-users/${publicUserId}`);
   return { success: "Reminder sent." };
+}
+
+/**
+ * Section-scoped reminder (Part 28) -- same machinery as the overall
+ * reminder above (real missing fields, server-regenerated on send, same
+ * PROFILE_COMPLETION_REMINDER notification type), just filtered to one
+ * section's fields instead of the whole profile. Reuses the existing
+ * ADMIN_PROFILE_REMINDER_SENT event type with `section` added to its
+ * metadata, rather than a second parallel event type for the same signal.
+ */
+export async function previewSectionReminderAction(publicUserId: string, section: ProfileSectionKey): Promise<ProfileReminderPreview | { error: string }> {
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "users.manage_notifications"))) {
+    return { error: "You don't have permission to do this." };
+  }
+
+  const loaded = await loadCompletionInput(publicUserId);
+  if (!loaded) return { error: "User not found." };
+
+  const missing = getCompletionSections(loaded.input).filter((s) => !s.complete && s.section === section);
+  if (missing.length === 0) return { error: `${PROFILE_SECTION_LABELS[section]} is already complete for this user.` };
+
+  const phrases = missing.map((m) => toMidSentence(m.label));
+  const list = toNaturalList(phrases);
+  const opener = loaded.percent >= 75 ? "You're almost there! " : "";
+  const body = `${opener}Your research profile is ${loaded.percent}% complete. Add your ${list} to help us make your property research more relevant.`;
+
+  return {
+    title: "Complete your research profile",
+    body,
+    missingFieldKeys: missing.map((m) => m.key),
+    completionPercent: loaded.percent,
+  };
+}
+
+export async function sendSectionReminderAction(publicUserId: string, section: ProfileSectionKey): Promise<{ error?: string; success?: string }> {
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "users.manage_notifications"))) {
+    return { error: "You don't have permission to do this." };
+  }
+
+  const preview = await previewSectionReminderAction(publicUserId, section);
+  if ("error" in preview) return preview;
+
+  await createNotification({
+    type: "PROFILE_COMPLETION_REMINDER",
+    title: preview.title,
+    body: preview.body,
+    recipientPublicUserId: publicUserId,
+    entityType: "PublicUser",
+    entityId: publicUserId,
+    actionLabel: "Complete profile",
+    actionUrl: "/account?tab=profile&guide=1",
+  });
+
+  await recordResearchEvent("ADMIN_PROFILE_REMINDER_SENT", {
+    entityType: "PublicUser",
+    entityId: publicUserId,
+    metadata: { section, completionPercent: preview.completionPercent, missingFieldKeys: preview.missingFieldKeys },
+  });
+  await logAudit(session.userId, "profile_reminder.send_section", "PublicUser", publicUserId, { after: { section } });
+
+  revalidatePath(`/admin/analytics/registered-users/${publicUserId}`);
+  return { success: `Reminder sent for ${PROFILE_SECTION_LABELS[section]}.` };
 }
