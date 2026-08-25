@@ -86,6 +86,7 @@ function focusAfterScroll(focusTarget: HTMLElement) {
  * section" only for fields that don't tag a specific control yet.
  */
 function scrollToAnchor(anchorId: string, fieldKey?: string) {
+  document.title = "DBG:scrollToAnchor:" + anchorId + ":" + fieldKey;
   const fieldEl = fieldKey ? document.getElementById(`field-${fieldKey}`) : null;
   if (fieldEl) {
     fieldEl.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -279,12 +280,14 @@ export function ProfileCompletionProvider({
   const guideParam = searchParams.get("guide");
   const guideHandledRef = useRef(false);
   useEffect(() => {
+    document.title = "DBG:effect-ran:guide=" + guideParam;
     if (guideParam !== "1") {
       guideHandledRef.current = false;
       return;
     }
     if (guideHandledRef.current) return;
     guideHandledRef.current = true;
+    document.title = "DBG:handling-guide";
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       params.delete("guide");
@@ -296,7 +299,9 @@ export function ProfileCompletionProvider({
     // timing used elsewhere in this same guided flow. Deliberately no cleanup
     // that cancels this timeout -- see comment above for why.
     window.setTimeout(() => {
-      if (sections.some((s) => !s.complete)) scrollToFirstIncomplete("next_action_card");
+      const incomplete = sections.some((s) => !s.complete);
+      document.title = "DBG:timeout-fired:incomplete=" + incomplete + ":len=" + sections.length;
+      if (incomplete) scrollToFirstIncomplete("next_action_card");
     }, 200);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run when the guide param itself flips to/from "1"
   }, [guideParam]);
