@@ -28,6 +28,8 @@ const MAX_SAMPLES = 500;
 interface DbMetricsState {
   durationsMs: number[];
   errorCount: number;
+  /** Subset of errorCount — specifically raw TCP/TLS connect timeouts to Neon (UND_ERR_CONNECT_TIMEOUT), not a generic query failure. This is the exact symptom Phase 2's load test observed at 50 concurrent requests, so it's tracked separately rather than folded into a generic "errors" bucket. */
+  timeoutCount: number;
   totalCount: number;
 }
 
@@ -35,16 +37,40 @@ const globalForDbMetrics = globalThis as unknown as { __dbMetricsState: DbMetric
 
 function getState(): DbMetricsState {
   if (!globalForDbMetrics.__dbMetricsState) {
-    globalForDbMetrics.__dbMetricsState = { durationsMs: [], errorCount: 0, totalCount: 0 };
+    globalForDbMetrics.__dbMetricsState = { durationsMs: [], errorCount: 0, timeoutCount: 0, totalCount: 0 };
   }
   return globalForDbMetrics.__dbMetricsState;
 }
 
-export function recordDbQuery(durationMs: number, ok: boolean): void {
+/**
+ * Detects the specific connect-timeout shape confirmed by Phase 2's load
+ * test (`Error [NeonDbError] ... sourceError: [TypeError: fetch failed] {
+ * [cause]: Error [ConnectTimeoutError] { code: 'UND_ERR_CONNECT_TIMEOUT' } }`)
+ * — undici's (Node's fetch implementation) connect-timeout error code,
+ * walked through Prisma's/Neon's wrapping without depending on either
+ * library's exact error class (duck-typed via `.code`/`.cause`, since
+ * neither package exports these wrapper types for `instanceof` checks).
+ */
+function isConnectTimeoutError(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current; depth++) {
+    if (typeof current === "object") {
+      const code = (current as { code?: unknown }).code;
+      if (code === "UND_ERR_CONNECT_TIMEOUT" || code === "ETIMEDOUT") return true;
+      current = (current as { cause?: unknown; sourceError?: unknown }).cause ?? (current as { sourceError?: unknown }).sourceError;
+    } else {
+      break;
+    }
+  }
+  return false;
+}
+
+export function recordDbQuery(durationMs: number, ok: boolean, error?: unknown): void {
   const state = getState();
   state.totalCount += 1;
   if (!ok) {
     state.errorCount += 1;
+    if (isConnectTimeoutError(error)) state.timeoutCount += 1;
     return;
   }
   state.durationsMs.push(durationMs);
@@ -63,6 +89,7 @@ export interface DbMetricsSnapshot {
   p95Ms: number | null;
   p99Ms: number | null;
   errorCount: number;
+  timeoutCount: number;
   totalCount: number;
 }
 
@@ -71,7 +98,7 @@ export function readDbMetrics(): DbMetricsSnapshot {
   const state = getState();
   const sampleCount = state.durationsMs.length;
   if (sampleCount === 0) {
-    return { sampleCount: 0, avgMs: null, p95Ms: null, p99Ms: null, errorCount: state.errorCount, totalCount: state.totalCount };
+    return { sampleCount: 0, avgMs: null, p95Ms: null, p99Ms: null, errorCount: state.errorCount, timeoutCount: state.timeoutCount, totalCount: state.totalCount };
   }
   const sorted = [...state.durationsMs].sort((a, b) => a - b);
   const avg = sorted.reduce((sum, v) => sum + v, 0) / sorted.length;
@@ -81,6 +108,7 @@ export function readDbMetrics(): DbMetricsSnapshot {
     p95Ms: Math.round(percentile(sorted, 95) * 10) / 10,
     p99Ms: Math.round(percentile(sorted, 99) * 10) / 10,
     errorCount: state.errorCount,
+    timeoutCount: state.timeoutCount,
     totalCount: state.totalCount,
   };
 }
@@ -90,5 +118,6 @@ export function resetDbMetrics(): void {
   const state = getState();
   state.durationsMs.length = 0;
   state.errorCount = 0;
+  state.timeoutCount = 0;
   state.totalCount = 0;
 }

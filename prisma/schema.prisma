@@ -1162,6 +1162,11 @@ model PlatformMetricSnapshot {
   dbP95ResponseMs     Float?
   dbP99ResponseMs     Float?
   dbErrorCount        Int
+  /// Subset of dbErrorCount — raw connect-timeout failures specifically
+  /// (Phase 3, Part C: tracked separately since this is the exact symptom
+  /// Phase 2's load test observed at 50 concurrent requests, distinct from
+  /// a generic query error). See lib/platform-metrics/db-metrics.ts.
+  dbTimeoutCount      Int               @default(0)
   /// A real, counted proxy for site traffic volume (ResearchEvent +
   /// heartbeat writes in the capture window) -- deliberately labeled
   /// "activity", not "requests", since this app has no full HTTP

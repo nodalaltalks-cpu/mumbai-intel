@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
     primaryBottleneck: snapshot.primaryBottleneck,
     bottleneckReason: snapshot.bottleneckReason,
     activeNow: snapshot.activeNow,
+    snapshotId: snapshot.id,
   });
 
   return NextResponse.json({ snapshot, prunedHeartbeats: prunedCount });

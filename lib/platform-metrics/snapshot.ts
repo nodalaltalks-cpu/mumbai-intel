@@ -18,6 +18,18 @@ const ERROR_RATE_WATCH = 0.01; // 1%
 const ERROR_RATE_WARNING = 0.05; // 5%
 const ERROR_RATE_CRITICAL = 0.15; // 15%
 
+/**
+ * Connection timeouts (Phase 3, Part C) get their own, stricter absolute
+ * thresholds rather than folding into the generic error-rate ratio above —
+ * this is the exact failure mode Phase 2's load test observed at 50
+ * concurrent requests (raw TCP connect timeouts to Neon), and it doesn't
+ * behave like a normal query error: it's a sign of connection-pool/
+ * concurrency exhaustion, worth flagging even at low absolute counts.
+ */
+const TIMEOUT_COUNT_WATCH = 1;
+const TIMEOUT_COUNT_WARNING = 5;
+const TIMEOUT_COUNT_CRITICAL = 20;
+
 const LATENCY_DEGRADATION_WATCH = 1.4; // 40% above trailing baseline
 const LATENCY_DEGRADATION_WARNING = 1.8; // 80% above trailing baseline
 const LATENCY_DEGRADATION_CRITICAL = 2.5; // 150% above trailing baseline
@@ -39,10 +51,18 @@ function classifyByRatio(ratio: number, watch: number, warning: number, critical
 
 const STATE_RANK: Record<PlatformLoadState, number> = { NORMAL: 0, WATCH: 1, WARNING: 2, CRITICAL: 3 };
 
+function classifyByCount(count: number, watch: number, warning: number, critical: number): PlatformLoadState {
+  if (count >= critical) return "CRITICAL";
+  if (count >= warning) return "WARNING";
+  if (count >= watch) return "WATCH";
+  return "NORMAL";
+}
+
 export function assessBottleneck(params: {
   dbAvgMs: number | null;
   dbSampleCount: number;
   dbErrorCount: number;
+  dbTimeoutCount: number;
   dbTotalCount: number;
   trailingAvgDbMs: number | null;
 }): BottleneckAssessment {
@@ -55,6 +75,15 @@ export function assessBottleneck(params: {
       state: errorState,
       label: "Error rate",
       reason: `Database query error rate is ${(errorRate * 100).toFixed(1)}% over the last ${params.dbTotalCount} queries observed by this instance.`,
+    });
+  }
+
+  const timeoutState = classifyByCount(params.dbTimeoutCount, TIMEOUT_COUNT_WATCH, TIMEOUT_COUNT_WARNING, TIMEOUT_COUNT_CRITICAL);
+  if (timeoutState !== "NORMAL") {
+    candidates.push({
+      state: timeoutState,
+      label: "Database connection timeouts",
+      reason: `${params.dbTimeoutCount} database connection timeout(s) observed — the same failure mode seen in the Phase 2 load test at high concurrency. Review connection/concurrency capacity before traffic increases further.`,
     });
   }
 
@@ -107,6 +136,7 @@ export async function capturePlatformMetricSnapshot() {
     dbAvgMs: db.avgMs,
     dbSampleCount: db.sampleCount,
     dbErrorCount: db.errorCount,
+    dbTimeoutCount: db.timeoutCount,
     dbTotalCount: db.totalCount,
     trailingAvgDbMs,
   });
@@ -124,6 +154,7 @@ export async function capturePlatformMetricSnapshot() {
       dbP95ResponseMs: db.p95Ms,
       dbP99ResponseMs: db.p99Ms,
       dbErrorCount: db.errorCount,
+      dbTimeoutCount: db.timeoutCount,
       activityEventCount,
       loadState: assessment.loadState,
       primaryBottleneck: assessment.primaryBottleneck,

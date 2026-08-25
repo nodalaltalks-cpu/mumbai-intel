@@ -31,7 +31,7 @@ function createPrismaClient() {
             recordDbQuery(performance.now() - start, true);
             return result;
           } catch (error) {
-            recordDbQuery(performance.now() - start, false);
+            recordDbQuery(performance.now() - start, false, error);
             throw error;
           }
         },

@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { notifyAllAdmins } from "@/lib/notifications";
+import { logAudit } from "@/lib/audit";
 import type { PlatformLoadState } from "@prisma/client";
 
 /**
@@ -23,6 +24,7 @@ export async function checkAndNotifyPlatformLoad(params: {
   primaryBottleneck: string | null;
   bottleneckReason: string | null;
   activeNow: number;
+  snapshotId: string;
 }): Promise<void> {
   if (!NOTIFY_STATES.includes(params.loadState)) return;
 
@@ -46,6 +48,12 @@ export async function checkAndNotifyPlatformLoad(params: {
     title,
     body,
   });
+
+  // Part 5 — also surface this in the existing Activity Feed (AuditLog),
+  // not just the Notification bell, so it's visible alongside every other
+  // admin-relevant event without a second UI. actorId null = system-generated,
+  // the same convention AuditLog already supports (see lib/audit.ts).
+  await logAudit(null, "platform-health.capacity-warning", "PlatformMetricSnapshot", params.snapshotId, { after: { loadState: params.loadState, primaryBottleneck: params.primaryBottleneck } });
 }
 
 export interface PlatformAlertHistoryEntry {
