@@ -47,6 +47,37 @@ interface ProfileCompletionContextValue {
 const ProfileCompletionContext = createContext<ProfileCompletionContextValue | null>(null);
 
 /**
+ * Focuses `focusTarget` only once the smooth scroll actually finishes,
+ * rather than guessing a fixed delay. A fixed delay (previously 500ms) was
+ * live-verified to fail intermittently: scroll distance to the target varies
+ * a lot (a field near the top of Personal Details vs. Family Income near the
+ * bottom of the page), and smooth-scroll duration scales with distance --
+ * 500ms was enough for a ~1300px scroll but not for a ~1750px one, so focus
+ * fired mid-animation and the viewport never finished moving. `scrollend`
+ * fires exactly when the browser's own scroll animation completes, so this
+ * works regardless of distance; the timeout is only a safety net for
+ * browsers without `scrollend` support (pre-17.4 Safari) or the rare case
+ * where no actual scrolling was needed (target already in view).
+ */
+function focusAfterScroll(focusTarget: HTMLElement) {
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    focusTarget.focus({ preventScroll: true });
+  };
+  const supportsScrollEnd = "onscrollend" in window;
+  if (supportsScrollEnd) {
+    const handler = () => {
+      window.removeEventListener("scrollend", handler);
+      finish();
+    };
+    window.addEventListener("scrollend", handler);
+  }
+  window.setTimeout(finish, supportsScrollEnd ? 1500 : 900); // safety net if scrollend never fires, or fixed fallback pre-Safari-17.4
+}
+
+/**
  * Scrolls to a field. Prefers the field's own control (id="field-<key>",
  * set on the specific input/button that field actually saves through) so
  * guided mode lands on the right control even when a section has several
@@ -58,19 +89,14 @@ function scrollToAnchor(anchorId: string, fieldKey?: string) {
   const fieldEl = fieldKey ? document.getElementById(`field-${fieldKey}`) : null;
   if (fieldEl) {
     fieldEl.scrollIntoView({ behavior: "smooth", block: "center" });
-    // Calling focus() right after starting a smooth scrollIntoView aborts the
-    // in-progress scroll animation in Chromium even with preventScroll:true
-    // (live-verified: focus landed on the field correctly but the viewport
-    // never visibly moved) -- give the animation time to actually finish
-    // before moving focus onto the target.
-    window.setTimeout(() => fieldEl.focus({ preventScroll: true }), 500);
+    focusAfterScroll(fieldEl);
     return;
   }
   const el = document.getElementById(anchorId);
   if (!el) return;
   el.scrollIntoView({ behavior: "smooth", block: "start" });
   const focusable = el.querySelector<HTMLElement>("input, select, textarea, button, [tabindex]");
-  if (focusable) window.setTimeout(() => focusable.focus({ preventScroll: true }), 500);
+  if (focusable) focusAfterScroll(focusable);
 }
 
 export function ProfileCompletionProvider({
