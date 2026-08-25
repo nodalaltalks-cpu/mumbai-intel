@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/storage-snapshot",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/platform-metrics",
+      "schedule": "0 * * * *"
     }
   ]
 }

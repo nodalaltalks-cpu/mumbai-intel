@@ -13,6 +13,7 @@ import PriceTrend from "./components/PriceTrend";
 import RecentlyActiveDevelopers from "./components/RecentlyActiveDevelopers";
 import TopDevelopers from "./components/TopDevelopers";
 import TrendingLocalities from "./components/TrendingLocalities";
+import RecommendedForYou from "./components/RecommendedForYou";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
 
 // All sections below read live from Prisma — force dynamic rendering so the
@@ -53,6 +54,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
       <main id="main-content" className="flex-1">
         <HeroSearch />
         <FeaturedProjects />
+        <RecommendedForYou surface="homepage" />
         <TrendingLocalities />
         <FeaturedBuilders />
         <TopDevelopers />

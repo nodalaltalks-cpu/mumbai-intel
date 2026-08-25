@@ -13,6 +13,8 @@ import { formatDate, formatPaise } from "@/lib/format";
 import { STATUS_CHART_COLOR, STATUS_LABEL, type ProjectStatus } from "@/lib/project-meta";
 import BarChart from "@/app/admin/components/charts/BarChart";
 import DonutChart from "@/app/admin/components/charts/DonutChart";
+import { getSession } from "@/lib/auth/session";
+import PlatformHealthSummaryCard from "@/app/admin/components/PlatformHealthSummaryCard";
 
 export const metadata: Metadata = { title: "Dashboard — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
@@ -44,6 +46,7 @@ function describeActivity(action: string): string {
 }
 
 export default async function AdminDashboardPage() {
+  const session = await getSession();
   const [stats, charts, recentProjects, recentTransactions, activity, latestUpload, growth] = await Promise.all([
     getDashboardStats(),
     getDashboardCharts(),
@@ -91,6 +94,13 @@ export default async function AdminDashboardPage() {
         <StatTile label="Archived" value={stats.archivedCount} href="/admin/projects?archived=1" />
         <StatTile label="Transactions" value={stats.transactionCount} href="/admin/transactions" />
       </div>
+
+      {/* Part 22: Founder-only, not shown to EDITOR/VIEWER — infrastructure visibility stays ADMIN-gated everywhere, including this summary card. */}
+      {session?.role === "ADMIN" ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <PlatformHealthSummaryCard />
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="rounded-sm border border-border bg-surface p-4">

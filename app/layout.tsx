@@ -4,6 +4,7 @@ import { GoogleAnalytics } from "@next/third-parties/google";
 import PremiumGateProvider from "@/app/components/premium/PremiumGateProvider";
 import GoogleLoginPing from "@/app/components/analytics/GoogleLoginPing";
 import CookieConsentBanner from "@/app/components/CookieConsentBanner";
+import PresenceHeartbeat from "@/app/components/PresenceHeartbeat";
 import { getSession } from "@/lib/auth/session";
 import { getPublicSession } from "@/lib/public-auth/session";
 import { peekCookieConsent } from "@/lib/analytics/consent";
@@ -91,6 +92,10 @@ export default async function RootLayout({
         </a>
         <PremiumGateProvider isGuest={isGuest}>{children}</PremiumGateProvider>
         <GoogleLoginPing />
+        {/* Platform Capacity presence (Part 3/20): only real site visitors count as
+            platform traffic — a signed-in founder/admin browsing /admin must not
+            inflate the active-user numbers their own dashboard shows them. */}
+        {!founderSession ? <PresenceHeartbeat /> : null}
         {GA_MEASUREMENT_ID && analyticsConsented ? <GoogleAnalytics gaId={GA_MEASUREMENT_ID} /> : null}
         {consent === null ? <CookieConsentBanner /> : null}
       </body>

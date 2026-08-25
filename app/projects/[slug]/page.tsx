@@ -8,6 +8,7 @@ import InfoTooltip from "@/app/components/ui/InfoTooltip";
 import BrochureDownloadLink from "@/app/components/BrochureDownloadLink";
 import { maskProjectBrochure } from "@/lib/premium/mask";
 import { recordBrochureViewed } from "@/lib/analytics/brochure-events";
+import SimilarProjectsRecommended from "@/app/components/SimilarProjectsRecommended";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
 import {
   AMENITY_CATEGORY_LABEL,
@@ -646,6 +647,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               </div>
             </div>
           ) : null}
+
+          <SimilarProjectsRecommended project={{ id: project.id, localityId: project.localityId, builderId: project.builderId }} locked={locked} />
 
           <div>
             <h2 className="font-mono text-lg font-semibold text-foreground">Nearby Builders</h2>

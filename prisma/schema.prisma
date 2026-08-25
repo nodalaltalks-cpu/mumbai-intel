@@ -1112,6 +1112,77 @@ model StorageSnapshot {
   @@index([capturedAt])
 }
 
+/// Platform Capacity presence tracking (see docs/architecture-overview.md
+/// §Platform Capacity Monitoring). ONE row per subject (an anonymous session
+/// or a signed-in PublicUser) that is continuously upserted on every
+/// heartbeat -- deliberately NOT a new row per heartbeat, so a visitor
+/// sending a heartbeat every ~20s for an hour still produces exactly one
+/// row here, not 180. Staleness (a visitor who closed the tab) is handled
+/// by filtering lastSeenAt in reads, not by deleting rows on expiry -- a
+/// lightweight periodic cron prune keeps the table from growing unbounded
+/// (see lib/platform-metrics/presence.ts).
+model PresenceHeartbeat {
+  id           String      @id @default(cuid())
+  /// The anonymous session id (mi_anon_id cookie) or `user:<publicUserId>`
+  /// for a signed-in visitor -- one identity, one row, regardless of how
+  /// many tabs/devices are open (Part 3/Section 30 of the spec: multiple
+  /// tabs must not count as multiple active users).
+  subjectKey   String      @unique
+  publicUserId String?     @unique
+  publicUser   PublicUser? @relation(fields: [publicUserId], references: [id], onDelete: Cascade)
+  isAnonymous  Boolean
+  firstSeenAt  DateTime    @default(now())
+  lastSeenAt   DateTime    @default(now())
+
+  @@index([lastSeenAt])
+  @@index([publicUserId])
+}
+
+/// One row per periodic platform-load capture (cron-captured, mirrors
+/// StorageSnapshot's pattern exactly) -- powers Platform Health's history
+/// table, peak-traffic tracking, and growth trend. Every numeric field here
+/// is a REAL measurement (presence-derived active counts, Prisma
+/// query-duration samples collected in-process since the last capture) --
+/// never a fabricated or estimated value. See lib/platform-metrics/.
+model PlatformMetricSnapshot {
+  id                  String            @id @default(cuid())
+  capturedAt          DateTime          @default(now())
+  activeNow           Int
+  active5m            Int
+  active30m           Int
+  activeToday         Int
+  anonymousActiveNow  Int
+  registeredActiveNow Int
+  /// Sample count backing the latency figures below -- 0 means no DB
+  /// queries were observed by this instance since the last capture, in
+  /// which case the latency fields are null rather than a misleading 0ms.
+  dbSampleCount       Int
+  dbAvgResponseMs     Float?
+  dbP95ResponseMs     Float?
+  dbP99ResponseMs     Float?
+  dbErrorCount        Int
+  /// A real, counted proxy for site traffic volume (ResearchEvent +
+  /// heartbeat writes in the capture window) -- deliberately labeled
+  /// "activity", not "requests", since this app has no full HTTP
+  /// request-logging layer (see architecture-overview.md's disclosed gap).
+  activityEventCount  Int
+  loadState           PlatformLoadState
+  /// Human-readable "why" (Section 7 of the spec) -- e.g. "Database query
+  /// latency is 42% above its trailing baseline." Never blank when
+  /// loadState is above NORMAL.
+  primaryBottleneck   String?
+  bottleneckReason    String?
+
+  @@index([capturedAt])
+}
+
+enum PlatformLoadState {
+  NORMAL
+  WATCH
+  WARNING
+  CRITICAL
+}
+
 enum ReportStatus {
   NEW
   UNDER_REVIEW
@@ -1215,6 +1286,10 @@ enum NotificationType {
   /// isn't a NotificationCampaign bulk send (no campaignId), so the founder can tell the two
   /// apart in Activity/analytics without a schema change to Notification itself.
   PROFILE_COMPLETION_REMINDER
+  /// Platform Capacity crossed a WATCH/WARNING/CRITICAL load state (see
+  /// PlatformMetricSnapshot.loadState) -- mirrors ADMIN_STORAGE_WARNING's
+  /// dedup-once-per-day-per-level pattern (lib/platform-metrics/alerts.ts).
+  ADMIN_PLATFORM_CAPACITY_WARNING
 }
 
 /// One shared table for both audiences (public researcher + founder admin)
@@ -1389,8 +1464,8 @@ model PublicUser {
   createdAt                DateTime     @default(now())
   updatedAt                DateTime     @updatedAt
 
-  resetTokens              PublicPasswordResetToken[]
-  emailVerificationTokens  PublicEmailVerificationToken[]
+  resetTokens             PublicPasswordResetToken[]
+  emailVerificationTokens PublicEmailVerificationToken[]
   savedProjects           SavedProject[]
   wishlist                Wishlist[]
   recentViews             RecentView[]
@@ -1403,6 +1478,7 @@ model PublicUser {
   notifications           Notification[]
   emailCampaignRecipients EmailCampaignRecipient[]
   contactEnquiries        ContactEnquiry[]
+  presenceHeartbeat       PresenceHeartbeat?
 
   @@index([provider])
   @@index([referredByUserId])
@@ -1924,6 +2000,21 @@ enum ResearchEventType {
   /// read client-side on first page load. metadata: { source, referrerHost,
   /// utmSource, utmMedium, utmCampaign } -- never any personal data.
   VISITOR_SOURCE_IDENTIFIED
+  /// Recommendation Engine (Part 15 of the spec) -- a project card was shown
+  /// inside a "Recommended for you" / "Similar projects" surface.
+  /// Deliberately new (no existing event captures "shown", only "opened") --
+  /// metadata: { reason: string[], score, position, surface, candidateSource }.
+  /// A click-through, save, compare, or enquiry FROM a recommendation reuses
+  /// the existing PROJECT_VIEWED/WISHLIST_ADDED/COMPARE_USED/
+  /// CONTACT_ENQUIRY_SUBMITTED events with the same metadata shape (never
+  /// duplicated as a parallel RECOMMENDATION_* event) so the existing funnel
+  /// queries keep working unmodified.
+  RECOMMENDATION_IMPRESSION
+  /// A recommended project card was clicked through to its detail page --
+  /// distinct from PROJECT_VIEWED (which fires on the landing itself,
+  /// regardless of entry point) so recommendation CTR is directly queryable
+  /// without inferring it from metadata on every PROJECT_VIEWED row.
+  RECOMMENDATION_CLICKED
 }
 
 /// Site-wide "research intent" log — a deliberately generic single table

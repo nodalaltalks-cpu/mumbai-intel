@@ -82,7 +82,7 @@ function initials(name: string): string {
     .join("");
 }
 
-export default function ProjectCard({ project }: { project: ProjectCardData }) {
+export default function ProjectCard({ project, onNavigate }: { project: ProjectCardData; onNavigate?: () => void }) {
   const [quickViewOpen, setQuickViewOpen] = useState(false);
   const projectSize = formatProjectSize(project.totalUnits, project.totalTowers, project.landAreaAcres);
   const paymentPlanLabel = project.paymentPlanType ? PAYMENT_PLAN_TYPE_LABEL[project.paymentPlanType] : "No Payment Plan";
@@ -91,7 +91,12 @@ export default function ProjectCard({ project }: { project: ProjectCardData }) {
     <>
       <div className="group relative flex flex-col overflow-hidden rounded-sm border border-border bg-surface transition-[box-shadow,border-color] duration-150 md:hover:border-accent/40 md:hover:shadow-md">
         {/* Stretched link: an invisible full-card click target rendered as a sibling (not an ancestor) of the content below, so the Payment Plan info icon — a real nested button — never ends up inside an <a>. Non-interactive content is pointer-events-none and lets clicks fall through to this link; only actual controls opt back in with pointer-events-auto. */}
-        <Link href={`/projects/${project.slug}`} aria-label={project.name} className="absolute inset-0 z-0 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent" />
+        <Link
+          href={`/projects/${project.slug}`}
+          aria-label={project.name}
+          onClick={onNavigate}
+          className="absolute inset-0 z-0 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+        />
 
         <div className="pointer-events-none relative z-[1] flex flex-1 flex-col">
           <div className="relative h-36 w-full shrink-0 overflow-hidden bg-[linear-gradient(135deg,_var(--surface-raised),_var(--background))]">

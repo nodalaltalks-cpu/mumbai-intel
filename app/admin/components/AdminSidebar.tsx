@@ -45,6 +45,7 @@ const NAV_SECTIONS: { label: string; links: { label: string; href: string }[] }[
       { label: "Referrals", href: "/admin/analytics/referrals" },
       { label: "Registered Users", href: "/admin/analytics/registered-users" },
       { label: "Newsletter", href: "/admin/analytics/newsletter" },
+      { label: "Recommendation Intelligence", href: "/admin/recommendations" },
     ],
   },
   {
@@ -78,6 +79,7 @@ const NAV_SECTIONS: { label: string; links: { label: string; href: string }[] }[
     label: "System",
     links: [
       { label: "System Health", href: "/admin/system-health" },
+      { label: "Platform Health", href: "/admin/platform-health" },
       { label: "Trash", href: "/admin/trash" },
       { label: "Users", href: "/admin/users" },
       { label: "Approvals", href: "/admin/approvals" },
