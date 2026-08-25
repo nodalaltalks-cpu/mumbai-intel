@@ -235,10 +235,30 @@ export function ProfileCompletionProvider({
   // observed (live-tested) to reset window.scrollY back to 0 shortly after
   // the guided scroll ran, undoing it. history.replaceState only rewrites
   // the address bar -- no server round-trip, no re-render, nothing to race.
+  //
+  // In this project's Next.js version, history.replaceState IS synced back
+  // into useSearchParams() (confirmed against node_modules/next/dist/docs --
+  // this differs from older Next.js, where it was not). That means the
+  // replaceState call above itself flips guideParam from "1" back to null on
+  // a follow-up render. With a plain `useEffect(..., [guideParam])` that
+  // returns `() => clearTimeout(t)`, that follow-up render's cleanup fires
+  // BEFORE the scheduled scroll ever runs, silently cancelling it every time
+  // (live-verified: the URL correctly loses ?guide=1, but the page never
+  // scrolls). guideHandledRef decouples "detected a genuine new arrival"
+  // from "guideParam's current value", so the scheduled scroll is never
+  // cancelled by our own replaceState call, while a real new arrival
+  // (guideParam genuinely returning to "1" later) still works, because the
+  // ref is reset the moment guideParam is next seen as anything other than "1".
   const searchParams = useSearchParams();
   const guideParam = searchParams.get("guide");
+  const guideHandledRef = useRef(false);
   useEffect(() => {
-    if (guideParam !== "1") return;
+    if (guideParam !== "1") {
+      guideHandledRef.current = false;
+      return;
+    }
+    if (guideHandledRef.current) return;
+    guideHandledRef.current = true;
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       params.delete("guide");
@@ -247,12 +267,12 @@ export function ProfileCompletionProvider({
     }
     // Small delay: lets the tab's own content (images, lazy sections) settle
     // before measuring scroll position, and matches the "Saved" micro-feedback
-    // timing used elsewhere in this same guided flow.
-    const t = window.setTimeout(() => {
+    // timing used elsewhere in this same guided flow. Deliberately no cleanup
+    // that cancels this timeout -- see comment above for why.
+    window.setTimeout(() => {
       if (sections.some((s) => !s.complete)) scrollToFirstIncomplete("next_action_card");
     }, 200);
-    return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run when the guide param itself flips to "1"
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run when the guide param itself flips to/from "1"
   }, [guideParam]);
 
   const value: ProfileCompletionContextValue = {
