@@ -109,6 +109,7 @@ export interface VisitorChannelBreakdownRow {
 
 export interface VisitorCampaignBreakdownRow {
   source: VisitorSource;
+  medium: string | null;
   campaign: string;
   sessions: number;
   registered: number;
@@ -142,10 +143,10 @@ export async function getVisitorAcquisitionBreakdown(
       select: { sessionId: true, metadata: true },
     });
 
-    const sessionInfo = new Map<string, { source: VisitorSource; campaign: string | null }>();
+    const sessionInfo = new Map<string, { source: VisitorSource; campaign: string | null; medium: string | null }>();
     for (const event of sourceEvents) {
-      const meta = event.metadata as { source?: VisitorSource; utmCampaign?: string | null } | null;
-      if (event.sessionId && meta?.source) sessionInfo.set(event.sessionId, { source: meta.source, campaign: meta.utmCampaign ?? null });
+      const meta = event.metadata as { source?: VisitorSource; utmCampaign?: string | null; utmMedium?: string | null } | null;
+      if (event.sessionId && meta?.source) sessionInfo.set(event.sessionId, { source: meta.source, campaign: meta.utmCampaign ?? null, medium: meta.utmMedium ?? null });
     }
     if (sessionInfo.size === 0) return { channels: [], campaigns: [], insights: { bestAcquisition: null, bestConversion: null, lowQuality: null } };
 
@@ -172,7 +173,7 @@ export async function getVisitorAcquisitionBreakdown(
 
       if (info.campaign) {
         const key = `${info.source}::${info.campaign}`;
-        const row = byCampaign.get(key) ?? { source: info.source, campaign: info.campaign, sessions: 0, registered: 0, activeResearchers: 0 };
+        const row = byCampaign.get(key) ?? { source: info.source, medium: info.medium, campaign: info.campaign, sessions: 0, registered: 0, activeResearchers: 0 };
         row.sessions += 1;
         if (registeredSessions.has(sessionId)) row.registered += 1;
         if (researcherSessions.has(sessionId)) row.activeResearchers += 1;

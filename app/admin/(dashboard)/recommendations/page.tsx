@@ -18,11 +18,18 @@ import {
 import { getRecommendationDataAudit } from "@/lib/recommendations/ml/audit";
 import { getMlDashboardData, checkModelPerformanceDrift } from "@/lib/recommendations/ml/admin-queries";
 import { SUFFICIENCY_THRESHOLDS } from "@/lib/recommendations/ml/train";
+import { getRecommendationPerformanceBySource, getRecommendationJourneyExample } from "@/lib/recommendations/source-intelligence";
 import { formatDateTime } from "@/lib/format";
 import { ANALYTICS_PERIOD_COOKIE, resolveAnalyticsPeriodFromRequest } from "@/lib/analytics/period";
 import MlControls from "@/app/admin/components/MlControls";
 import ModelStatusButton from "@/app/admin/components/ModelStatusButton";
 import AnalyticsPeriodFilter from "@/app/admin/components/AnalyticsPeriodFilter";
+
+const SOURCE_LABEL: Record<string, string> = {
+  google: "Google", google_discover: "Google Discover", direct: "Direct", whatsapp: "WhatsApp", instagram: "Instagram",
+  linkedin: "LinkedIn", facebook: "Facebook", youtube: "YouTube", x_twitter: "X (Twitter)", reddit: "Reddit",
+  email: "Email", referral: "Referral link", other_website: "Other website", unknown: "Unknown",
+};
 
 export const metadata: Metadata = { title: "Recommendation Intelligence — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
@@ -65,7 +72,7 @@ export default async function RecommendationIntelligencePage({ searchParams }: {
   const period = resolveAnalyticsPeriodFromRequest(params, cookieStore.get(ANALYTICS_PERIOD_COOKIE)?.value);
   const daysBack = Math.max(1, Math.ceil((period.until.getTime() - period.since.getTime()) / 86_400_000));
 
-  const [overview, topProjects, surfaces, recent, dataAudit, ml, drift, founderSummary, funnel, attributes, personalization, insights] = await Promise.all([
+  const [overview, topProjects, surfaces, recent, dataAudit, ml, drift, founderSummary, funnel, attributes, personalization, insights, bySource, journeyExample] = await Promise.all([
     getRecommendationOverview(daysBack),
     getTopRecommendedProjects(daysBack, 10),
     getRecommendationSurfaceBreakdown(daysBack),
@@ -78,6 +85,8 @@ export default async function RecommendationIntelligencePage({ searchParams }: {
     getTopRecommendedAttributes(period),
     getPersonalizationDepth(period),
     getRecommendationDecisionInsights(period),
+    getRecommendationPerformanceBySource(period),
+    getRecommendationJourneyExample(period),
   ]);
 
   const coveragePercent = overview.publishedProjectCount > 0 ? Math.round((overview.distinctProjectsRecommended / overview.publishedProjectCount) * 100) : 0;
@@ -134,6 +143,72 @@ export default async function RecommendationIntelligencePage({ searchParams }: {
           <FunnelStage label="Contacted" count={funnel.contacted} ofPrevious={funnelPct(funnel.contacted, funnel.compared)} />
         </div>
       </section>
+
+      {/* Phase 3B Part 14/16 — "which acquisition channel produces users who actually benefit from recommendations." */}
+      <section className="rounded-sm border border-border bg-surface p-4">
+        <h2 className="mb-1 font-mono text-sm font-semibold text-foreground">Recommendation performance by acquisition source — {period.label}</h2>
+        <p className="mb-3 text-[11px] text-muted">
+          Only covers users whose session (or the session they originally signed up through) has a known acquisition source — see Visitors for the same coverage limit.
+        </p>
+        {bySource.length === 0 ? (
+          <p className="text-xs text-muted">Not enough data yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] border-collapse text-left text-xs">
+              <thead>
+                <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted">
+                  <th className="py-1.5 pr-3 font-medium">Source</th>
+                  <th className="py-1.5 pr-3 font-medium text-right">Users</th>
+                  <th className="py-1.5 pr-3 font-medium text-right">Recommendations</th>
+                  <th className="py-1.5 pr-3 font-medium text-right">CTR</th>
+                  <th className="py-1.5 pr-3 font-medium text-right">Save rate</th>
+                  <th className="py-1.5 pr-3 font-medium text-right">Compare rate</th>
+                  <th className="py-1.5 font-medium text-right">Contact rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bySource.map((row) => (
+                  <tr key={row.source} className="border-b border-border last:border-b-0">
+                    <td className="py-1.5 pr-3 text-foreground">{SOURCE_LABEL[row.source] ?? row.source}</td>
+                    <td className="py-1.5 pr-3 text-right font-mono text-foreground">{row.users}</td>
+                    <td className="py-1.5 pr-3 text-right font-mono text-muted">{row.impressions}</td>
+                    <td className="py-1.5 pr-3 text-right font-mono text-muted">{row.ctrPercent ?? "--"}%</td>
+                    <td className="py-1.5 pr-3 text-right font-mono text-muted">{row.saveRatePercent ?? "--"}%</td>
+                    <td className="py-1.5 pr-3 text-right font-mono text-muted">{row.compareRatePercent ?? "--"}%</td>
+                    <td className="py-1.5 text-right font-mono text-muted">{row.contactRatePercent ?? "--"}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* Part 15 — one real, connected journey example (source -> search -> recommendation -> action). Never fabricated: absent when no complete trail exists this period. */}
+      {journeyExample ? (
+        <section className="rounded-sm border border-accent/30 bg-accent/5 p-4">
+          <h2 className="mb-2 font-mono text-sm font-semibold text-foreground">A real recommendation journey this period</h2>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-foreground">
+            <span className="rounded-sm border border-border bg-surface px-2 py-1 font-mono">{SOURCE_LABEL[journeyExample.source] ?? journeyExample.source}</span>
+            <span className="text-muted">→</span>
+            {journeyExample.searchQuery ? (
+              <>
+                <span className="rounded-sm border border-border bg-surface px-2 py-1 font-mono">Searched &quot;{journeyExample.searchQuery}&quot;</span>
+                <span className="text-muted">→</span>
+              </>
+            ) : null}
+            <span className="rounded-sm border border-border bg-surface px-2 py-1 font-mono">{journeyExample.projectName} recommended</span>
+            <span className="text-muted">→</span>
+            <span className="rounded-sm border border-positive/40 bg-positive/10 px-2 py-1 font-mono text-positive">Clicked</span>
+            {journeyExample.saved ? (<><span className="text-muted">→</span><span className="rounded-sm border border-positive/40 bg-positive/10 px-2 py-1 font-mono text-positive">Saved</span></>) : null}
+            {journeyExample.compared ? (<><span className="text-muted">→</span><span className="rounded-sm border border-positive/40 bg-positive/10 px-2 py-1 font-mono text-positive">Compared</span></>) : null}
+            {journeyExample.contacted ? (<><span className="text-muted">→</span><span className="rounded-sm border border-positive/40 bg-positive/10 px-2 py-1 font-mono text-positive">Contacted</span></>) : null}
+          </div>
+          {journeyExample.reasons.length > 0 ? (
+            <p className="mt-2 text-[11px] text-muted">Why recommended: {journeyExample.reasons.join(" · ")}</p>
+          ) : null}
+        </section>
+      ) : null}
 
       {/* Part 18 — what's actually being recommended. */}
       <section className="rounded-sm border border-border bg-surface p-4">

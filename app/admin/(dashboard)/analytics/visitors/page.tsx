@@ -5,6 +5,17 @@ import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/guard";
 import { hasPermission } from "@/lib/auth/permissions";
 import { getVisitorAcquisitionBreakdown, getVisitorOverview, getVisitorSourceBreakdown } from "@/lib/analytics/visitor-queries";
+import {
+  getChannelQualityBreakdown,
+  getLandingPageBreakdown,
+  getSearchIntentBySource,
+  getAnonymousJourneyFunnel,
+  getReturningVisitorInsights,
+  getDeviceBreakdown,
+  getGeoBreakdown,
+  getLiveActivityBreakdown,
+  getFounderInsights,
+} from "@/lib/analytics/visitor-intelligence";
 import { ANALYTICS_PERIOD_COOKIE, computeChange, resolveAnalyticsPeriodFromRequest } from "@/lib/analytics/period";
 import { getActiveUserCounts, getTodayActiveCount } from "@/lib/platform-metrics/presence";
 import AnalyticsPeriodFilter from "@/app/admin/components/AnalyticsPeriodFilter";
@@ -24,15 +35,28 @@ const CHANNEL_LABEL: Record<string, string> = {
 
 const SOURCE_LABEL: Record<string, string> = {
   google: "Google",
+  google_discover: "Google Discover",
   direct: "Direct",
   whatsapp: "WhatsApp",
   instagram: "Instagram",
   linkedin: "LinkedIn",
   facebook: "Facebook",
   youtube: "YouTube",
+  x_twitter: "X (Twitter)",
+  reddit: "Reddit",
+  email: "Email",
   referral: "Referral link",
   other_website: "Other website",
   unknown: "Unknown",
+};
+
+const ACTIVITY_LABEL: Record<string, string> = {
+  browsing: "Browsing",
+  searching: "Searching",
+  viewing_project: "Viewing a project",
+  viewing_transaction: "Viewing a transaction",
+  viewing_brochure: "Viewing a brochure/floor plan",
+  researching: "Researching (compare/save/market data)",
 };
 
 export default async function VisitorsAnalyticsPage({ searchParams }: { searchParams: Promise<{ period?: string; from?: string; to?: string }> }) {
@@ -42,13 +66,36 @@ export default async function VisitorsAnalyticsPage({ searchParams }: { searchPa
   const cookieStore = await cookies();
   const period = resolveAnalyticsPeriodFromRequest(params, cookieStore.get(ANALYTICS_PERIOD_COOKIE)?.value);
 
-  const [overview, sourceBreakdown, acquisition, todayActiveCount] = await Promise.all([
+  const [
+    overview,
+    sourceBreakdown,
+    acquisition,
+    todayActiveCount,
+    channelQuality,
+    landingPages,
+    searchBySource,
+    anonymousJourney,
+    returningInsights,
+    deviceBreakdown,
+    geoBreakdown,
+    liveActivity,
+    founderInsights,
+  ] = await Promise.all([
     getVisitorOverview(period),
     getVisitorSourceBreakdown(period),
     getVisitorAcquisitionBreakdown(period),
     getTodayActiveCount(),
+    getChannelQualityBreakdown(period),
+    getLandingPageBreakdown(period),
+    getSearchIntentBySource(period),
+    getAnonymousJourneyFunnel(period),
+    getReturningVisitorInsights(period),
+    getDeviceBreakdown(period),
+    getGeoBreakdown(period),
+    getLiveActivityBreakdown(),
+    getFounderInsights(period),
   ]);
-  // Part 13 — "Live Now", reusing Platform Health's existing PresenceHeartbeat
+  // Part 12/13 — "Live Now", reusing Platform Health's existing PresenceHeartbeat
   // infrastructure (lib/platform-metrics/presence.ts) rather than a second
   // presence system. Real-time, independent of the period filter above.
   const liveNow = await getActiveUserCounts(todayActiveCount);
@@ -95,7 +142,37 @@ export default async function VisitorsAnalyticsPage({ searchParams }: { searchPa
           <div><p className="text-[10px] uppercase tracking-wide text-muted">Last 30 minutes</p><p className="font-mono text-xl font-semibold text-foreground">{liveNow.active30m}</p></div>
           <div><p className="text-[10px] uppercase tracking-wide text-muted">Today (unique)</p><p className="font-mono text-xl font-semibold text-foreground">{liveNow.activeToday}</p></div>
         </div>
-        <p className="mt-2 text-[10px] text-muted">Full per-page live activity (currently viewing a project vs. searching vs. viewing a brochure) isn&apos;t separately tracked yet — see Platform Health for the underlying presence signal this reuses.</p>
+        {liveActivity.activeNow > 0 ? (
+          <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border pt-3 sm:grid-cols-3 lg:grid-cols-6">
+            {(Object.entries(liveActivity.byActivity) as [string, number][])
+              .filter(([, count]) => count > 0)
+              .map(([activity, count]) => (
+                <div key={activity}>
+                  <p className="text-[10px] uppercase tracking-wide text-muted">{ACTIVITY_LABEL[activity] ?? activity}</p>
+                  <p className="font-mono text-base font-semibold text-foreground">{count}</p>
+                </div>
+              ))}
+          </div>
+        ) : null}
+        <p className="mt-2 text-[10px] text-muted">
+          Last updated: just now · activity is each visitor&apos;s most recent tracked action in the last 2 minutes, not a guaranteed instantaneous read.
+        </p>
+      </section>
+
+      {/* Part 13 — plain-language insights, generated only from the real aggregates below; never fabricated. */}
+      <section className="rounded-sm border border-accent/30 bg-accent/5 p-4">
+        <h2 className="mb-2 font-mono text-sm font-semibold text-foreground">Founder insights — {period.label}</h2>
+        {founderInsights.length === 0 ? (
+          <p className="text-xs text-muted">Not enough data yet.</p>
+        ) : (
+          <ul className="flex flex-col gap-1.5 text-xs text-foreground">
+            {founderInsights.map((insight, i) => (
+              <li key={i} className="flex gap-2">
+                <span className="text-accent">→</span>{insight}
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -137,6 +214,57 @@ export default async function VisitorsAnalyticsPage({ searchParams }: { searchPa
           </div>
         </section>
       </div>
+
+      {/* Part 8 — the fuller anonymous -> registered step funnel, from real events only. "Profile step" is placed after Registered (not before) because an anonymous visitor has no profile to interact with until they sign up. */}
+      <section className="rounded-sm border border-border bg-surface p-4">
+        <h2 className="mb-1 font-mono text-sm font-semibold text-foreground">Anonymous visitor journey — {period.label}</h2>
+        <p className="mb-3 text-[11px] text-muted">Each stage counts distinct sessions/users who reached at least that far — not a strict single-path funnel.</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          {[
+            { label: "Anonymous visitor", count: anonymousJourney.anonymousVisitors },
+            { label: "Searched / researched", count: anonymousJourney.searchedOrBrowsed },
+            { label: "Registered", count: anonymousJourney.registered },
+            { label: "Completed a profile step", count: anonymousJourney.completedProfileStep },
+            { label: "Saved / compared", count: anonymousJourney.savedOrCompared },
+            { label: "Contacted", count: anonymousJourney.contacted },
+          ].map((stage) => (
+            <div key={stage.label} className="rounded-sm border border-border bg-background p-2.5 text-center">
+              <p className="text-[9px] uppercase tracking-wide text-muted">{stage.label}</p>
+              <p className="mt-0.5 font-mono text-lg font-semibold text-foreground">{stage.count}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Part 9 — returning visitors, with one real (never fabricated) repeat-research example. */}
+      <section className="rounded-sm border border-border bg-surface p-4">
+        <h2 className="mb-1 font-mono text-sm font-semibold text-foreground">Returning visitors — {period.label}</h2>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-muted">New</p>
+            <p className="font-mono text-xl font-semibold text-foreground">{overview.newVisitors}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-muted">Returning</p>
+            <p className="font-mono text-xl font-semibold text-foreground">{overview.returningVisitors}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-muted">Returned and re-researched the same project</p>
+            <p className="font-mono text-xl font-semibold text-foreground">{returningInsights.repeatResearchSessions}</p>
+          </div>
+        </div>
+        {returningInsights.example ? (
+          <p className="mt-3 border-t border-border pt-3 text-xs text-foreground">
+            Real example: a visitor who first arrived via{" "}
+            <span className="font-semibold">{returningInsights.example.sessionSource ? SOURCE_LABEL[returningInsights.example.sessionSource] : "an unknown source"}</span>{" "}
+            returned {returningInsights.example.daysSinceFirstSeen === 0 ? "the same day" : `after ${returningInsights.example.daysSinceFirstSeen} day${returningInsights.example.daysSinceFirstSeen === 1 ? "" : "s"}`}, viewed{" "}
+            {returningInsights.example.projectsViewedAgain} project{returningInsights.example.projectsViewedAgain === 1 ? "" : "s"} they had already looked at
+            {returningInsights.example.didCompareAgain ? ", and used Compare again" : ""}.
+          </p>
+        ) : (
+          <p className="mt-3 border-t border-border pt-3 text-xs text-muted">No repeat-research example in this period.</p>
+        )}
+      </section>
 
       {sourceBreakdown.length > 0 ? (
         <section className="rounded-sm border border-border bg-surface p-4">
@@ -217,6 +345,7 @@ export default async function VisitorsAnalyticsPage({ searchParams }: { searchPa
                   <thead>
                     <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted">
                       <th className="py-1.5 pr-3 font-medium">Source</th>
+                      <th className="py-1.5 pr-3 font-medium">Medium</th>
                       <th className="py-1.5 pr-3 font-medium">Campaign</th>
                       <th className="py-1.5 pr-3 font-medium text-right">Visitors</th>
                       <th className="py-1.5 pr-3 font-medium text-right">Registered</th>
@@ -227,6 +356,7 @@ export default async function VisitorsAnalyticsPage({ searchParams }: { searchPa
                     {acquisition.campaigns.map((row) => (
                       <tr key={`${row.source}::${row.campaign}`} className="border-b border-border last:border-b-0">
                         <td className="py-1.5 pr-3 text-foreground">{SOURCE_LABEL[row.source] ?? row.source}</td>
+                        <td className="py-1.5 pr-3 text-muted">{row.medium ?? "--"}</td>
                         <td className="py-1.5 pr-3 text-muted">{row.campaign}</td>
                         <td className="py-1.5 pr-3 text-right font-mono text-foreground">{row.sessions}</td>
                         <td className="py-1.5 pr-3 text-right font-mono text-muted">{row.registered}</td>
@@ -283,6 +413,169 @@ export default async function VisitorsAnalyticsPage({ searchParams }: { searchPa
           </p>
         </section>
       ) : null}
+
+      {/* Part 5 — channel quality: not just volume, but registration/research/save/compare/contact/return rate per source. "Which channel brings the BEST users, not just the MOST." */}
+      {channelQuality.length > 0 ? (
+        <section className="rounded-sm border border-border bg-surface p-4">
+          <h2 className="mb-1 font-mono text-sm font-semibold text-foreground">Channel quality — {period.label}</h2>
+          <p className="mb-3 text-[11px] text-muted">Which channel brings the best users, not just the most.</p>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] border-collapse text-left text-xs">
+              <thead>
+                <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted">
+                  <th className="py-1.5 pr-3 font-medium">Source</th>
+                  <th className="py-1.5 pr-3 font-medium text-right">Visitors</th>
+                  <th className="py-1.5 pr-3 font-medium text-right">Registration</th>
+                  <th className="py-1.5 pr-3 font-medium text-right">Research</th>
+                  <th className="py-1.5 pr-3 font-medium text-right">Project view</th>
+                  <th className="py-1.5 pr-3 font-medium text-right">Save</th>
+                  <th className="py-1.5 pr-3 font-medium text-right">Compare</th>
+                  <th className="py-1.5 pr-3 font-medium text-right">Contact</th>
+                  <th className="py-1.5 font-medium text-right">Return</th>
+                </tr>
+              </thead>
+              <tbody>
+                {channelQuality
+                  .slice()
+                  .sort((a, b) => b.sessions - a.sessions)
+                  .map((row) => (
+                    <tr key={row.source} className="border-b border-border last:border-b-0">
+                      <td className="py-1.5 pr-3 text-foreground">{SOURCE_LABEL[row.source] ?? row.source}</td>
+                      <td className="py-1.5 pr-3 text-right font-mono text-foreground">{row.sessions}</td>
+                      <td className="py-1.5 pr-3 text-right font-mono text-muted">{row.registrationRate ?? "--"}%</td>
+                      <td className="py-1.5 pr-3 text-right font-mono text-muted">{row.researchRate ?? "--"}%</td>
+                      <td className="py-1.5 pr-3 text-right font-mono text-muted">{row.projectViewRate ?? "--"}%</td>
+                      <td className="py-1.5 pr-3 text-right font-mono text-muted">{row.saveRate ?? "--"}%</td>
+                      <td className="py-1.5 pr-3 text-right font-mono text-muted">{row.compareRate ?? "--"}%</td>
+                      <td className="py-1.5 pr-3 text-right font-mono text-muted">{row.contactRate ?? "--"}%</td>
+                      <td className="py-1.5 text-right font-mono text-muted">{row.returnRate ?? "--"}%</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
+
+      {/* Part 6 — landing page analytics. No bounce/exit rate: not every page in this app fires a tracked event, so "no further action" can't be reliably told apart from "visited an untracked page and left satisfied." */}
+      {landingPages.length > 0 ? (
+        <section className="rounded-sm border border-border bg-surface p-4">
+          <h2 className="mb-1 font-mono text-sm font-semibold text-foreground">Landing pages — {period.label}</h2>
+          <p className="mb-3 text-[11px] text-muted">Where sessions with a known landing page first arrived (only covers sessions captured since this was added).</p>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[480px] border-collapse text-left text-xs">
+              <thead>
+                <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted">
+                  <th className="py-1.5 pr-3 font-medium">Landing page</th>
+                  <th className="py-1.5 pr-3 font-medium text-right">Visitors</th>
+                  <th className="py-1.5 pr-3 font-medium text-right">Registration</th>
+                  <th className="py-1.5 pr-3 font-medium text-right">Research</th>
+                  <th className="py-1.5 font-medium text-right">Contact</th>
+                </tr>
+              </thead>
+              <tbody>
+                {landingPages.map((row) => (
+                  <tr key={row.bucket} className="border-b border-border last:border-b-0">
+                    <td className="py-1.5 pr-3 text-foreground">{row.bucket}</td>
+                    <td className="py-1.5 pr-3 text-right font-mono text-foreground">{row.sessions}</td>
+                    <td className="py-1.5 pr-3 text-right font-mono text-muted">{row.registrationRate ?? "--"}%</td>
+                    <td className="py-1.5 pr-3 text-right font-mono text-muted">{row.researchRate ?? "--"}%</td>
+                    <td className="py-1.5 text-right font-mono text-muted">{row.contactRate ?? "--"}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
+
+      {/* Part 7 — search intent by source, reusing the existing Search Analytics query pattern. */}
+      {searchBySource.length > 0 ? (
+        <section className="rounded-sm border border-border bg-surface p-4">
+          <h2 className="mb-1 font-mono text-sm font-semibold text-foreground">What each source searches for — {period.label}</h2>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {searchBySource.map((row) => (
+              <div key={row.source}>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">{SOURCE_LABEL[row.source] ?? row.source}</p>
+                <ul className="mt-1 flex flex-col gap-0.5 text-xs text-foreground">
+                  {row.topQueries.map((q) => (
+                    <li key={q.query}>
+                      &quot;{q.query}&quot; <span className="text-muted">({q.count})</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* Parts 10/11 — device and coarse geography, from the same first-party session-level capture as source (no fingerprinting, no precise location). */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <section className="rounded-sm border border-border bg-surface p-4">
+          <h2 className="mb-1 font-mono text-sm font-semibold text-foreground">Devices — {period.label}</h2>
+          {deviceBreakdown.coveredSessions === 0 ? (
+            <p className="text-xs text-muted">Not enough data yet.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-muted">Device</p>
+                <ul className="mt-1 flex flex-col gap-0.5 text-xs text-foreground">
+                  {deviceBreakdown.byDevice.map((d) => (
+                    <li key={d.label} className="flex justify-between gap-3">
+                      <span>{d.label}</span>
+                      <span className="font-mono text-muted">{d.percent}%</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-muted">OS</p>
+                <ul className="mt-1 flex flex-col gap-0.5 text-xs text-foreground">
+                  {deviceBreakdown.byOs.map((d) => (
+                    <li key={d.label} className="flex justify-between gap-3">
+                      <span>{d.label}</span>
+                      <span className="font-mono text-muted">{d.percent}%</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-sm border border-border bg-surface p-4">
+          <h2 className="mb-1 font-mono text-sm font-semibold text-foreground">Geography — {period.label}</h2>
+          {geoBreakdown.coveredSessions === 0 ? (
+            <p className="text-xs text-muted">Not enough data yet.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-muted">Country</p>
+                <ul className="mt-1 flex flex-col gap-0.5 text-xs text-foreground">
+                  {geoBreakdown.byCountry.map((d) => (
+                    <li key={d.label} className="flex justify-between gap-3">
+                      <span>{d.label}</span>
+                      <span className="font-mono text-muted">{d.percent}%</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-muted">City</p>
+                <ul className="mt-1 flex flex-col gap-0.5 text-xs text-foreground">
+                  {geoBreakdown.byCity.map((d) => (
+                    <li key={d.label} className="flex justify-between gap-3">
+                      <span>{d.label}</span>
+                      <span className="font-mono text-muted">{d.percent}%</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
 
       <p className="text-[11px] text-muted">
         These numbers only include visitors who accepted analytics cookies on the consent banner — a decline means no

@@ -24,7 +24,7 @@ export default function CookieConsentBanner() {
   // page happened to be showing when they clicked Accept (Section 30/31).
   const sourceInfo = useRef<VisitorSourceInput>(
     typeof window === "undefined"
-      ? { referrerHost: null, utmSource: null, utmMedium: null, utmCampaign: null }
+      ? { referrerHost: null, utmSource: null, utmMedium: null, utmCampaign: null, utmContent: null, utmTerm: null, landingPath: null }
       : (() => {
           let referrerHost: string | null = null;
           try {
@@ -33,7 +33,15 @@ export default function CookieConsentBanner() {
             referrerHost = null;
           }
           const params = new URLSearchParams(window.location.search);
-          return { referrerHost, utmSource: params.get("utm_source"), utmMedium: params.get("utm_medium"), utmCampaign: params.get("utm_campaign") };
+          return {
+            referrerHost,
+            utmSource: params.get("utm_source"),
+            utmMedium: params.get("utm_medium"),
+            utmCampaign: params.get("utm_campaign"),
+            utmContent: params.get("utm_content"),
+            utmTerm: params.get("utm_term"),
+            landingPath: window.location.pathname,
+          };
         })()
   );
 
