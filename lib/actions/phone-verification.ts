@@ -25,7 +25,10 @@ export async function requestPhoneVerificationAction(): Promise<PhoneVerificatio
   const limit = checkRateLimit(`phone-verify-request:${session.userId}`, 5, 60 * 15);
   if (!limit.allowed) return { error: "Too many requests. Please try again in a few minutes." };
 
-  const user = await prisma.publicUser.findUnique({ where: { id: session.userId }, select: { phone: true, phoneVerifiedAt: true, email: true, name: true } });
+  const user = await prisma.publicUser.findUnique({
+    where: { id: session.userId },
+    select: { phone: true, phoneCountryCode: true, phoneVerifiedAt: true, email: true, name: true },
+  });
   if (!user?.phone) return { error: "Add a phone number above first, then request verification." };
   if (user.phoneVerifiedAt) return { success: "Your phone is already verified." };
 
@@ -34,7 +37,10 @@ export async function requestPhoneVerificationAction(): Promise<PhoneVerificatio
   await notifyAllAdmins({
     type: "ADMIN_PHONE_VERIFICATION_REQUESTED",
     title: "Phone verification requested",
-    body: `${user.name ?? user.email} requested verification for ${user.phone}.`,
+    // Full international number (country code + local number) -- an admin
+    // confirming this out-of-band needs the dial code to actually reach an
+    // NRI/international user, not just the local digits.
+    body: `${user.name ?? user.email} requested verification for ${user.phoneCountryCode} ${user.phone}.`,
     entityType: "PublicUser",
     entityId: session.userId,
   });

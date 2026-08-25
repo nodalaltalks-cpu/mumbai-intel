@@ -85,6 +85,30 @@ function focusAfterScroll(focusTarget: HTMLElement) {
 }
 
 /**
+ * Chromium suspends the rAF-driven animation behind `scrollIntoView({behavior:
+ * "smooth"})` while the page is not visible/foregrounded (`document.hidden`)
+ * -- the call returns immediately but the viewport never actually moves,
+ * silently. That's not just a background-tab edge case: a notification link
+ * opened in a new background tab, or a window that's minimized/occluded the
+ * instant the guided-scroll effect fires on page load, hits this exact same
+ * silent no-op (live-verified: scrollY stayed put for 3+ seconds under
+ * `document.visibilityState === "hidden"`, vs. an identical `behavior:
+ * "instant"` call landing correctly). This checks whether the smooth call
+ * actually made progress shortly after, and if not, re-issues it as an
+ * instant jump so the destination is still reached either way.
+ */
+function scrollIntoViewRobust(el: HTMLElement, block: ScrollLogicalPosition) {
+  const before = window.scrollY;
+  el.scrollIntoView({ behavior: "smooth", block });
+  window.setTimeout(() => {
+    if (window.scrollY !== before) return; // smooth animation is progressing (or already finished) -- nothing to do
+    const rect = el.getBoundingClientRect();
+    const stillOffscreen = rect.top < 0 || rect.bottom > window.innerHeight;
+    if (stillOffscreen) el.scrollIntoView({ behavior: "instant", block });
+  }, 400);
+}
+
+/**
  * Scrolls to a field. Prefers the field's own control (id="field-<key>",
  * set on the specific input/button that field actually saves through) so
  * guided mode lands on the right control even when a section has several
@@ -95,13 +119,13 @@ function focusAfterScroll(focusTarget: HTMLElement) {
 function scrollToAnchor(anchorId: string, fieldKey?: string) {
   const fieldEl = fieldKey ? document.getElementById(`field-${fieldKey}`) : null;
   if (fieldEl) {
-    fieldEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    scrollIntoViewRobust(fieldEl, "center");
     focusAfterScroll(fieldEl);
     return;
   }
   const el = document.getElementById(anchorId);
   if (!el) return;
-  el.scrollIntoView({ behavior: "smooth", block: "start" });
+  scrollIntoViewRobust(el, "start");
   const focusable = el.querySelector<HTMLElement>("input, select, textarea, button, [tabindex]");
   if (focusable) focusAfterScroll(focusable);
 }
@@ -291,6 +315,13 @@ export function ProfileCompletionProvider({
   // ref is reset the moment guideParam is next seen as anything other than "1".
   const searchParams = useSearchParams();
   const guideParam = searchParams.get("guide");
+  // Part 5 (notification deep-linking) -- read once alongside guideParam, same
+  // "handled" gating below, so a notification's actionUrl
+  // (/account?tab=profile&guide=1&section=budget&field=...) lands on the
+  // SPECIFIC section/field it was about instead of always the first
+  // incomplete field overall. Absent -> unchanged existing behavior.
+  const sectionParam = searchParams.get("section") as ProfileSectionKey | null;
+  const fieldParam = searchParams.get("field");
   const guideHandledRef = useRef(false);
   useEffect(() => {
     if (guideParam !== "1") {
@@ -302,6 +333,8 @@ export function ProfileCompletionProvider({
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       params.delete("guide");
+      params.delete("section");
+      params.delete("field");
       const nextSearch = params.toString();
       window.history.replaceState({}, "", window.location.pathname + (nextSearch ? `?${nextSearch}` : "") + window.location.hash);
     }
@@ -310,7 +343,13 @@ export function ProfileCompletionProvider({
     // timing used elsewhere in this same guided flow. Deliberately no cleanup
     // that cancels this timeout -- see comment above for why.
     window.setTimeout(() => {
-      if (sections.some((s) => !s.complete)) scrollToFirstIncomplete("next_action_card");
+      if (fieldParam) {
+        scrollToField(fieldParam, "notification_deep_link");
+      } else if (sectionParam) {
+        scrollToSection(sectionParam, "notification_deep_link");
+      } else if (sections.some((s) => !s.complete)) {
+        scrollToFirstIncomplete("next_action_card");
+      }
     }, 200);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run when the guide param itself flips to/from "1"
   }, [guideParam]);

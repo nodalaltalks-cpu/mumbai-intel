@@ -54,18 +54,29 @@ export const PROFILE_SECTION_LABELS: Record<ProfileSectionKey, string> = {
   family: "Family / Household",
 };
 
+/**
+ * Order here MUST match the real on-page section order (app/account/page.tsx's
+ * section ids: basic-profile -> budget -> property-type -> property-status ->
+ * purpose -> locations -> family) -- "Skip for now"/guided auto-advance
+ * (lib/profile-completion-client.tsx's scrollToNextAfter) walks this array in
+ * order to find "the next incomplete field after this one," so a mismatch
+ * here silently sends the user to the wrong section or skips sections
+ * entirely. This previously listed property/budget/location out of their
+ * real page order for exactly that reason -- fixed, verified against the
+ * page's own section ids rather than assumed.
+ */
 export const PROFILE_COMPLETION_SECTIONS: CompletionSection[] = [
   { key: "name", label: "Name", section: "personal", isComplete: (i) => Boolean(i.name) },
   { key: "phone", label: "Phone number", section: "personal", isComplete: (i) => Boolean(i.phone) },
   { key: "emailVerified", label: "Verified email", section: "personal", isComplete: (i) => i.emailVerified },
   { key: "dateOfBirth", label: "Date of birth", section: "personal", isComplete: (i) => Boolean(i.dateOfBirth) },
   { key: "gender", label: "Gender", section: "personal", isComplete: (i) => Boolean(i.gender) },
+  { key: "budget", label: "Budget range", section: "budget", isComplete: (i) => Boolean(i.preferredBudgetMinRupees) || Boolean(i.preferredBudgetMaxRupees) },
   { key: "category", label: "Property type", section: "property", isComplete: (i) => i.preferredCategories.length > 0 },
   { key: "configuration", label: "Configuration", section: "property", isComplete: (i) => i.preferredConfigurations.length > 0 },
-  { key: "budget", label: "Budget range", section: "budget", isComplete: (i) => Boolean(i.preferredBudgetMinRupees) || Boolean(i.preferredBudgetMaxRupees) },
-  { key: "localities", label: "Preferred locations", section: "location", isComplete: (i) => i.preferredLocalityIds.length > 0 || i.localityFreeText.length > 0 },
   { key: "readiness", label: "Property status", section: "status", isComplete: (i) => i.preferredReadiness.length > 0 },
   { key: "purpose", label: "Purpose", section: "purpose", isComplete: (i) => i.purposes.length > 0 },
+  { key: "localities", label: "Preferred locations", section: "location", isComplete: (i) => i.preferredLocalityIds.length > 0 || i.localityFreeText.length > 0 },
   { key: "familySize", label: "Family size", section: "family", isComplete: (i) => Boolean(i.familySize) },
   { key: "familyIncome", label: "Family income", section: "family", isComplete: (i) => Boolean(i.familyIncomeRange) },
 ];
@@ -96,7 +107,7 @@ export interface SectionProgress {
 
 /** Groups the same per-field checklist into per-section progress ("Budget: 1/1", "Family: 0/2") — the exact same PROFILE_COMPLETION_SECTIONS list, just aggregated, so section progress can never drift out of sync with the overall percent. */
 export function getSectionProgress(sections: CompletionSectionStatus[]): SectionProgress[] {
-  const order: ProfileSectionKey[] = ["personal", "property", "budget", "location", "status", "purpose", "family"];
+  const order: ProfileSectionKey[] = ["personal", "budget", "property", "status", "purpose", "location", "family"];
   return order.map((section) => {
     const inSection = sections.filter((s) => s.section === section);
     return {

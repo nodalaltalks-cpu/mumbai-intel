@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/auth/guard";
 import { hasPermission } from "@/lib/auth/permissions";
 import { getVisitorAcquisitionBreakdown, getVisitorOverview, getVisitorSourceBreakdown } from "@/lib/analytics/visitor-queries";
 import { ANALYTICS_PERIOD_COOKIE, computeChange, resolveAnalyticsPeriodFromRequest } from "@/lib/analytics/period";
+import { getActiveUserCounts, getTodayActiveCount } from "@/lib/platform-metrics/presence";
 import AnalyticsPeriodFilter from "@/app/admin/components/AnalyticsPeriodFilter";
 import AnalyticsStatCard from "@/app/admin/components/AnalyticsStatCard";
 
@@ -41,11 +42,16 @@ export default async function VisitorsAnalyticsPage({ searchParams }: { searchPa
   const cookieStore = await cookies();
   const period = resolveAnalyticsPeriodFromRequest(params, cookieStore.get(ANALYTICS_PERIOD_COOKIE)?.value);
 
-  const [overview, sourceBreakdown, acquisition] = await Promise.all([
+  const [overview, sourceBreakdown, acquisition, todayActiveCount] = await Promise.all([
     getVisitorOverview(period),
     getVisitorSourceBreakdown(period),
     getVisitorAcquisitionBreakdown(period),
+    getTodayActiveCount(),
   ]);
+  // Part 13 — "Live Now", reusing Platform Health's existing PresenceHeartbeat
+  // infrastructure (lib/platform-metrics/presence.ts) rather than a second
+  // presence system. Real-time, independent of the period filter above.
+  const liveNow = await getActiveUserCounts(todayActiveCount);
   const anonymousChange = computeChange(overview.anonymousVisitors, overview.previousAnonymousVisitors);
 
   const anonToRegisteredPercent =
@@ -70,6 +76,27 @@ export default async function VisitorsAnalyticsPage({ searchParams }: { searchPa
           <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} label={period.label} dateRangeLabel={period.dateRangeLabel} />
         </div>
       </div>
+
+      <section className="rounded-sm border border-border bg-surface p-4">
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="font-mono text-sm font-semibold text-foreground">Live now</h2>
+          <span className="inline-flex items-center gap-1 rounded-sm border border-positive/40 bg-positive/10 px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wide text-positive">
+            <span className="h-1 w-1 rounded-full bg-positive" aria-hidden="true" />
+            Real-time
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-muted">Active now</p>
+            <p className="font-mono text-xl font-semibold text-foreground">{liveNow.activeNow}</p>
+            <p className="text-[10px] text-muted">{liveNow.anonymousActiveNow} anonymous · {liveNow.registeredActiveNow} registered</p>
+          </div>
+          <div><p className="text-[10px] uppercase tracking-wide text-muted">Last 5 minutes</p><p className="font-mono text-xl font-semibold text-foreground">{liveNow.active5m}</p></div>
+          <div><p className="text-[10px] uppercase tracking-wide text-muted">Last 30 minutes</p><p className="font-mono text-xl font-semibold text-foreground">{liveNow.active30m}</p></div>
+          <div><p className="text-[10px] uppercase tracking-wide text-muted">Today (unique)</p><p className="font-mono text-xl font-semibold text-foreground">{liveNow.activeToday}</p></div>
+        </div>
+        <p className="mt-2 text-[10px] text-muted">Full per-page live activity (currently viewing a project vs. searching vs. viewing a brochure) isn&apos;t separately tracked yet — see Platform Health for the underlying presence signal this reuses.</p>
+      </section>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <AnalyticsStatCard

@@ -1489,7 +1489,15 @@ model PublicUser {
   id                       String       @id @default(cuid())
   name                     String?
   email                    String       @unique
-  phone                    String?      @unique
+  /// ITU-T international calling code with leading "+" (e.g. "+91", "+971") --
+  /// kept as a SEPARATE column from `phone` (which stores only the local
+  /// number, no country prefix) deliberately, so the two can never be
+  /// conflated the way a single free-text "+91 98765 43210" string would
+  /// invite. Defaults to India since every account predating this field is
+  /// an Indian user; NRI/international users choose their own via the
+  /// country-code selector (app/components/CountryCodeSelect.tsx).
+  phoneCountryCode         String       @default("+91")
+  phone                    String?
   /// Where the user themself is based -- distinct from any Project's city,
   /// and from preferences (what they're researching). Free text, optional.
   city                     String?
@@ -1557,6 +1565,13 @@ model PublicUser {
   contactEnquiries        ContactEnquiry[]
   presenceHeartbeat       PresenceHeartbeat?
 
+  /// Replaces the old single-column `phone @unique` -- a bare local number is
+  /// only meaningfully unique together with its country code (two different
+  /// people in two different countries can share the same local digits).
+  /// Postgres allows any number of rows where `phone` is NULL under a
+  /// composite unique index (NULL is never considered equal to NULL), so
+  /// this doesn't change behavior for the many users with no phone at all.
+  @@unique([phoneCountryCode, phone])
   @@index([provider])
   @@index([referredByUserId])
 }

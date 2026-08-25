@@ -149,19 +149,28 @@ export default function NotificationBell({
 
   return (
     <div ref={boxRef} className="relative">
+      {/* Part 6 — a larger, visually stronger bell (44px hit area, the standard
+          mobile-tap-target minimum) with a permanent subtle accent tint rather
+          than only-on-hover, so the affordance reads as "clickable" at a
+          glance, not just on interaction. Pure styling change — polling,
+          click tracking, and read/unread logic below are all untouched. */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-label="Notifications"
+        aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
         aria-expanded={open}
-        className="relative flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface-raised text-foreground transition-colors hover:border-accent hover:bg-accent/5"
+        className={`relative flex h-11 w-11 items-center justify-center rounded-full border transition-all ${
+          unreadCount > 0
+            ? "border-accent/50 bg-accent/10 text-accent hover:border-accent hover:bg-accent/15"
+            : "border-border bg-surface-raised text-foreground hover:border-accent hover:bg-accent/5"
+        }`}
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="h-5 w-5">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-6 w-6">
           <path d="M6 8a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 12 6 8Z" strokeLinecap="round" strokeLinejoin="round" />
           <path d="M9.5 17a2.5 2.5 0 0 0 5 0" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         {unreadCount > 0 ? (
-          <span className="absolute -right-1 -top-1 flex h-4.5 min-w-[1.125rem] items-center justify-center rounded-full border-2 border-background bg-accent px-1 text-[10px] font-bold leading-none text-white">
+          <span className="absolute -right-1 -top-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full border-2 border-background bg-accent px-1 text-[10px] font-bold leading-none text-white shadow-sm">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         ) : null}

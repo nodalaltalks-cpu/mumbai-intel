@@ -6,6 +6,8 @@ import AuthField from "@/app/components/auth/AuthField";
 import { AuthError } from "@/app/components/auth/AuthMessage";
 import PhoneVerificationCard from "./PhoneVerificationCard";
 import SkipFieldButton from "./SkipFieldButton";
+import CountryCodeSelect from "@/app/components/CountryCodeSelect";
+import { DEFAULT_COUNTRY_CODE } from "@/lib/country-codes";
 import { useProfileCompletion } from "@/lib/profile-completion-client";
 
 const GENDER_OPTIONS = [
@@ -37,6 +39,7 @@ function SaveStatus({ state }: { state: SaveState }) {
 export default function ProfileForm({
   name,
   phone,
+  phoneCountryCode,
   city,
   currentLocality,
   phoneVerified,
@@ -45,6 +48,7 @@ export default function ProfileForm({
 }: {
   name: string | null;
   phone: string | null;
+  phoneCountryCode: string;
   city: string | null;
   currentLocality: string | null;
   phoneVerified: boolean;
@@ -58,6 +62,7 @@ export default function ProfileForm({
   // requested mid-debounce.
   const [phoneValue, setPhoneValue] = useState(phone ?? "");
   const [savedPhone, setSavedPhone] = useState(phone ?? "");
+  const [phoneCountryCodeValue, setPhoneCountryCodeValue] = useState(phoneCountryCode || DEFAULT_COUNTRY_CODE);
   const [cityValue, setCityValue] = useState(city ?? "");
   const [localityValue, setLocalityValue] = useState(currentLocality ?? "");
   const [dobDay, setDobDay] = useState(dateOfBirth ? String(dateOfBirth.getUTCDate()) : "");
@@ -135,6 +140,12 @@ export default function ProfileForm({
     debouncedPersist("phone", (fd) => fd.set("phone", value), "phone", Boolean(value.trim()), () => setSavedPhone(value));
   }
 
+  /** A discrete selection, not typed text — saves immediately, no debounce. Completion never changes here: the phone SECTION is scored on the local number alone (PROFILE_COMPLETION_SECTIONS' "phone" predicate), so this always passes the field's current completion state through unchanged. */
+  function handleCountryCodeChange(dialCode: string) {
+    setPhoneCountryCodeValue(dialCode);
+    void persist("phoneCountryCode", (fd) => fd.set("phoneCountryCode", dialCode), "phone", Boolean(phoneValue.trim()));
+  }
+
   function handleCityChange(value: string) {
     setCityValue(value);
     debouncedPersist("city", (fd) => fd.set("city", value), "city", true); // city/locality aren't scored fields -- always "complete" once touched, just persisted
@@ -181,27 +192,31 @@ export default function ProfileForm({
             <SaveStatus state={saveStates.name ?? "idle"} />
           </div>
           <div className="flex flex-col gap-1">
-            <AuthField
-              id="field-phone"
-              ref={phoneInputRef}
-              label="Phone (optional)"
-              name="phone"
-              type="tel"
-              value={phoneValue}
-              onChange={(e) => handlePhoneChange(e.target.value)}
-              onBlur={() => {
-                // Flush immediately on blur rather than waiting out the debounce, so
-                // "typed but not saved" (PhoneVerificationCard's Case 2) closes as
-                // soon as the user leaves the field, not up to 700ms later.
-                const existing = debounceRefs.current.phone;
-                if (existing) clearTimeout(existing);
-                if (phoneValue.trim() !== savedPhone.trim()) {
-                  const value = phoneValue;
-                  void persist("phone", (fd) => fd.set("phone", value), "phone", Boolean(value.trim()), () => setSavedPhone(value));
-                }
-              }}
-              placeholder="+91 98765 43210"
-            />
+            <span className="text-sm font-medium text-foreground">Phone (optional)</span>
+            <div className="flex gap-1.5">
+              <CountryCodeSelect value={phoneCountryCodeValue} onChange={handleCountryCodeChange} />
+              <input
+                id="field-phone"
+                ref={phoneInputRef}
+                name="phone"
+                type="tel"
+                value={phoneValue}
+                onChange={(e) => handlePhoneChange(e.target.value)}
+                onBlur={() => {
+                  // Flush immediately on blur rather than waiting out the debounce, so
+                  // "typed but not saved" (PhoneVerificationCard's Case 2) closes as
+                  // soon as the user leaves the field, not up to 700ms later.
+                  const existing = debounceRefs.current.phone;
+                  if (existing) clearTimeout(existing);
+                  if (phoneValue.trim() !== savedPhone.trim()) {
+                    const value = phoneValue;
+                    void persist("phone", (fd) => fd.set("phone", value), "phone", Boolean(value.trim()), () => setSavedPhone(value));
+                  }
+                }}
+                placeholder="98765 43210"
+                className="w-full min-w-0 rounded-lg border border-border bg-surface px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted transition-shadow focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/10"
+              />
+            </div>
             <SaveStatus state={saveStates.phone ?? "idle"} />
           </div>
           <div className="flex flex-col gap-1">

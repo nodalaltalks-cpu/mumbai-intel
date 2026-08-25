@@ -182,6 +182,13 @@ export async function sendSectionReminderAction(publicUserId: string, section: P
   const preview = await previewSectionReminderAction(publicUserId, section);
   if ("error" in preview) return preview;
 
+  // Part 5 — deep-link to the specific section (and, when there's exactly
+  // one missing field, that exact field) rather than always the same
+  // generic "top of the guided flow" URL. Consumed by the `section`/`field`
+  // params in lib/profile-completion-client.tsx's guide-param effect.
+  const deepLinkParams = new URLSearchParams({ tab: "profile", guide: "1", section });
+  if (preview.missingFieldKeys.length === 1) deepLinkParams.set("field", preview.missingFieldKeys[0]);
+
   await createNotification({
     type: "PROFILE_COMPLETION_REMINDER",
     title: preview.title,
@@ -190,7 +197,7 @@ export async function sendSectionReminderAction(publicUserId: string, section: P
     entityType: "PublicUser",
     entityId: publicUserId,
     actionLabel: "Complete profile",
-    actionUrl: "/account?tab=profile&guide=1",
+    actionUrl: `/account?${deepLinkParams.toString()}`,
   });
 
   await recordResearchEvent("ADMIN_PROFILE_REMINDER_SENT", {

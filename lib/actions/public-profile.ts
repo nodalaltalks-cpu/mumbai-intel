@@ -7,14 +7,17 @@ import { getPublicSession } from "@/lib/public-auth/session";
 import { recalculatePublicUserCompletion, getMilestoneCrossed } from "@/lib/profile-completion";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
 import { friendlyPrismaError } from "@/lib/actions/errors";
+import { COUNTRY_CALLING_CODES } from "@/lib/country-codes";
 
 const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefined ? undefined : v);
 
 const GENDERS = ["MALE", "FEMALE", "PREFER_NOT_TO_SAY"] as const;
+const VALID_DIAL_CODES = new Set(COUNTRY_CALLING_CODES.map((c) => c.dialCode));
 
 const profileSchema = z.object({
   name: z.preprocess(emptyToUndefined, z.string().trim().min(1).optional()),
   phone: z.preprocess(emptyToUndefined, z.string().trim().min(6, "Enter a valid phone number").optional()),
+  phoneCountryCode: z.preprocess(emptyToUndefined, z.string().refine((v) => VALID_DIAL_CODES.has(v), "Unrecognized country code").optional()),
   city: z.preprocess(emptyToUndefined, z.string().trim().min(1).optional()),
   currentLocality: z.preprocess(emptyToUndefined, z.string().trim().min(1).optional()),
   dobDay: z.preprocess(emptyToUndefined, z.string().optional()),
@@ -78,6 +81,7 @@ export async function updatePublicProfileAction(_prevState: ProfileFormState, fo
   const parsed = profileSchema.safeParse({
     name: formData.get("name"),
     phone: formData.get("phone"),
+    phoneCountryCode: formData.get("phoneCountryCode"),
     city: formData.get("city"),
     currentLocality: formData.get("currentLocality"),
     dobDay: formData.get("dobDay"),
@@ -99,9 +103,11 @@ export async function updatePublicProfileAction(_prevState: ProfileFormState, fo
     select: { profileCompletionPercent: true, name: true, phone: true, dateOfBirth: true, gender: true },
   });
 
-  const data: { name?: string | null; phone?: string | null; city?: string | null; currentLocality?: string | null; dateOfBirth?: Date | null; gender?: string | null } = {};
+  const data: { name?: string | null; phone?: string | null; phoneCountryCode?: string; city?: string | null; currentLocality?: string | null; dateOfBirth?: Date | null; gender?: string | null } = {};
   if (formData.has("name")) data.name = parsed.data.name ?? null;
   if (formData.has("phone")) data.phone = parsed.data.phone ?? null;
+  // phoneCountryCode has no "empty" state -- it always defaults back to India rather than going null, so a selector can never be left in a blank/invalid state.
+  if (formData.has("phoneCountryCode")) data.phoneCountryCode = parsed.data.phoneCountryCode ?? "+91";
   if (formData.has("city")) data.city = parsed.data.city ?? null;
   if (formData.has("currentLocality")) data.currentLocality = parsed.data.currentLocality ?? null;
   if (dobValue !== undefined) data.dateOfBirth = dobValue;

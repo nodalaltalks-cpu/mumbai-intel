@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { requireSession } from "@/lib/auth/guard";
 import {
   getRecommendationOverview,
@@ -7,12 +8,21 @@ import {
   getRecommendationSurfaceBreakdown,
   getRecentRecommendationImpressions,
 } from "@/lib/recommendations/admin-queries";
+import {
+  getFounderRecommendationSummary,
+  getRecommendationFunnel,
+  getTopRecommendedAttributes,
+  getPersonalizationDepth,
+  getRecommendationDecisionInsights,
+} from "@/lib/recommendations/founder-intelligence";
 import { getRecommendationDataAudit } from "@/lib/recommendations/ml/audit";
 import { getMlDashboardData, checkModelPerformanceDrift } from "@/lib/recommendations/ml/admin-queries";
 import { SUFFICIENCY_THRESHOLDS } from "@/lib/recommendations/ml/train";
 import { formatDateTime } from "@/lib/format";
+import { ANALYTICS_PERIOD_COOKIE, resolveAnalyticsPeriodFromRequest } from "@/lib/analytics/period";
 import MlControls from "@/app/admin/components/MlControls";
 import ModelStatusButton from "@/app/admin/components/ModelStatusButton";
+import AnalyticsPeriodFilter from "@/app/admin/components/AnalyticsPeriodFilter";
 
 export const metadata: Metadata = { title: "Recommendation Intelligence — NoDalalTalks Admin" };
 export const dynamic = "force-dynamic";
@@ -27,56 +37,163 @@ const MODEL_STATUS_CLASS: Record<string, string> = {
   FAILED: "border-negative/40 bg-negative/10 text-negative",
 };
 
-export default async function RecommendationIntelligencePage() {
+const SUMMARY_STATUS: Record<string, { icon: string; label: string; class: string }> = {
+  HEALTHY: { icon: "🟢", label: "Healthy", class: "text-positive" },
+  NEEDS_ATTENTION: { icon: "🟡", label: "Needs attention", class: "text-warning" },
+  CRITICAL: { icon: "🔴", label: "Critical", class: "text-negative" },
+  NO_DATA: { icon: "⚪", label: "Not enough data yet", class: "text-muted" },
+};
+
+function FunnelStage({ label, count, ofPrevious }: { label: string; count: number; ofPrevious: number | null }) {
+  return (
+    <div className="flex flex-col items-center gap-0.5 rounded-sm border border-border bg-surface p-3 text-center">
+      <p className="text-[10px] uppercase tracking-wide text-muted">{label}</p>
+      <p className="font-mono text-lg font-semibold text-foreground">{count.toLocaleString("en-IN")}</p>
+      {ofPrevious !== null ? <p className="text-[10px] text-muted">{ofPrevious}% of previous</p> : null}
+    </div>
+  );
+}
+
+export default async function RecommendationIntelligencePage({ searchParams }: { searchParams: Promise<{ period?: string; from?: string; to?: string }> }) {
   // Same gating as the rest of Analytics (any signed-in admin-side role) —
   // not infrastructure-sensitive the way Platform Health is, so not
   // ADMIN-only for VIEWING. Mutating actions (train/mode/promote) are each
   // independently gated requireAdminSession() in lib/actions/recommendation-ml.ts.
   const session = await requireSession();
+  const params = await searchParams;
+  const cookieStore = await cookies();
+  const period = resolveAnalyticsPeriodFromRequest(params, cookieStore.get(ANALYTICS_PERIOD_COOKIE)?.value);
+  const daysBack = Math.max(1, Math.ceil((period.until.getTime() - period.since.getTime()) / 86_400_000));
 
-  const [overview, topProjects, surfaces, recent, dataAudit, ml, drift] = await Promise.all([
-    getRecommendationOverview(30),
-    getTopRecommendedProjects(30, 10),
-    getRecommendationSurfaceBreakdown(30),
+  const [overview, topProjects, surfaces, recent, dataAudit, ml, drift, founderSummary, funnel, attributes, personalization, insights] = await Promise.all([
+    getRecommendationOverview(daysBack),
+    getTopRecommendedProjects(daysBack, 10),
+    getRecommendationSurfaceBreakdown(daysBack),
     getRecentRecommendationImpressions(25),
     getRecommendationDataAudit(),
     getMlDashboardData(),
     checkModelPerformanceDrift(),
+    getFounderRecommendationSummary(period),
+    getRecommendationFunnel(period),
+    getTopRecommendedAttributes(period),
+    getPersonalizationDepth(period),
+    getRecommendationDecisionInsights(period),
   ]);
 
   const coveragePercent = overview.publishedProjectCount > 0 ? Math.round((overview.distinctProjectsRecommended / overview.publishedProjectCount) * 100) : 0;
+  const status = SUMMARY_STATUS[founderSummary.status];
+
+  const funnelPct = (n: number, of: number) => (of > 0 ? Math.round((n / of) * 100) : null);
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="font-mono text-lg font-semibold text-foreground">Recommendation Intelligence</h1>
-        <p className="text-xs text-muted">
-          Real aggregates over RECOMMENDATION_IMPRESSION/RECOMMENDATION_CLICKED events — Phase 1 (rules + weighted scoring, no ML yet). Last 30 days.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-mono text-lg font-semibold text-foreground">Recommendation Intelligence</h1>
+          <p className="text-xs text-muted">Real aggregates over RECOMMENDATION_IMPRESSION/RECOMMENDATION_CLICKED events — Phase 1 (rules + weighted scoring, no ML yet).</p>
+        </div>
+        <AnalyticsPeriodFilter current={period.key} currentFrom={params.from} currentTo={params.to} label={period.label} dateRangeLabel={period.dateRangeLabel} />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-sm border border-border bg-surface p-4">
-          <p className="text-[10px] uppercase tracking-wide text-muted">Recommendations served</p>
-          <p className="mt-1.5 font-mono text-2xl font-semibold text-foreground">{overview.totalImpressions.toLocaleString("en-IN")}</p>
+      {/* Part 16/17 — Founder Summary + "Is it working?", business outcomes before anything technical. */}
+      <section className="rounded-sm border border-border bg-surface p-4">
+        <div className="flex items-center gap-2">
+          <span className={`font-mono text-base font-semibold ${status.class}`}>{status.icon} Recommendation Engine: {status.label}</span>
         </div>
-        <div className="rounded-sm border border-border bg-surface p-4">
-          <p className="text-[10px] uppercase tracking-wide text-muted">Click-through rate</p>
-          <p className="mt-1.5 font-mono text-2xl font-semibold text-foreground">{overview.ctrPercent !== null ? `${overview.ctrPercent}%` : "--"}</p>
-          <p className="mt-1 text-[11px] text-muted">{overview.totalClicks.toLocaleString("en-IN")} click-throughs</p>
+        {founderSummary.status === "NO_DATA" ? (
+          <p className="mt-2 text-xs text-muted">Not enough data yet ({founderSummary.impressions} recommendations shown this period).</p>
+        ) : (
+          <>
+            <p className="mt-2 text-sm text-foreground">
+              Recommendations are generating <span className="font-semibold">{founderSummary.ctrPercent}% click rate</span>, <span className="font-semibold">{founderSummary.saveRatePercent}% save rate</span>, and <span className="font-semibold">{founderSummary.enquiryRatePercent}% contact rate</span>.
+              {founderSummary.ctrChange ? (
+                <span className={founderSummary.ctrChange.direction === "up" ? "text-positive" : founderSummary.ctrChange.direction === "down" ? "text-negative" : "text-muted"}>
+                  {" "}{founderSummary.ctrChange.direction === "up" ? "↑" : founderSummary.ctrChange.direction === "down" ? "↓" : "→"} {founderSummary.ctrChange.percent !== null ? `${Math.abs(founderSummary.ctrChange.percent)}%` : ""} vs previous period.
+                </span>
+              ) : null}
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div><p className="text-[10px] uppercase tracking-wide text-muted">Recommendations served</p><p className="font-mono text-xl text-foreground">{founderSummary.impressions.toLocaleString("en-IN")}</p></div>
+              <div><p className="text-[10px] uppercase tracking-wide text-muted">Click rate</p><p className="font-mono text-xl text-foreground">{founderSummary.ctrPercent}%</p></div>
+              <div><p className="text-[10px] uppercase tracking-wide text-muted">Save rate</p><p className="font-mono text-xl text-foreground">{founderSummary.saveRatePercent}%</p></div>
+              <div><p className="text-[10px] uppercase tracking-wide text-muted">Contact rate</p><p className="font-mono text-xl text-foreground">{founderSummary.enquiryRatePercent}%</p></div>
+            </div>
+          </>
+        )}
+      </section>
+
+      {/* Part 20 — the funnel. */}
+      <section>
+        <h2 className="mb-2 font-mono text-sm font-semibold text-foreground">Recommendation funnel</h2>
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+          <FunnelStage label="Shown" count={funnel.shown} ofPrevious={null} />
+          <FunnelStage label="Clicked" count={funnel.clicked} ofPrevious={funnelPct(funnel.clicked, funnel.shown)} />
+          <FunnelStage label="Viewed" count={funnel.viewed} ofPrevious={funnelPct(funnel.viewed, funnel.clicked)} />
+          <FunnelStage label="Saved" count={funnel.saved} ofPrevious={funnelPct(funnel.saved, funnel.viewed)} />
+          <FunnelStage label="Compared" count={funnel.compared} ofPrevious={funnelPct(funnel.compared, funnel.saved)} />
+          <FunnelStage label="Contacted" count={funnel.contacted} ofPrevious={funnelPct(funnel.contacted, funnel.compared)} />
         </div>
-        <div className="rounded-sm border border-border bg-surface p-4">
-          <p className="text-[10px] uppercase tracking-wide text-muted">Coverage</p>
-          <p className="mt-1.5 font-mono text-2xl font-semibold text-foreground">{coveragePercent}%</p>
-          <p className="mt-1 text-[11px] text-muted">{overview.distinctProjectsRecommended} of {overview.publishedProjectCount} published projects shown</p>
+      </section>
+
+      {/* Part 18 — what's actually being recommended. */}
+      <section className="rounded-sm border border-border bg-surface p-4">
+        <h2 className="mb-3 font-mono text-sm font-semibold text-foreground">What users are being recommended</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-muted">Most recommended localities</p>
+            {attributes.topLocalities.length === 0 ? <p className="mt-1 text-xs text-muted">No data yet.</p> : (
+              <ul className="mt-1 flex flex-col gap-0.5 text-xs text-foreground">{attributes.topLocalities.map((l) => <li key={l.name}>{l.name}</li>)}</ul>
+            )}
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-muted">Most recommended configurations</p>
+            {attributes.topConfigurations.length === 0 ? <p className="mt-1 text-xs text-muted">No data yet.</p> : (
+              <ul className="mt-1 flex flex-col gap-0.5 text-xs text-foreground">{attributes.topConfigurations.map((c) => <li key={c.label}>{c.label}</li>)}</ul>
+            )}
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-muted">Most recommended price ranges</p>
+            {attributes.topPriceBandRupeesCr.length === 0 ? <p className="mt-1 text-xs text-muted">No data yet.</p> : (
+              <ul className="mt-1 flex flex-col gap-0.5 text-xs text-foreground">{attributes.topPriceBandRupeesCr.map((p) => <li key={p.band}>{p.band}</li>)}</ul>
+            )}
+          </div>
         </div>
-        <div className="rounded-sm border border-border bg-surface p-4">
-          <p className="text-[10px] uppercase tracking-wide text-muted">Recommendation health</p>
-          <p className={`mt-1.5 font-mono text-lg font-semibold ${overview.totalImpressions === 0 ? "text-muted" : overview.ctrPercent !== null && overview.ctrPercent < 1 ? "text-warning" : "text-positive"}`}>
-            {overview.totalImpressions === 0 ? "No data yet" : overview.ctrPercent !== null && overview.ctrPercent < 1 ? "NEEDS ATTENTION" : "HEALTHY"}
-          </p>
-        </div>
-      </div>
+      </section>
+
+      {/* Part 24/25 — personalization depth + coverage. */}
+      <section className="rounded-sm border border-border bg-surface p-4">
+        <h2 className="mb-1 font-mono text-sm font-semibold text-foreground">Personalization level</h2>
+        {personalization.dominantLevel === null ? (
+          <p className="text-xs text-muted">No data yet.</p>
+        ) : (
+          <>
+            <p className="text-sm text-foreground">
+              Most users are currently receiving{" "}
+              <span className="font-semibold">
+                {{ COLD_START: "cold-start", PROFILE_BASED: "profile-based", PROFILE_AND_BEHAVIOR: "profile + behaviour", SIMILARITY_BASED: "similarity-based", EXPLORATION: "exploration" }[personalization.dominantLevel]}
+              </span>{" "}
+              recommendations.
+            </p>
+            <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4 text-xs">
+              <div><p className="text-muted">Cold start</p><p className="font-mono text-foreground">{personalization.coldStartPercent}%</p></div>
+              <div><p className="text-muted">Profile-based</p><p className="font-mono text-foreground">{personalization.profileBasedPercent}%</p></div>
+              <div><p className="text-muted">Behaviour/similarity</p><p className="font-mono text-foreground">{personalization.behaviorBasedPercent}%</p></div>
+              <div><p className="text-muted">Exploration</p><p className="font-mono text-foreground">{personalization.explorationPercent}%</p></div>
+            </div>
+          </>
+        )}
+        <p className="mt-2 text-[11px] text-muted">Coverage: {overview.distinctProjectsRecommended} of {overview.publishedProjectCount} published projects ({coveragePercent}%) have been recommended at least once this period.</p>
+      </section>
+
+      {/* Part 31 — Decision Center. */}
+      <section className="rounded-sm border border-accent/30 bg-accent/5 p-4">
+        <h2 className="mb-2 font-mono text-sm font-semibold text-foreground">What should I do?</h2>
+        <ul className="flex flex-col gap-1.5 text-xs text-foreground">
+          {insights.map((insight, i) => (
+            <li key={i} className="flex gap-2"><span className="text-accent">→</span>{insight.text}</li>
+          ))}
+        </ul>
+      </section>
 
       {drift?.degraded ? (
         <div className="rounded-sm border border-negative/50 bg-negative/10 p-3">
@@ -96,7 +213,7 @@ export default async function RecommendationIntelligencePage() {
                 {ml.currentModel.status}
               </span>
             ) : (
-              <p className="mt-1 text-[11px] text-muted">No model has been trained yet.</p>
+              <p className="mt-1 text-[11px] text-muted">⚪ Not active — reason: {dataAudit.recommendation.impressions < SUFFICIENCY_THRESHOLDS.minLabeledExamples ? "insufficient training data" : "no model trained yet"}.</p>
             )}
           </div>
           <div className="rounded-sm border border-border bg-surface p-4">
@@ -109,7 +226,7 @@ export default async function RecommendationIntelligencePage() {
           <div className="rounded-sm border border-border bg-surface p-4">
             <p className="text-[10px] uppercase tracking-wide text-muted">Retraining</p>
             <p className="mt-1.5 font-mono text-lg font-semibold text-foreground">{ml.retraining.needed ? "Recommended" : "Not yet needed"}</p>
-            <p className="mt-1 text-[11px] text-muted">{ml.retraining.newInteractionsSinceLastTrain} new impressions since last training run</p>
+            <p className="mt-1 text-[11px] text-muted">{ml.retraining.newInteractionsSinceLastTrain} new impressions since last training run (need {SUFFICIENCY_THRESHOLDS.minLabeledExamples})</p>
           </div>
         </div>
       </section>
@@ -250,7 +367,7 @@ export default async function RecommendationIntelligencePage() {
 
       <section className="rounded-sm border border-border bg-surface p-4">
         <h2 className="mb-1 font-mono text-sm font-semibold text-foreground">Recent recommendations (why was this shown?)</h2>
-        <p className="mb-3 text-[11px] text-muted">Part 30 debug view — the last 25 impressions with their scoring reasons. A full per-user drill-down is a Phase 3 follow-up (see final report).</p>
+        <p className="mb-3 text-[11px] text-muted">The last 25 impressions with their scoring reasons. A full per-user drill-down is a future follow-up (see final report).</p>
         {recent.length === 0 ? (
           <p className="text-xs text-muted">No impressions recorded yet.</p>
         ) : (
