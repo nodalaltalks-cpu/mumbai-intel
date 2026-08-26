@@ -1489,6 +1489,14 @@ model PublicUser {
   id                       String       @id @default(cuid())
   name                     String?
   email                    String       @unique
+  /// Gmail dot/plus-insensitive canonical form of `email` (see
+  /// lib/email-canonicalize.ts) -- equals `email` for every non-Gmail domain.
+  /// Enforced unique so "john.doe@gmail.com" and "johndoe@gmail.com" can't
+  /// both register (same inbox, would otherwise look like two accounts).
+  /// Nullable only because it's computed at write time, never in a query --
+  /// every signup/link path sets it, so in practice no row is missing it for
+  /// long after this column was introduced.
+  canonicalEmail           String?      @unique
   /// ITU-T international calling code with leading "+" (e.g. "+91", "+971") --
   /// kept as a SEPARATE column from `phone` (which stores only the local
   /// number, no country prefix) deliberately, so the two can never be

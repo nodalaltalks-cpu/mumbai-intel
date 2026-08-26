@@ -1,6 +1,15 @@
-export function AuthError({ message }: { message?: string }) {
+export function AuthError({ message, actionHref, actionLabel }: { message?: string; actionHref?: string; actionLabel?: string }) {
   if (!message) return null;
-  return <div className="rounded-lg border border-negative/20 bg-negative/10 px-3.5 py-2.5 text-sm text-negative">{message}</div>;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-negative/20 bg-negative/10 px-3.5 py-2.5 text-sm text-negative">
+      <span>{message}</span>
+      {actionHref && actionLabel ? (
+        <a href={actionHref} className="whitespace-nowrap font-medium underline underline-offset-2">
+          {actionLabel}
+        </a>
+      ) : null}
+    </div>
+  );
 }
 
 export function AuthSuccess({ message }: { message?: string }) {

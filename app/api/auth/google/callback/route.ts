@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { canonicalizeEmail } from "@/lib/email-canonicalize";
 import { setSessionCookie } from "@/lib/auth/session";
 import { setPublicSessionCookie } from "@/lib/public-auth/session";
 import { exchangeGoogleCode, fetchGoogleUserInfo } from "@/lib/public-auth/google";
@@ -65,8 +66,16 @@ export async function GET(request: NextRequest) {
       user = await prisma.publicUser.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
     } else {
       // A CREDENTIALS account may already own this email — link Google to it
-      // rather than erroring, so the same person can sign in either way.
-      const existingByEmail = await prisma.publicUser.findUnique({ where: { email: profile.email } });
+      // rather than erroring, so the same person can sign in either way. Matched
+      // on canonicalEmail too (lib/email-canonicalize.ts): Google can return the
+      // account's canonical Gmail address (e.g. "johndoe@gmail.com") even when the
+      // user originally typed a dotted/plus-tagged variant at credentials-signup
+      // ("john.doe@gmail.com") -- an exact-email match alone would miss that and
+      // silently create a second account for the same inbox.
+      const googleCanonicalEmail = canonicalizeEmail(profile.email);
+      const existingByEmail = await prisma.publicUser.findFirst({
+        where: { OR: [{ email: profile.email }, { canonicalEmail: googleCanonicalEmail }] },
+      });
       if (existingByEmail && !profile.email_verified) {
         // Same guard the admin branch above already applies: linking by email
         // alone, without Google itself having verified that email, would let
@@ -95,6 +104,9 @@ export async function GET(request: NextRequest) {
             googleId: profile.sub,
             image: existingByEmail.image ?? profile.picture,
             emailVerifiedAt: existingByEmail.emailVerifiedAt ?? (profile.email_verified ? new Date() : null),
+            // Defensively backfilled here too, in case this row somehow predates
+            // the canonicalEmail column and was never backfilled.
+            canonicalEmail: existingByEmail.canonicalEmail ?? canonicalizeEmail(existingByEmail.email),
             lastLoginAt: new Date(),
           },
         });
@@ -106,20 +118,30 @@ export async function GET(request: NextRequest) {
           generateUniqueReferralCode(),
           resolveReferral(request.cookies.get(REFERRAL_COOKIE_NAME)?.value),
         ]);
-        user = await prisma.publicUser.create({
-          data: {
-            name: profile.name,
-            email: profile.email,
-            googleId: profile.sub,
-            image: profile.picture,
-            provider: "GOOGLE",
-            emailVerifiedAt: profile.email_verified ? new Date() : null,
-            lastLoginAt: new Date(),
-            referralCode,
-            referredByUserId: referral?.referredByUserId ?? null,
-            referralSource: referral?.referralSource ?? null,
-          },
-        });
+        // try/catch: defense-in-depth against the race window between the
+        // existingByEmail check above and this create (same reasoning as
+        // signupAction's credentials path) -- an unhandled unique-constraint
+        // violation here would otherwise crash the whole OAuth callback.
+        try {
+          user = await prisma.publicUser.create({
+            data: {
+              name: profile.name,
+              email: profile.email,
+              canonicalEmail: googleCanonicalEmail,
+              googleId: profile.sub,
+              image: profile.picture,
+              provider: "GOOGLE",
+              emailVerifiedAt: profile.email_verified ? new Date() : null,
+              lastLoginAt: new Date(),
+              referralCode,
+              referredByUserId: referral?.referredByUserId ?? null,
+              referralSource: referral?.referralSource ?? null,
+            },
+          });
+        } catch (error) {
+          console.error("[google-oauth] duplicate account race on create:", error);
+          return failure(origin, "google_auth_failed");
+        }
         authEvent = "SIGNUP_COMPLETED";
       }
     }

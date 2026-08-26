@@ -5,6 +5,8 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { canonicalizeEmail } from "@/lib/email-canonicalize";
+import { friendlyPrismaError } from "@/lib/actions/errors";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { setSessionCookie } from "@/lib/auth/session";
 import { clearPublicSessionCookie, setPublicSessionCookie } from "@/lib/public-auth/session";
@@ -40,7 +42,14 @@ const signupSchema = z.object({
 export interface PublicAuthState {
   error?: string;
   success?: string;
+  /** Optional inline link shown next to `error` -- e.g. "Log in instead" when the
+   *  error is a duplicate-account collision (mirrors how Google/Facebook/LinkedIn
+   *  redirect a signup attempt on an existing email straight to sign-in). */
+  errorActionHref?: string;
+  errorActionLabel?: string;
 }
+
+const DUPLICATE_ACCOUNT_ERROR = "An account with this email already exists.";
 
 export async function signupAction(_prevState: PublicAuthState, formData: FormData): Promise<PublicAuthState> {
   const ip = await getClientIp();
@@ -54,9 +63,14 @@ export async function signupAction(_prevState: PublicAuthState, formData: FormDa
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const { name, email, password } = parsed.data;
+  // Gmail ignores dots/plus-tags -- "john.doe@gmail.com" and "johndoe@gmail.com"
+  // are the same inbox, so checking (and later creating with) the canonical form
+  // stops someone registering what looks like a second account with the exact
+  // same email (see lib/email-canonicalize.ts).
+  const canonicalEmail = canonicalizeEmail(email);
 
-  const existing = await prisma.publicUser.findUnique({ where: { email } });
-  if (existing) return { error: "An account with this email already exists." };
+  const existing = await prisma.publicUser.findFirst({ where: { OR: [{ email }, { canonicalEmail }] } });
+  if (existing) return { error: DUPLICATE_ACCOUNT_ERROR, errorActionHref: "/login", errorActionLabel: "Log in instead" };
 
   // Every account gets its own shareable referralCode regardless of signup
   // path (see the Google callback for the other one) -- and, if this visit
@@ -67,18 +81,28 @@ export async function signupAction(_prevState: PublicAuthState, formData: FormDa
   const referral = await resolveReferral(cookieStore.get(REFERRAL_COOKIE_NAME)?.value);
 
   const passwordHash = await hashPassword(password);
-  const user = await prisma.publicUser.create({
-    data: {
-      name,
-      email,
-      passwordHash,
-      provider: "CREDENTIALS",
-      lastLoginAt: new Date(),
-      referralCode,
-      referredByUserId: referral?.referredByUserId ?? null,
-      referralSource: referral?.referralSource ?? null,
-    },
-  });
+  let user;
+  try {
+    user = await prisma.publicUser.create({
+      data: {
+        name,
+        email,
+        canonicalEmail,
+        passwordHash,
+        provider: "CREDENTIALS",
+        lastLoginAt: new Date(),
+        referralCode,
+        referredByUserId: referral?.referredByUserId ?? null,
+        referralSource: referral?.referralSource ?? null,
+      },
+    });
+  } catch (error) {
+    // Defense-in-depth against the race window between the findFirst check above
+    // and this create -- two concurrent signups for the same email/canonical form
+    // would otherwise surface as an unhandled 500 instead of the same friendly
+    // duplicate-account message everyone else gets.
+    return { error: friendlyPrismaError(error), errorActionHref: "/login", errorActionLabel: "Log in instead" };
+  }
 
   await setPublicSessionCookie({ userId: user.id, email: user.email, name: user.name, image: user.image });
   await recordResearchEvent("SIGNUP_COMPLETED", {

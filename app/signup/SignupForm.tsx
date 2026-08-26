@@ -18,7 +18,7 @@ export default function SignupForm({ next }: { next?: string }) {
       <AuthDivider />
 
       <form action={formAction} className="flex flex-col gap-4">
-        <AuthError message={state.error} />
+        <AuthError message={state.error} actionHref={state.errorActionHref} actionLabel={state.errorActionLabel} />
         {next ? <input type="hidden" name="next" value={next} /> : null}
         <AuthField label="Full name" name="name" type="text" required autoComplete="name" placeholder="Priya Sharma" />
         <AuthField label="Email" name="email" type="email" required autoComplete="email" placeholder="you@example.com" />

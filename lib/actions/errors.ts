@@ -29,6 +29,10 @@ export async function updateManyByRow<T>(ids: string[], updateOne: (id: string) 
 const KNOWN_CONSTRAINT_MESSAGES: Record<string, string> = {
   PublicUser_phoneCountryCode_phone_key: "This phone number is already registered to another account.",
   PublicUser_email_key: "This email address is already registered.",
+  // Gmail dot/plus-insensitive collision (lib/email-canonicalize.ts) -- from the
+  // user's point of view this is the exact same situation as PublicUser_email_key,
+  // so it gets the identical message rather than leaking the canonicalization detail.
+  PublicUser_canonicalEmail_key: "This email address is already registered.",
   PublicUser_referralCode_key: "That referral code is already in use.",
 };
 
