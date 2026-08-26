@@ -36,6 +36,21 @@ function SaveStatus({ state }: { state: SaveState }) {
   return null;
 }
 
+/**
+ * "Saved" must never be shown next to a field that's currently empty — an
+ * empty field with a checkmark reads as "there's a saved value here" when
+ * there isn't one, whether that's because nothing was ever entered, or
+ * because the user just cleared a previously-saved value (the persisted
+ * state after that clear genuinely IS "saved", it's just saved-as-empty,
+ * which isn't a state worth celebrating with a checkmark). "saving" and
+ * "error" still surface regardless of emptiness -- both are actionable
+ * feedback about a real in-flight/failed request, not a claim about content.
+ */
+function effectiveSaveState(value: string, state: SaveState): SaveState {
+  if (state === "saved" && value.trim() === "") return "idle";
+  return state;
+}
+
 export default function ProfileForm({
   name,
   phone,
@@ -75,6 +90,22 @@ export default function ProfileForm({
   const { setFieldComplete, isFieldComplete, scrollToNextAfter } = useProfileCompletion();
 
   const debounceRefs = useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
+  // The value currently being sent to the server for a given fieldKey (set the
+  // instant a request starts, cleared once it settles) — lets a second trigger
+  // for the SAME field (e.g. phone's debounce firing, then blur firing a
+  // fraction later) recognize "this exact value is already in flight" instead
+  // of firing a redundant duplicate request. See handlePhoneChange/onBlur.
+  const inFlightValueRef = useRef<Record<string, string | undefined>>({});
+  // Per-field request sequence — every persist() call for a fieldKey gets the
+  // next number, and only the response matching the CURRENT (latest) number
+  // is allowed to update saveStates/formError. Without this, two requests for
+  // the same field (the debounce-fired save and a blur-fired duplicate racing
+  // it, or simply two edits in quick succession) can resolve out of order,
+  // and a stale/duplicate response arriving after a newer one already
+  // succeeded can clobber a correct "saved" state back to a spurious "error"
+  // -- this was the actual root cause of phone autosave intermittently
+  // showing "Couldn't save" for a genuinely valid, already-persisted number.
+  const requestSeqRef = useRef<Record<string, number>>({});
 
   /**
    * The one save primitive every field below calls into — a per-field
@@ -92,10 +123,14 @@ export default function ProfileForm({
     onSuccess?: () => void
   ) {
     const wasComplete = isFieldComplete(completionKey);
+    const seq = (requestSeqRef.current[fieldKey] ?? 0) + 1;
+    requestSeqRef.current[fieldKey] = seq;
+    const isCurrent = () => requestSeqRef.current[fieldKey] === seq;
     setSaveStates((prev) => ({ ...prev, [fieldKey]: "saving" }));
     const fd = new FormData();
     build(fd);
     const result = await updatePublicProfileAction({}, fd);
+    if (!isCurrent()) return; // a newer request for this field has since superseded this one -- this response is stale, ignore it
     if (result.error) {
       setSaveStates((prev) => ({ ...prev, [fieldKey]: "error" }));
       setFormError(result.error);
@@ -135,9 +170,19 @@ export default function ProfileForm({
     debouncedPersist("name", (fd) => fd.set("name", value), "name", Boolean(value.trim()));
   }
 
+  /** The single place a phone save actually fires (debounce timeout or blur-flush both funnel through this) — marks inFlightValueRef the instant the request starts, so the OTHER trigger can recognize this exact value is already being saved and skip a redundant duplicate. */
+  function firePhoneSave(value: string) {
+    inFlightValueRef.current.phone = value;
+    void persist("phone", (fd) => fd.set("phone", value), "phone", Boolean(value.trim()), () => setSavedPhone(value)).finally(() => {
+      if (inFlightValueRef.current.phone === value) inFlightValueRef.current.phone = undefined;
+    });
+  }
+
   function handlePhoneChange(value: string) {
     setPhoneValue(value);
-    debouncedPersist("phone", (fd) => fd.set("phone", value), "phone", Boolean(value.trim()), () => setSavedPhone(value));
+    const existing = debounceRefs.current.phone;
+    if (existing) clearTimeout(existing);
+    debounceRefs.current.phone = setTimeout(() => firePhoneSave(value), 700);
   }
 
   /** A discrete selection, not typed text — saves immediately, no debounce. Completion never changes here: the phone SECTION is scored on the local number alone (PROFILE_COMPLETION_SECTIONS' "phone" predicate), so this always passes the field's current completion state through unchanged. */
@@ -189,7 +234,7 @@ export default function ProfileForm({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-1">
             <AuthField id="field-name" label="Name" name="name" value={nameValue} onChange={(e) => handleNameChange(e.target.value)} placeholder="Your name" />
-            <SaveStatus state={saveStates.name ?? "idle"} />
+            <SaveStatus state={effectiveSaveState(nameValue, saveStates.name ?? "idle")} />
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-sm font-medium text-foreground">Phone (optional)</span>
@@ -208,20 +253,26 @@ export default function ProfileForm({
                   // soon as the user leaves the field, not up to 700ms later.
                   const existing = debounceRefs.current.phone;
                   if (existing) clearTimeout(existing);
-                  if (phoneValue.trim() !== savedPhone.trim()) {
-                    const value = phoneValue;
-                    void persist("phone", (fd) => fd.set("phone", value), "phone", Boolean(value.trim()), () => setSavedPhone(value));
-                  }
+                  const trimmed = phoneValue.trim();
+                  if (trimmed === savedPhone.trim()) return; // already persisted
+                  // The debounce timer may have already fired (or another blur already
+                  // fired) for this exact value a moment ago and is still in flight --
+                  // firing a second identical request here would race it and risk a
+                  // later-arriving duplicate's failure clobbering the first one's
+                  // success in the UI (the actual root cause of the phone "Couldn't
+                  // save" bug). Skip; that in-flight request will settle savedPhone.
+                  if (inFlightValueRef.current.phone?.trim() === trimmed) return;
+                  firePhoneSave(phoneValue);
                 }}
                 placeholder="98765 43210"
                 className="w-full min-w-0 rounded-lg border border-border bg-surface px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted transition-shadow focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/10"
               />
             </div>
-            <SaveStatus state={saveStates.phone ?? "idle"} />
+            <SaveStatus state={effectiveSaveState(phoneValue, saveStates.phone ?? "idle")} />
           </div>
           <div className="flex flex-col gap-1">
             <AuthField label="City (optional)" name="city" value={cityValue} onChange={(e) => handleCityChange(e.target.value)} placeholder="Mumbai" />
-            <SaveStatus state={saveStates.city ?? "idle"} />
+            <SaveStatus state={effectiveSaveState(cityValue, saveStates.city ?? "idle")} />
           </div>
           <div className="flex flex-col gap-1">
             <AuthField
@@ -231,7 +282,7 @@ export default function ProfileForm({
               onChange={(e) => handleLocalityChange(e.target.value)}
               placeholder="Where you live now"
             />
-            <SaveStatus state={saveStates.currentLocality ?? "idle"} />
+            <SaveStatus state={effectiveSaveState(localityValue, saveStates.currentLocality ?? "idle")} />
           </div>
         </div>
 
@@ -314,7 +365,7 @@ export default function ProfileForm({
                 {g.label}
               </button>
             ))}
-            <SaveStatus state={saveStates.gender ?? "idle"} />
+            <SaveStatus state={effectiveSaveState(genderValue, saveStates.gender ?? "idle")} />
           </div>
           <SkipFieldButton fieldKey="gender" />
         </div>

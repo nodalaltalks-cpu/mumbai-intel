@@ -95,12 +95,17 @@ function focusAfterScroll(focusTarget: HTMLElement) {
  * `document.visibilityState === "hidden"`, vs. an identical `behavior:
  * "instant"` call landing correctly). This checks whether the smooth call
  * actually made progress shortly after, and if not, re-issues it as an
- * instant jump so the destination is still reached either way.
+ * instant jump so the destination is still reached either way. Guarded by
+ * `token` against `activeNavigationToken` (see below) so this delayed retry
+ * silently no-ops if a NEWER navigation has since started -- otherwise this
+ * exact mechanism, meant to fix one jump, could itself cause a different one
+ * by re-scrolling to a now-stale destination.
  */
-function scrollIntoViewRobust(el: HTMLElement, block: ScrollLogicalPosition) {
+function scrollIntoViewRobust(el: HTMLElement, block: ScrollLogicalPosition, token: number) {
   const before = window.scrollY;
   el.scrollIntoView({ behavior: "smooth", block });
   window.setTimeout(() => {
+    if (token !== activeNavigationToken) return; // superseded by a newer navigation while we were waiting
     if (window.scrollY !== before) return; // smooth animation is progressing (or already finished) -- nothing to do
     const rect = el.getBoundingClientRect();
     const stillOffscreen = rect.top < 0 || rect.bottom > window.innerHeight;
@@ -109,25 +114,102 @@ function scrollIntoViewRobust(el: HTMLElement, block: ScrollLogicalPosition) {
 }
 
 /**
- * Scrolls to a field. Prefers the field's own control (id="field-<key>",
- * set on the specific input/button that field actually saves through) so
- * guided mode lands on the right control even when a section has several
- * fields (e.g. Personal Details has Verify-email/Name/Phone, Property Type
- * has category/configuration) — falling back to "first focusable in the
- * section" only for fields that don't tag a specific control yet.
+ * Monotonic token identifying the current in-flight guided-navigation
+ * request. Every entry point (scrollToFirstIncomplete, scrollToSection,
+ * scrollToField, scrollToNextAfter, the notification-deep-link effect)
+ * mints a new token via `scrollToAnchor` before doing anything async --
+ * anything checking against a stale token silently abandons its work
+ * instead of scrolling. This is what "avoid multiple competing scroll
+ * operations" (Part 7) actually means in practice: not just avoiding two
+ * scrollIntoView calls back to back, but making sure a slow, still-pending
+ * older request (waiting on the DOM/page to settle) can never fire AFTER a
+ * newer, more relevant one already has -- which is what produced the
+ * "jumps up/down before reaching destination" symptom: two different
+ * navigation requests both eventually scrolling, to two different places,
+ * moments apart.
  */
-function scrollToAnchor(anchorId: string, fieldKey?: string) {
-  const fieldEl = fieldKey ? document.getElementById(`field-${fieldKey}`) : null;
-  if (fieldEl) {
-    scrollIntoViewRobust(fieldEl, "center");
-    focusAfterScroll(fieldEl);
-    return;
+let activeNavigationToken = 0;
+
+/**
+ * Polls (via requestAnimationFrame, not a guessed setTimeout delay) until
+ * `get` returns an element, then resolves one frame later so that element's
+ * own layout has settled. Resolves `null` if superseded by a newer
+ * navigation, or if the element never appears within `timeoutMs` (a safety
+ * ceiling, not the mechanism itself -- every profile section is already
+ * present in the initial server-rendered HTML, so this should resolve on
+ * the very first frame in practice; the ceiling only protects against a
+ * genuinely missing id).
+ */
+function waitForElement(get: () => HTMLElement | null, token: number, timeoutMs = 4000): Promise<HTMLElement | null> {
+  return new Promise((resolve) => {
+    const deadline = performance.now() + timeoutMs;
+    function tick() {
+      if (token !== activeNavigationToken) return resolve(null);
+      const el = get();
+      if (el) return requestAnimationFrame(() => resolve(el));
+      if (performance.now() >= deadline) return resolve(null);
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  });
+}
+
+/**
+ * Waits for the document's own resources (images in particular -- the
+ * user's avatar, referral-card icons) to finish loading, so the scroll
+ * destination is measured against a layout that's actually done shifting,
+ * not a moment before an image loads in and pushes everything below it
+ * down. Deterministic (driven by `document.readyState`, not a guessed
+ * delay) with a bounded ceiling so a single slow/failed resource can't hang
+ * navigation indefinitely.
+ */
+function waitForPageSettled(token: number, timeoutMs = 1500): Promise<void> {
+  return new Promise((resolve) => {
+    if (document.readyState === "complete") return resolve();
+    const deadline = performance.now() + timeoutMs;
+    function tick() {
+      if (token !== activeNavigationToken || document.readyState === "complete" || performance.now() >= deadline) return resolve();
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  });
+}
+
+/**
+ * The single async worker behind every guided-navigation entry point.
+ * Prefers the field's own control (id="field-<key>", set on the specific
+ * input/button that field actually saves through) so guided mode lands on
+ * the right control even when a section has several fields (e.g. Personal
+ * Details has Verify-email/Name/Phone, Property Type has category/
+ * configuration) — falling back to "first focusable in the section" only
+ * for fields that don't tag a specific control yet. Scrolls EXACTLY ONCE
+ * per navigation (plus the narrow hidden-tab retry above, itself
+ * token-guarded), only after the destination genuinely exists and the page
+ * has stopped shifting under it.
+ */
+async function navigateToAnchor(anchorId: string, fieldKey: string | undefined, token: number) {
+  const fieldId = fieldKey ? `field-${fieldKey}` : null;
+  const el = await waitForElement(() => (fieldId ? document.getElementById(fieldId) : null) ?? document.getElementById(anchorId), token);
+  if (!el || token !== activeNavigationToken) return;
+
+  await waitForPageSettled(token);
+  if (token !== activeNavigationToken) return; // a newer navigation started while we waited for the page to settle
+
+  const isFieldTarget = fieldId !== null && el.id === fieldId;
+  scrollIntoViewRobust(el, isFieldTarget ? "center" : "start", token);
+  if (isFieldTarget) {
+    focusAfterScroll(el);
+  } else {
+    const focusable = el.querySelector<HTMLElement>("input, select, textarea, button, [tabindex]");
+    if (focusable) focusAfterScroll(focusable);
   }
-  const el = document.getElementById(anchorId);
-  if (!el) return;
-  scrollIntoViewRobust(el, "start");
-  const focusable = el.querySelector<HTMLElement>("input, select, textarea, button, [tabindex]");
-  if (focusable) focusAfterScroll(focusable);
+}
+
+/** Mints a fresh navigation token (superseding any in-flight older request) and kicks off the async worker. Synchronous from callers' perspective, same as before. */
+function scrollToAnchor(anchorId: string, fieldKey?: string): number {
+  const token = ++activeNavigationToken;
+  void navigateToAnchor(anchorId, fieldKey, token);
+  return token;
 }
 
 export function ProfileCompletionProvider({
@@ -257,15 +339,33 @@ export function ProfileCompletionProvider({
   );
 
   const scrollToNextAfter = useCallback(
-    (key: string) => {
-      if (!guidedActive) return;
+    (key: string, force = false) => {
+      // The auto-advance-after-save case (ProfileForm's persist(), called on
+      // every field that just transitioned complete) stays gated behind
+      // guidedActive -- a user quietly filling in fields in their own order,
+      // who never asked to be guided, shouldn't get an unsolicited jump.
+      // `force` (skipField below) bypasses that gate: an explicit "Skip for
+      // now" click IS the user asking to move on, and doing nothing in
+      // response is a dead end, not a safe default.
+      if (!guidedActive && !force) return;
       const idx = sections.findIndex((s) => s.key === key);
       const rest = idx >= 0 ? sections.slice(idx + 1) : sections;
       const next = rest.find((s) => !s.complete) ?? sections.find((s) => !s.complete);
       const anchor = next ? FIELD_ANCHORS[next.key] : null;
       if (anchor && next && next.key !== key) {
         void recordSectionClickedAction({ section: next.section, field: next.key, trigger: "auto_advance" });
-        window.setTimeout(() => scrollToAnchor(anchor, next.key), 550); // let the "Saved" micro-feedback register before moving on
+        // Deliberate brief pause so the "Saved" micro-feedback is visible
+        // before auto-advancing -- UX pacing, not a render/data wait (the
+        // destination is already in the DOM). Snapshotting the token here
+        // means that if the user (or any other trigger) starts a DIFFERENT
+        // navigation in the meantime, this stale auto-advance silently
+        // stands down instead of yanking them away from wherever they went
+        // -- exactly the "must not jump to unrelated sections" requirement.
+        const snapshotToken = activeNavigationToken;
+        window.setTimeout(() => {
+          if (activeNavigationToken !== snapshotToken) return;
+          scrollToAnchor(anchor, next.key);
+        }, 550);
       }
     },
     [guidedActive, sections]
@@ -274,7 +374,8 @@ export function ProfileCompletionProvider({
   const skipField = useCallback(
     (key: string) => {
       void recordFieldSkippedAction(key);
-      scrollToNextAfter(key);
+      setGuidedActive(true); // an explicit Skip is itself entering guided mode, same as the "Complete my profile" CTA -- so a save on the NEXT field also auto-advances
+      scrollToNextAfter(key, true);
     },
     [scrollToNextAfter]
   );
@@ -338,19 +439,20 @@ export function ProfileCompletionProvider({
       const nextSearch = params.toString();
       window.history.replaceState({}, "", window.location.pathname + (nextSearch ? `?${nextSearch}` : "") + window.location.hash);
     }
-    // Small delay: lets the tab's own content (images, lazy sections) settle
-    // before measuring scroll position, and matches the "Saved" micro-feedback
-    // timing used elsewhere in this same guided flow. Deliberately no cleanup
-    // that cancels this timeout -- see comment above for why.
-    window.setTimeout(() => {
-      if (fieldParam) {
-        scrollToField(fieldParam, "notification_deep_link");
-      } else if (sectionParam) {
-        scrollToSection(sectionParam, "notification_deep_link");
-      } else if (sections.some((s) => !s.complete)) {
-        scrollToFirstIncomplete("next_action_card");
-      }
-    }, 200);
+    // No arbitrary delay here: scrollToField/scrollToSection/scrollToFirstIncomplete
+    // (via scrollToAnchor -> navigateToAnchor) each deterministically wait
+    // for their destination element to exist and the page to finish settling
+    // before scrolling, rather than guessing a fixed ms (Part 7). Deliberately
+    // still no cleanup that could cancel a pending navigation on this effect's
+    // own re-run -- see comment above for why (the replaceState-triggered
+    // re-render must not cancel the navigation it itself is part of).
+    if (fieldParam) {
+      scrollToField(fieldParam, "notification_deep_link");
+    } else if (sectionParam) {
+      scrollToSection(sectionParam, "notification_deep_link");
+    } else if (sections.some((s) => !s.complete)) {
+      scrollToFirstIncomplete("next_action_card");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run when the guide param itself flips to/from "1"
   }, [guideParam]);
 

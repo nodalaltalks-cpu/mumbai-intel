@@ -434,6 +434,9 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               </div>
             </div>
 
+            {/* Directly below My Profile (not buried at the bottom, and not requiring the top-right bell to be opened first) -- same underlying Notification data the bell reads, just rendered as a full history list here. */}
+            <NotificationHistorySection initialNotifications={profileNotifications} initialUnreadCount={profileUnreadCount} />
+
             <div>
               <h2 className="font-mono text-sm font-semibold text-foreground">Research Profile</h2>
               <p className="mt-1 text-xs text-muted">
@@ -497,8 +500,6 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                 <FamilyForm familySize={preferences?.familySize ?? null} familyIncomeRange={preferences?.familyIncomeRange ?? null} />
               </div>
             </div>
-
-            <NotificationHistorySection initialNotifications={profileNotifications} initialUnreadCount={profileUnreadCount} />
 
             <div className="rounded-sm border border-border bg-surface p-4">
               <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Notification Settings</h2>
