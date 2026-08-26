@@ -50,6 +50,10 @@ export default function ProfileMilestoneToast() {
   const { celebration, dismissCelebration } = useProfileCompletion();
 
   useEffect(() => {
+    console.log("[mi-debug] toast sees celebration", celebration);
+  }, [celebration]);
+
+  useEffect(() => {
     if (!celebration) return;
     const duration = celebration.kind === "complete" ? 8000 : celebration.kind === "milestone" ? 6000 : 5500;
     const t = setTimeout(dismissCelebration, duration);
