@@ -65,6 +65,11 @@ export async function acceptCookiesAction(sourceInfo?: VisitorSourceInput): Prom
         browser,
         os,
         country: h.get("x-vercel-ip-country"),
+        // Phase 3C Part 9 -- Vercel's own edge geo header, an ISO 3166-2
+        // region/state code (e.g. "MH" for Maharashtra, "CA" for California).
+        // Same first-party, no-third-party-lookup, no-precise-coordinates
+        // reasoning as country/city above.
+        region: h.get("x-vercel-ip-country-region"),
         city: rawCity ? decodeURIComponent(rawCity) : null,
       },
     });

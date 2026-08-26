@@ -40,6 +40,8 @@ export interface SourceSessionInfo {
   os: string | null;
   browser: string | null;
   country: string | null;
+  /** ISO 3166-2 region/state code (e.g. "MH", "CA") from Vercel's edge geo header — Phase 3C. */
+  region: string | null;
   city: string | null;
   landingPath: string | null;
 }
@@ -66,6 +68,7 @@ export async function loadSessionSourceMap(period: AnalyticsPeriod): Promise<Map
         os: meta.os ?? null,
         browser: meta.browser ?? null,
         country: meta.country ?? null,
+        region: meta.region ?? null,
         city: meta.city ?? null,
         landingPath: meta.landingPath ?? null,
       });
@@ -472,15 +475,17 @@ export async function getDeviceBreakdown(period: AnalyticsPeriod): Promise<Devic
 
 export interface GeoBreakdown {
   byCountry: { label: string; count: number; percent: number }[];
+  /** Region/state rows -- label is "Region, Country" since the same region code can recur across countries (e.g. two different "CA"s is unlikely here but not guaranteed). */
+  byRegion: { label: string; count: number; percent: number }[];
   byCity: { label: string; count: number; percent: number }[];
   coveredSessions: number;
 }
 
 export async function getGeoBreakdown(period: AnalyticsPeriod): Promise<GeoBreakdown> {
-  return safeQuery("getGeoBreakdown", { byCountry: [], byCity: [], coveredSessions: 0 }, async () => {
+  return safeQuery("getGeoBreakdown", { byCountry: [], byRegion: [], byCity: [], coveredSessions: 0 }, async () => {
     const sessionSource = await loadSessionSourceMap(period);
     const withGeo = Array.from(sessionSource.values()).filter((info) => info.country !== null);
-    if (withGeo.length === 0) return { byCountry: [], byCity: [], coveredSessions: 0 };
+    if (withGeo.length === 0) return { byCountry: [], byRegion: [], byCity: [], coveredSessions: 0 };
 
     function tally(pick: (i: SourceSessionInfo) => string | null) {
       const counts = new Map<string, number>();
@@ -495,7 +500,237 @@ export async function getGeoBreakdown(period: AnalyticsPeriod): Promise<GeoBreak
         .slice(0, 10);
     }
 
-    return { byCountry: tally((i) => i.country), byCity: tally((i) => i.city), coveredSessions: withGeo.length };
+    return {
+      byCountry: tally((i) => i.country),
+      byRegion: tally((i) => (i.region ? `${i.region}, ${i.country}` : null)),
+      byCity: tally((i) => i.city),
+      coveredSessions: withGeo.length,
+    };
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 3C Part 11 -- per-location detail rows (Visitors / New / Returning /
+// Registered / Researchers), the same session-cross-reference pattern
+// getChannelQualityBreakdown already established, just grouped by location
+// instead of by source. One shared helper powers all three granularities
+// (country/region/city) so the three tables can never disagree on what
+// "registered"/"researcher" means.
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface GeoLocationRow {
+  label: string;
+  visitors: number;
+  newVisitors: number;
+  returningVisitors: number;
+  registered: number;
+  researchers: number;
+}
+
+async function getGeoLocationRows(period: AnalyticsPeriod, pick: (i: SourceSessionInfo) => string | null, limit = 10): Promise<GeoLocationRow[]> {
+  const sessionSource = await loadSessionSourceMap(period);
+  if (sessionSource.size === 0) return [];
+  const sessionIds = Array.from(sessionSource.keys());
+
+  async function sessionsWith(eventTypes: ResearchEventType[]): Promise<Set<string>> {
+    const groups = await prisma.researchEvent.groupBy({
+      by: ["sessionId"],
+      where: { eventType: { in: eventTypes }, sessionId: { in: sessionIds }, createdAt: { gte: period.since, lt: period.until } },
+    });
+    return new Set(groups.map((g) => g.sessionId as string));
+  }
+
+  const [registered, researched, earliestPerSession] = await Promise.all([
+    sessionsWith(["SIGNUP_COMPLETED"]),
+    sessionsWith(INTENT_EVENT_TYPES),
+    prisma.researchEvent.groupBy({ by: ["sessionId"], where: { sessionId: { in: sessionIds } }, _min: { createdAt: true } }),
+  ]);
+  const returning = new Set(
+    earliestPerSession.filter((g) => g._min.createdAt !== null && g._min.createdAt < period.since).map((g) => g.sessionId as string)
+  );
+
+  const byLocation = new Map<string, string[]>();
+  for (const [sessionId, info] of sessionSource) {
+    if (info.country === null) continue; // no geo signal at all for this session
+    const label = pick(info) ?? "Unknown";
+    const list = byLocation.get(label) ?? [];
+    list.push(sessionId);
+    byLocation.set(label, list);
+  }
+
+  return Array.from(byLocation.entries())
+    .map(([label, ids]) => ({
+      label,
+      visitors: ids.length,
+      newVisitors: ids.filter((id) => !returning.has(id)).length,
+      returningVisitors: ids.filter((id) => returning.has(id)).length,
+      registered: ids.filter((id) => registered.has(id)).length,
+      researchers: ids.filter((id) => researched.has(id)).length,
+    }))
+    .sort((a, b) => b.visitors - a.visitors)
+    .slice(0, limit);
+}
+
+export function getGeoCountryRows(period: AnalyticsPeriod): Promise<GeoLocationRow[]> {
+  return safeQuery("getGeoCountryRows", [], () => getGeoLocationRows(period, (i) => i.country));
+}
+
+export function getGeoRegionRows(period: AnalyticsPeriod): Promise<GeoLocationRow[]> {
+  return safeQuery("getGeoRegionRows", [], () => getGeoLocationRows(period, (i) => (i.region ? `${i.region}, ${i.country}` : null)));
+}
+
+export function getGeoCityRows(period: AnalyticsPeriod): Promise<GeoLocationRow[]> {
+  return safeQuery("getGeoCityRows", [], () => getGeoLocationRows(period, (i) => i.city));
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 3C Part 12 -- Geo x acquisition source: which channel brought
+// visitors from each location, reusing the exact same session->source map
+// as everything else in this file. Only the top locations (by volume) are
+// broken down by source, and only sources with a real presence there --
+// never a fabricated "0 visitors" row.
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface GeoSourceRow {
+  location: string;
+  source: VisitorSource;
+  visitors: number;
+  registered: number;
+  researchers: number;
+}
+
+export async function getGeoSourceBreakdown(period: AnalyticsPeriod, topLocations = 5): Promise<GeoSourceRow[]> {
+  return safeQuery("getGeoSourceBreakdown", [], async () => {
+    const sessionSource = await loadSessionSourceMap(period);
+    if (sessionSource.size === 0) return [];
+    const sessionIds = Array.from(sessionSource.keys());
+
+    async function sessionsWith(eventTypes: ResearchEventType[]): Promise<Set<string>> {
+      const groups = await prisma.researchEvent.groupBy({
+        by: ["sessionId"],
+        where: { eventType: { in: eventTypes }, sessionId: { in: sessionIds }, createdAt: { gte: period.since, lt: period.until } },
+      });
+      return new Set(groups.map((g) => g.sessionId as string));
+    }
+    const [registered, researched] = await Promise.all([sessionsWith(["SIGNUP_COMPLETED"]), sessionsWith(INTENT_EVENT_TYPES)]);
+
+    // Determine the top locations by volume first (using the city, the most
+    // specific granularity the spec's own example uses: "Mumbai -> Google -> ...").
+    const cityCounts = new Map<string, number>();
+    for (const info of sessionSource.values()) {
+      if (!info.city) continue;
+      cityCounts.set(info.city, (cityCounts.get(info.city) ?? 0) + 1);
+    }
+    const topCities = new Set(Array.from(cityCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, topLocations).map(([c]) => c));
+    if (topCities.size === 0) return [];
+
+    const key = (city: string, source: VisitorSource) => `${city}|||${source}`;
+    const grouped = new Map<string, string[]>();
+    for (const [sessionId, info] of sessionSource) {
+      if (!info.city || !topCities.has(info.city)) continue;
+      const k = key(info.city, info.source);
+      const list = grouped.get(k) ?? [];
+      list.push(sessionId);
+      grouped.set(k, list);
+    }
+
+    return Array.from(grouped.entries())
+      .map(([k, ids]) => {
+        const [location, source] = k.split("|||") as [string, VisitorSource];
+        return {
+          location,
+          source,
+          visitors: ids.length,
+          registered: ids.filter((id) => registered.has(id)).length,
+          researchers: ids.filter((id) => researched.has(id)).length,
+        };
+      })
+      .sort((a, b) => (a.location === b.location ? b.visitors - a.visitors : b.visitors - a.visitors));
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 3C Part 13 -- Geo x behaviour: top searches and top projects viewed
+// per location (city-level, same reasoning as Part 12). Gated by a minimum
+// sample size per location -- below it, the caller should show "Not enough
+// data yet" rather than a thin, noisy top-N list.
+// ─────────────────────────────────────────────────────────────────────────
+
+const MIN_SESSIONS_FOR_GEO_BEHAVIOUR = 5;
+
+export interface GeoBehaviourRow {
+  location: string;
+  sessions: number;
+  topSearches: { query: string; count: number }[];
+  topProjects: { projectId: string; count: number }[];
+}
+
+export async function getGeoBehaviourBreakdown(period: AnalyticsPeriod, topLocations = 5): Promise<GeoBehaviourRow[]> {
+  return safeQuery("getGeoBehaviourBreakdown", [], async () => {
+    const sessionSource = await loadSessionSourceMap(period);
+    if (sessionSource.size === 0) return [];
+
+    const byCity = new Map<string, string[]>();
+    for (const [sessionId, info] of sessionSource) {
+      if (!info.city) continue;
+      const list = byCity.get(info.city) ?? [];
+      list.push(sessionId);
+      byCity.set(info.city, list);
+    }
+    const eligibleCities = Array.from(byCity.entries())
+      .filter(([, ids]) => ids.length >= MIN_SESSIONS_FOR_GEO_BEHAVIOUR)
+      .sort((a, b) => b[1].length - a[1].length)
+      .slice(0, topLocations);
+    if (eligibleCities.length === 0) return [];
+
+    const allSessionIds = eligibleCities.flatMap(([, ids]) => ids);
+    const [searches, views] = await Promise.all([
+      prisma.researchEvent.findMany({
+        where: { eventType: { in: SEARCH_EVENT_TYPES }, sessionId: { in: allSessionIds }, createdAt: { gte: period.since, lt: period.until } },
+        select: { sessionId: true, metadata: true },
+      }),
+      prisma.researchEvent.findMany({
+        where: { eventType: "PROJECT_VIEWED", sessionId: { in: allSessionIds }, entityId: { not: null }, createdAt: { gte: period.since, lt: period.until } },
+        select: { sessionId: true, entityId: true },
+      }),
+    ]);
+
+    const sessionToCity = new Map<string, string>();
+    for (const [city, ids] of eligibleCities) for (const id of ids) sessionToCity.set(id, city);
+
+    const searchByCity = new Map<string, Map<string, number>>();
+    for (const row of searches) {
+      const city = row.sessionId ? sessionToCity.get(row.sessionId) : undefined;
+      if (!city) continue;
+      const q = (row.metadata as { query?: unknown } | null)?.query;
+      if (typeof q !== "string" || !q.trim()) continue;
+      const counts = searchByCity.get(city) ?? new Map<string, number>();
+      const key = q.trim().toLowerCase();
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+      searchByCity.set(city, counts);
+    }
+
+    const viewByCity = new Map<string, Map<string, number>>();
+    for (const row of views) {
+      const city = row.sessionId ? sessionToCity.get(row.sessionId) : undefined;
+      if (!city || !row.entityId) continue;
+      const counts = viewByCity.get(city) ?? new Map<string, number>();
+      counts.set(row.entityId, (counts.get(row.entityId) ?? 0) + 1);
+      viewByCity.set(city, counts);
+    }
+
+    return eligibleCities.map(([city, ids]) => ({
+      location: city,
+      sessions: ids.length,
+      topSearches: Array.from((searchByCity.get(city) ?? new Map()).entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([query, count]) => ({ query, count })),
+      topProjects: Array.from((viewByCity.get(city) ?? new Map()).entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([projectId, count]) => ({ projectId, count })),
+    }));
   });
 }
 
@@ -637,6 +872,60 @@ export async function getFounderInsights(period: AnalyticsPeriod): Promise<strin
     const risingSearch = trending.find((t) => t.direction === "up" && t.percent !== null && t.percent >= 25 && t.count >= 3);
     if (risingSearch) {
       insights.push(`Searches for "${risingSearch.query}" are up ${risingSearch.percent}% vs the previous period.`);
+    }
+
+    // Phase 3C Part 14 -- geography insights, gated by the same minimum
+    // sample size and never fabricated: only real counts from getGeoCityRows,
+    // never an invented percentage or trend.
+    const cityRows = await getGeoCityRows(period);
+    const eligibleCities = cityRows.filter((c) => c.visitors >= MIN_SESSIONS_FOR_CHANNEL_INSIGHT);
+    const totalGeoVisitors = cityRows.reduce((sum, c) => sum + c.visitors, 0);
+    if (eligibleCities[0] && totalGeoVisitors > 0) {
+      const top = eligibleCities[0];
+      const share = Math.round((top.visitors / totalGeoVisitors) * 1000) / 10;
+      if (share >= 30) insights.push(`${top.label} currently represents ${share}% of visitor traffic.`);
+    }
+    if (eligibleCities.length >= 2) {
+      const [byVolumeCity, secondCity] = eligibleCities; // eligibleCities is already sorted by visitors desc (getGeoCityRows)
+      const rateOf = (c: (typeof eligibleCities)[number]) => (c.visitors > 0 ? Math.round((c.registered / c.visitors) * 1000) / 10 : 0);
+      const volumeRate = rateOf(byVolumeCity);
+      const secondRate = rateOf(secondCity);
+      if (secondRate > volumeRate) {
+        insights.push(
+          `${byVolumeCity.label} brings the most visitors (${byVolumeCity.visitors}), but registration rate is currently higher in ${secondCity.label} (${secondRate}% vs ${volumeRate}%).`
+        );
+      }
+    }
+    if (eligibleCities.length >= 2) {
+      const topTwoCityNames = eligibleCities.slice(0, 2).map((c) => c.label);
+      const viewCounts = await prisma.researchEvent.groupBy({
+        by: ["sessionId"],
+        _count: { _all: true },
+        where: { eventType: "PROJECT_VIEWED", createdAt: { gte: period.since, lt: period.until } },
+      });
+      const sessionSource = await loadSessionSourceMap(period);
+      const viewsByCity = new Map<string, { views: number; sessions: Set<string> }>();
+      for (const v of viewCounts) {
+        const sessionId = v.sessionId;
+        if (!sessionId) continue;
+        const city = sessionSource.get(sessionId)?.city;
+        if (!city || !topTwoCityNames.includes(city)) continue;
+        const entry = viewsByCity.get(city) ?? { views: 0, sessions: new Set<string>() };
+        entry.views += v._count._all;
+        entry.sessions.add(sessionId);
+        viewsByCity.set(city, entry);
+      }
+      const depths = topTwoCityNames
+        .map((city) => {
+          const entry = viewsByCity.get(city);
+          if (!entry || entry.sessions.size < MIN_SESSIONS_FOR_CHANNEL_INSIGHT) return null;
+          return { city, depth: Math.round((entry.views / entry.sessions.size) * 10) / 10 };
+        })
+        .filter((d): d is { city: string; depth: number } => d !== null);
+      if (depths.length === 2 && depths[0].depth !== depths[1].depth) {
+        const [deeper, shallower] = depths[0].depth > depths[1].depth ? depths : [depths[1], depths[0]];
+        insights.push(`Users from ${deeper.city} are researching more projects per session (${deeper.depth} avg) than users from ${shallower.city} (${shallower.depth} avg).`);
+      }
     }
 
     return insights;

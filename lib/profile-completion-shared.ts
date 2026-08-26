@@ -121,10 +121,31 @@ export function getSectionProgress(sections: CompletionSectionStatus[]): Section
 
 const MILESTONES = [25, 50, 75, 90] as const;
 
-/** Highest milestone (25/50/75/90) strictly crossed going from `before` to `after` — null if none, so callers only fire a PROFILE_COMPLETION_XX event on a genuine crossing, never on every save. 100 is intentionally excluded here; callers already check that separately against PROFILE_COMPLETED. */
+/** Highest milestone (25/50/75/90) strictly crossed going from `before` to `after` — null if none, so callers only fire a PROFILE_COMPLETION_XX event on a genuine crossing, never on every save. 100 is intentionally excluded here; callers already check that separately against PROFILE_COMPLETED. This feeds the server-side PROFILE_COMPLETION_25/50/75/90 analytics funnel (lib/analytics/user-profile-queries.ts) — deliberately UNCHANGED (not renumbered to the UX milestones below) so historical funnel data stays comparable; those are stored ResearchEventType enum values, not something safely renamed without losing every past event's meaning. */
 export function getMilestoneCrossed(before: number, after: number): (typeof MILESTONES)[number] | null {
   let crossed: (typeof MILESTONES)[number] | null = null;
   for (const m of MILESTONES) {
+    if (before < m && after >= m) crossed = m;
+  }
+  return crossed;
+}
+
+/** Phase 3C Part 2 — the user-facing celebration/motivation brackets (20/40/60/80/90), distinct from the backend analytics brackets above. Purely a client-side UX concern (profile-completion-client.tsx), so introducing a different bracket set here needs no schema/enum change. */
+export const UX_MILESTONES = [20, 40, 60, 80, 90] as const;
+export type UxMilestone = (typeof UX_MILESTONES)[number];
+
+export const UX_MILESTONE_MESSAGES: Record<UxMilestone, string> = {
+  20: "You're getting started.",
+  40: "Your research profile is taking shape.",
+  60: "Now we're getting a much clearer picture of what you're looking for.",
+  80: "Almost there.",
+  90: "Just a little more.",
+};
+
+/** Same crossing logic as getMilestoneCrossed, over the UX bracket set. */
+export function getUxMilestoneCrossed(before: number, after: number): UxMilestone | null {
+  let crossed: UxMilestone | null = null;
+  for (const m of UX_MILESTONES) {
     if (before < m && after >= m) crossed = m;
   }
   return crossed;

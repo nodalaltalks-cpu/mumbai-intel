@@ -2,7 +2,17 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { getSectionProgress, type CompletionSectionStatus, type ProfileSectionKey } from "@/lib/profile-completion-shared";
+import {
+  getSectionProgress,
+  getUxMilestoneCrossed,
+  UX_MILESTONE_MESSAGES,
+  UX_MILESTONES,
+  type CompletionSectionStatus,
+  type ProfileSectionKey,
+  type UxMilestone,
+} from "@/lib/profile-completion-shared";
+
+const UX_MILESTONES_DESC = [...UX_MILESTONES].reverse();
 import {
   recordFieldSkippedAction,
   recordProfileStartedAction,
@@ -28,7 +38,10 @@ export const FIELD_ANCHORS: Record<string, string> = {
 };
 
 /** A whole section (Personal Details, Budget, ...) just transitioned incomplete -> complete, or the overall profile just reached 100% -- the two celebration moments Section 12/13 ask to distinguish. Replaces the old numeric 25/50/75/90 percent-bracket toast, which fired on arbitrary percent crossings that didn't correspond to anything the user could point to ("what did I just finish?"); a named section is more legible and matches the spec's own examples verbatim. The server-side PROFILE_COMPLETION_25/50/75/90 analytics events (fired from the save actions, unrelated to this UI trigger) are untouched. */
-type Celebration = { kind: "section"; section: ProfileSectionKey; label: string } | { kind: "complete" };
+type Celebration =
+  | { kind: "section"; section: ProfileSectionKey; label: string }
+  | { kind: "milestone"; percent: UxMilestone; message: string }
+  | { kind: "complete" };
 
 interface ProfileCompletionContextValue {
   sections: CompletionSectionStatus[];
@@ -242,7 +255,52 @@ export function ProfileCompletionProvider({
   const prevSectionCompleteRef = useRef<Partial<Record<ProfileSectionKey, boolean>>>(
     Object.fromEntries(getSectionProgress(initialSections).map((sp) => [sp.section, sp.totalCount > 0 && sp.completeCount === sp.totalCount]))
   );
+
+  // 100% is its own distinct, largest celebration (Part 4) — self-seeding ref
+  // so a profile that's already 100% on load never re-celebrates.
+  const celebratedCompleteRef = useRef(initialPercent >= 100);
+
+  // Phase 3C Part 2/3 — 20/40/60/80/90 UX milestones, tracked as "highest
+  // bracket already celebrated" (not a per-bracket boolean set) so a profile
+  // that loads at, say, 65% never retroactively celebrates 20/40/60 on
+  // mount, and a later save that jumps straight from 55% to 85% still only
+  // celebrates once (the highest bracket crossed), matching
+  // getUxMilestoneCrossed's own "highest crossed" semantics.
+  const highestUxMilestoneCelebratedRef = useRef<number>(
+    [...UX_MILESTONES_DESC].find((m) => initialPercent >= m) ?? 0
+  );
+
+  const prevPercentRef = useRef(initialPercent);
   useEffect(() => {
+    // Priority: 100% completion > a percent milestone > a single section
+    // completing — at most ONE celebration per state update, so a save that
+    // both finishes a section AND crosses a milestone never stacks two
+    // popups. A section-complete that does NOT coincide with a fresh
+    // milestone still gets its own (smaller) toast, unchanged from before.
+    if (percent >= 100 && !celebratedCompleteRef.current) {
+      celebratedCompleteRef.current = true;
+      setCelebration({ kind: "complete" });
+      prevPercentRef.current = percent;
+      return;
+    }
+
+    const uxCrossed = getUxMilestoneCrossed(prevPercentRef.current, percent);
+    prevPercentRef.current = percent;
+    if (uxCrossed !== null && uxCrossed > highestUxMilestoneCelebratedRef.current) {
+      highestUxMilestoneCelebratedRef.current = uxCrossed;
+      setCelebration({ kind: "milestone", percent: uxCrossed, message: UX_MILESTONE_MESSAGES[uxCrossed] });
+      // Still record section-completion transitions for the analytics side
+      // effect (recordSectionCompletedAction) even though the UI shows the
+      // milestone popup instead of the section one this time.
+      for (const sp of getSectionProgress(sections)) {
+        const isComplete = sp.totalCount > 0 && sp.completeCount === sp.totalCount;
+        const wasComplete = prevSectionCompleteRef.current[sp.section] ?? false;
+        prevSectionCompleteRef.current[sp.section] = isComplete;
+        if (isComplete && !wasComplete) void recordSectionCompletedAction(sp.section);
+      }
+      return;
+    }
+
     for (const sp of getSectionProgress(sections)) {
       const isComplete = sp.totalCount > 0 && sp.completeCount === sp.totalCount;
       const wasComplete = prevSectionCompleteRef.current[sp.section] ?? false;
@@ -253,18 +311,8 @@ export function ProfileCompletionProvider({
         break; // one celebration at a time even if two sections complete in the same update
       }
     }
-  }, [sections]);
-
-  // 100% is its own distinct, larger celebration (Section 13), decoupled
-  // from the per-section one above — same self-seeding-ref pattern so a
-  // profile that's already 100% on load never re-celebrates.
-  const celebratedCompleteRef = useRef(initialPercent >= 100);
-  useEffect(() => {
-    if (percent >= 100 && !celebratedCompleteRef.current) {
-      celebratedCompleteRef.current = true;
-      setCelebration({ kind: "complete" });
-    }
-  }, [percent]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs intentionally excluded; this must only re-run when sections/percent actually change
+  }, [sections, percent]);
 
   // Best-effort funnel-drop-off signal (Part 5) — fires once, the first time
   // the page is hidden (tab switch, navigation, or close) while the user is

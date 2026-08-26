@@ -4,14 +4,40 @@ import Button from "@/app/components/ui/Button";
 import { useProfileCompletion } from "@/lib/profile-completion-client";
 import { getSectionProgress } from "@/lib/profile-completion-shared";
 
-/** Milestone framing — the nearest-below milestone's copy stays shown until the next is actually reached. */
+/** Milestone framing — the nearest-below milestone's copy stays shown until the next is actually reached. Brackets and wording match the product's own 20/40/60/80/90/100 milestones (ProfileMilestoneToast fires the celebration at the same thresholds). */
 function milestoneLabel(percent: number): string {
-  if (percent >= 100) return "Research profile complete";
-  if (percent >= 90) return "Just a little more to go";
-  if (percent >= 75) return "Almost there";
-  if (percent >= 50) return "Halfway there";
-  if (percent >= 25) return "Off to a good start";
+  if (percent >= 100) return "Your research profile is complete";
+  if (percent >= 90) return "Just a little more";
+  if (percent >= 80) return "Almost there";
+  if (percent >= 60) return "Now we're getting a much clearer picture of what you're looking for";
+  if (percent >= 40) return "Your research profile is taking shape";
+  if (percent >= 20) return "You're getting started";
   return "Just getting started";
+}
+
+/**
+ * Smart motivation (reflects the user's ACTUAL remaining sections, never a
+ * repeated generic line) — named-field copy for the two highest-value gaps
+ * this product actually recommends against (budget, locality), a "one last
+ * detail" framing when literally one field remains, otherwise the milestone
+ * copy above. No fabricated personalization signal (visit count, skip
+ * history) is invented here -- only what the current section list already
+ * tells us for certain.
+ */
+function smartMotivationMessage(percent: number, incomplete: { key: string; label: string }[]): string {
+  if (percent >= 100) return milestoneLabel(percent);
+  if (incomplete.length === 1) {
+    return `One last detail — add your ${incomplete[0].label.toLowerCase()} to finish up.`;
+  }
+  const missingBudget = incomplete.find((s) => s.key === "budget");
+  if (missingBudget && incomplete.length <= 3) {
+    return "Your research profile is almost ready. Add your budget to make project recommendations more relevant.";
+  }
+  const missingLocality = incomplete.find((s) => s.key === "localities");
+  if (missingLocality && incomplete.length <= 3) {
+    return "Tell us where you're looking and we'll make your research more relevant.";
+  }
+  return milestoneLabel(percent);
 }
 
 /** Real, verified benefits only — every line below corresponds to something this platform actually does today (no promised feature that doesn't exist yet). */
@@ -62,7 +88,7 @@ export default function ProfileCompletionBar() {
           <div className="h-full rounded-full bg-accent transition-[width] duration-500 ease-out" style={{ width: `${percent}%` }} />
         </div>
         <p className="text-[11px] text-muted">
-          <span className="font-medium text-foreground">{milestoneLabel(percent)}.</span> Make your property research more relevant to you.
+          <span className="font-medium text-foreground">{smartMotivationMessage(percent, incomplete)}</span>
         </p>
       </div>
 

@@ -13,6 +13,11 @@ import {
   getReturningVisitorInsights,
   getDeviceBreakdown,
   getGeoBreakdown,
+  getGeoCountryRows,
+  getGeoRegionRows,
+  getGeoCityRows,
+  getGeoSourceBreakdown,
+  getGeoBehaviourBreakdown,
   getLiveActivityBreakdown,
   getFounderInsights,
 } from "@/lib/analytics/visitor-intelligence";
@@ -78,6 +83,11 @@ export default async function VisitorsAnalyticsPage({ searchParams }: { searchPa
     returningInsights,
     deviceBreakdown,
     geoBreakdown,
+    geoCountryRows,
+    geoRegionRows,
+    geoCityRows,
+    geoSourceRows,
+    geoBehaviourRows,
     liveActivity,
     founderInsights,
   ] = await Promise.all([
@@ -92,6 +102,11 @@ export default async function VisitorsAnalyticsPage({ searchParams }: { searchPa
     getReturningVisitorInsights(period),
     getDeviceBreakdown(period),
     getGeoBreakdown(period),
+    getGeoCountryRows(period),
+    getGeoRegionRows(period),
+    getGeoCityRows(period),
+    getGeoSourceBreakdown(period),
+    getGeoBehaviourBreakdown(period),
     getLiveActivityBreakdown(),
     getFounderInsights(period),
   ]);
@@ -511,9 +526,8 @@ export default async function VisitorsAnalyticsPage({ searchParams }: { searchPa
       ) : null}
 
       {/* Parts 10/11 — device and coarse geography, from the same first-party session-level capture as source (no fingerprinting, no precise location). */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <section className="rounded-sm border border-border bg-surface p-4">
-          <h2 className="mb-1 font-mono text-sm font-semibold text-foreground">Devices — {period.label}</h2>
+      <section className="rounded-sm border border-border bg-surface p-4">
+        <h2 className="mb-1 font-mono text-sm font-semibold text-foreground">Devices — {period.label}</h2>
           {deviceBreakdown.coveredSessions === 0 ? (
             <p className="text-xs text-muted">Not enough data yet.</p>
           ) : (
@@ -542,40 +556,169 @@ export default async function VisitorsAnalyticsPage({ searchParams }: { searchPa
               </div>
             </div>
           )}
-        </section>
+      </section>
 
+      {/* Phase 3C Part 11 — Founder Visitor Geo Dashboard: Countries -> Regions -> Cities, each with real visitor/registered/researcher counts (not just a percent list). Approximate visitor location, derived from Vercel's own first-party edge geo headers -- never precise coordinates, never a raw IP. */}
+      {geoBreakdown.coveredSessions === 0 ? (
         <section className="rounded-sm border border-border bg-surface p-4">
           <h2 className="mb-1 font-mono text-sm font-semibold text-foreground">Geography — {period.label}</h2>
-          {geoBreakdown.coveredSessions === 0 ? (
-            <p className="text-xs text-muted">Not enough data yet.</p>
-          ) : (
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-[10px] uppercase tracking-wide text-muted">Country</p>
-                <ul className="mt-1 flex flex-col gap-0.5 text-xs text-foreground">
-                  {geoBreakdown.byCountry.map((d) => (
-                    <li key={d.label} className="flex justify-between gap-3">
-                      <span>{d.label}</span>
-                      <span className="font-mono text-muted">{d.percent}%</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-wide text-muted">City</p>
-                <ul className="mt-1 flex flex-col gap-0.5 text-xs text-foreground">
-                  {geoBreakdown.byCity.map((d) => (
-                    <li key={d.label} className="flex justify-between gap-3">
-                      <span>{d.label}</span>
-                      <span className="font-mono text-muted">{d.percent}%</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          )}
+          <p className="text-xs text-muted">Not enough data yet.</p>
         </section>
-      </div>
+      ) : (
+        <>
+          <section className="rounded-sm border border-border bg-surface p-4">
+            <h2 className="mb-1 font-mono text-sm font-semibold text-foreground">Geography — Countries — {period.label}</h2>
+            <p className="mb-3 text-[11px] text-muted">Approximate visitor location (country-level) — never a precise coordinate or raw IP.</p>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px] border-collapse text-left text-xs">
+                <thead>
+                  <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted">
+                    <th className="py-1.5 pr-3 font-medium">Country</th>
+                    <th className="py-1.5 pr-3 font-medium text-right">Visitors</th>
+                    <th className="py-1.5 pr-3 font-medium text-right">New</th>
+                    <th className="py-1.5 pr-3 font-medium text-right">Returning</th>
+                    <th className="py-1.5 pr-3 font-medium text-right">Registered</th>
+                    <th className="py-1.5 font-medium text-right">Researchers</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {geoCountryRows.map((row) => (
+                    <tr key={row.label} className="border-b border-border last:border-b-0">
+                      <td className="py-1.5 pr-3 text-foreground">{row.label}</td>
+                      <td className="py-1.5 pr-3 text-right font-mono text-foreground">{row.visitors}</td>
+                      <td className="py-1.5 pr-3 text-right font-mono text-muted">{row.newVisitors}</td>
+                      <td className="py-1.5 pr-3 text-right font-mono text-muted">{row.returningVisitors}</td>
+                      <td className="py-1.5 pr-3 text-right font-mono text-muted">{row.registered}</td>
+                      <td className="py-1.5 text-right font-mono text-muted">{row.researchers}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="rounded-sm border border-border bg-surface p-4">
+            <h2 className="mb-1 font-mono text-sm font-semibold text-foreground">Geography — Regions / States — {period.label}</h2>
+            {geoRegionRows.length === 0 ? (
+              <p className="text-xs text-muted">Not enough data yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[420px] border-collapse text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted">
+                      <th className="py-1.5 pr-3 font-medium">Region / State</th>
+                      <th className="py-1.5 pr-3 font-medium text-right">Visitors</th>
+                      <th className="py-1.5 pr-3 font-medium text-right">Registered</th>
+                      <th className="py-1.5 font-medium text-right">Researchers</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {geoRegionRows.map((row) => (
+                      <tr key={row.label} className="border-b border-border last:border-b-0">
+                        <td className="py-1.5 pr-3 text-foreground">{row.label}</td>
+                        <td className="py-1.5 pr-3 text-right font-mono text-foreground">{row.visitors}</td>
+                        <td className="py-1.5 pr-3 text-right font-mono text-muted">{row.registered}</td>
+                        <td className="py-1.5 text-right font-mono text-muted">{row.researchers}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-sm border border-border bg-surface p-4">
+            <h2 className="mb-1 font-mono text-sm font-semibold text-foreground">Geography — Cities — {period.label}</h2>
+            {geoCityRows.length === 0 ? (
+              <p className="text-xs text-muted">Not enough data yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[420px] border-collapse text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted">
+                      <th className="py-1.5 pr-3 font-medium">City</th>
+                      <th className="py-1.5 pr-3 font-medium text-right">Visitors</th>
+                      <th className="py-1.5 pr-3 font-medium text-right">Registered</th>
+                      <th className="py-1.5 font-medium text-right">Researchers</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {geoCityRows.map((row) => (
+                      <tr key={row.label} className="border-b border-border last:border-b-0">
+                        <td className="py-1.5 pr-3 text-foreground">{row.label}</td>
+                        <td className="py-1.5 pr-3 text-right font-mono text-foreground">{row.visitors}</td>
+                        <td className="py-1.5 pr-3 text-right font-mono text-muted">{row.registered}</td>
+                        <td className="py-1.5 text-right font-mono text-muted">{row.researchers}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          {/* Phase 3C Part 12 — geography x acquisition channel: WHERE users come from + WHICH channel brought them, for the top cities by volume only. */}
+          {geoSourceRows.length > 0 ? (
+            <section className="rounded-sm border border-border bg-surface p-4">
+              <h2 className="mb-1 font-mono text-sm font-semibold text-foreground">Geography × Source — {period.label}</h2>
+              <p className="mb-3 text-[11px] text-muted">Top cities by volume, broken down by acquisition channel.</p>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[480px] border-collapse text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted">
+                      <th className="py-1.5 pr-3 font-medium">City</th>
+                      <th className="py-1.5 pr-3 font-medium">Source</th>
+                      <th className="py-1.5 pr-3 font-medium text-right">Visitors</th>
+                      <th className="py-1.5 pr-3 font-medium text-right">Registered</th>
+                      <th className="py-1.5 font-medium text-right">Researchers</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {geoSourceRows.map((row, i) => (
+                      <tr key={`${row.location}-${row.source}`} className="border-b border-border last:border-b-0">
+                        <td className="py-1.5 pr-3 text-foreground">
+                          {i === 0 || geoSourceRows[i - 1].location !== row.location ? row.location : ""}
+                        </td>
+                        <td className="py-1.5 pr-3 text-muted">{SOURCE_LABEL[row.source] ?? row.source}</td>
+                        <td className="py-1.5 pr-3 text-right font-mono text-foreground">{row.visitors}</td>
+                        <td className="py-1.5 pr-3 text-right font-mono text-muted">{row.registered}</td>
+                        <td className="py-1.5 text-right font-mono text-muted">{row.researchers}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ) : null}
+
+          {/* Phase 3C Part 13 — geography x behaviour: top searches/projects per location, gated by a minimum sample size per city. */}
+          {geoBehaviourRows.length > 0 ? (
+            <section className="rounded-sm border border-border bg-surface p-4">
+              <h2 className="mb-1 font-mono text-sm font-semibold text-foreground">Geography × Behaviour — {period.label}</h2>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {geoBehaviourRows.map((row) => (
+                  <div key={row.location}>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">
+                      {row.location} <span className="font-normal normal-case text-muted">({row.sessions} sessions)</span>
+                    </p>
+                    {row.topSearches.length > 0 ? (
+                      <ul className="mt-1 flex flex-col gap-0.5 text-xs text-foreground">
+                        {row.topSearches.map((q) => (
+                          <li key={q.query}>
+                            &quot;{q.query}&quot; <span className="text-muted">({q.count})</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-1 text-xs text-muted">Not enough data yet.</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </>
+      )}
 
       <p className="text-[11px] text-muted">
         These numbers only include visitors who accepted analytics cookies on the consent banner — a decline means no
