@@ -241,11 +241,6 @@ export function ProfileCompletionProvider({
   const [celebration, setCelebration] = useState<Celebration | null>(null);
   const abandonedFiredRef = useRef(false);
 
-  useEffect(() => {
-    console.log("[mi-debug] Provider mounted", { initialPercent });
-    return () => console.log("[mi-debug] Provider UNMOUNTED");
-  }, []);
-
   const percent = useMemo(() => {
     const complete = sections.filter((s) => s.complete).length;
     return sections.length ? Math.round((complete / sections.length) * 100) : 0;
@@ -277,7 +272,6 @@ export function ProfileCompletionProvider({
 
   const prevPercentRef = useRef(initialPercent);
   useEffect(() => {
-    console.log("[mi-debug] effect run", { prevPercent: prevPercentRef.current, percent, highest: highestUxMilestoneCelebratedRef.current });
     // Priority: 100% completion > a percent milestone > a single section
     // completing — at most ONE celebration per state update, so a save that
     // both finishes a section AND crosses a milestone never stacks two
@@ -293,7 +287,6 @@ export function ProfileCompletionProvider({
     const uxCrossed = getUxMilestoneCrossed(prevPercentRef.current, percent);
     prevPercentRef.current = percent;
     if (uxCrossed !== null && uxCrossed > highestUxMilestoneCelebratedRef.current) {
-      console.log("[mi-debug] setting milestone celebration", uxCrossed);
       highestUxMilestoneCelebratedRef.current = uxCrossed;
       setCelebration({ kind: "milestone", percent: uxCrossed, message: UX_MILESTONE_MESSAGES[uxCrossed] });
       // Still record section-completion transitions for the analytics side
