@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * Client-only, localStorage-backed Compare list — anonymous-friendly (no
- * sign-in required), same useSyncExternalStore pattern as
- * lib/recent-searches.ts. Stores project slugs, since that's already the
- * stable public identifier used by every project link on the site.
+ * sign-in required). Stores project slugs, since that's already the stable
+ * public identifier used by every project link on the site.
  */
 const KEY = "mi:compare-list";
 const EVENT = "mi:compare-list-updated";
@@ -70,38 +69,35 @@ export function pruneCompareList(validSlugs: string[]) {
   }
 }
 
-function subscribe(onStoreChange: () => void) {
-  window.addEventListener(EVENT, onStoreChange);
-  window.addEventListener("storage", onStoreChange);
-  return () => {
-    window.removeEventListener(EVENT, onStoreChange);
-    window.removeEventListener("storage", onStoreChange);
-  };
-}
-
-function getSnapshot() {
-  return window.localStorage.getItem(KEY) ?? "[]";
-}
-
-function getServerSnapshot() {
-  return "[]";
-}
-
+/**
+ * Starts at "[]" on every render up to and including mount (matching what
+ * SSR necessarily renders, since there's no localStorage on the server) and
+ * self-corrects to the real list in an effect right after mount — a plain
+ * useState instead of useSyncExternalStore's getServerSnapshot trick, which
+ * turned out to leave this exact list stuck on the server snapshot forever
+ * on some routes (observed on /compare itself, behind its own loading.tsx
+ * Suspense boundary) while working fine elsewhere (the Navbar badge, the
+ * per-project toggle button) — the mismatch-correction render
+ * useSyncExternalStore relies on apparently isn't guaranteed to fire when a
+ * component's first commit comes from a Suspense-boundary reveal rather than
+ * the root hydration pass. A plain post-mount effect has no such dependency:
+ * it always runs once the component has committed, full stop.
+ */
 export function useCompareList(): string[] {
-  const raw = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  // getServerSnapshot always returns "[]" (no way to read localStorage during SSR), and on
-  // some consumers (observed on /compare's own list, not e.g. the Navbar badge or the
-  // per-project toggle button) React's post-hydration reconciliation never re-invokes
-  // getSnapshot on its own if nothing subsequently changes the store, leaving the page stuck
-  // on the server snapshot even when the real localStorage list is non-empty. Firing the same
-  // event `write()` already uses forces every subscribed instance to recheck getSnapshot once,
-  // safe to do unconditionally since a no-op recheck is harmless.
+  const [list, setList] = useState<string[]>([]);
+
   useEffect(() => {
-    window.dispatchEvent(new Event(EVENT));
+    setList(readCompareList());
+    function onChange() {
+      setList(readCompareList());
+    }
+    window.addEventListener(EVENT, onChange);
+    window.addEventListener("storage", onChange);
+    return () => {
+      window.removeEventListener(EVENT, onChange);
+      window.removeEventListener("storage", onChange);
+    };
   }, []);
-  try {
-    return JSON.parse(raw) as string[];
-  } catch {
-    return [];
-  }
+
+  return list;
 }
