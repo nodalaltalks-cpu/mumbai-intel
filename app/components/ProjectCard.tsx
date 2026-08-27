@@ -113,9 +113,11 @@ export default function ProjectCard({ project, onNavigate }: { project: ProjectC
               >
                 {CONSTRUCTION_BADGE_LABEL[project.status]}
               </span>
-              <span className="rounded-sm border border-border bg-background/85 px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wide text-muted backdrop-blur">
-                {formatPossessionMonthYear(project.possessionMonth, project.possessionYear, project.status, project.possessionDate)}
-              </span>
+              {project.status !== "READY_TO_MOVE" && project.status !== "DELIVERED" ? (
+                <span className="rounded-sm border border-border bg-background/85 px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wide text-muted backdrop-blur">
+                  {formatPossessionMonthYear(project.possessionMonth, project.possessionYear, project.status, project.possessionDate)}
+                </span>
+              ) : null}
             </div>
           </div>
 

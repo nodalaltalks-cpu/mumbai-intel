@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { formatDate, formatPriceBand, formatPricePerSqft, formatSqft } from "@/lib/format";
+import { formatPossessionMonthYear, formatPriceBand, formatPricePerSqft, formatSqft } from "@/lib/format";
 import { CATEGORY_LABEL, pickCardImageUrl, STATUS_LABEL, type ProjectStatus, type PropertyCategory } from "@/lib/project-meta";
 
 /**
@@ -45,7 +45,8 @@ export async function getProjectsForCompare(slugs: string[]): Promise<ComparePro
       priceMaxPaise: true,
       totalUnits: true,
       constructionPercent: true,
-      actualPossession: true,
+      possessionMonth: true,
+      possessionYear: true,
       promisedPossession: true,
       reraNumber: true,
       brochureUrl: true,
@@ -92,11 +93,12 @@ export async function getProjectsForCompare(slugs: string[]): Promise<ComparePro
         areaLabel: minArea !== null && maxArea !== null ? (minArea === maxArea ? formatSqft(minArea) : `${formatSqft(minArea)} – ${formatSqft(maxArea)}`) : null,
         totalUnits: project.totalUnits,
         constructionPercent: project.constructionPercent,
-        possessionLabel: project.actualPossession
-          ? `Ready (${formatDate(project.actualPossession)})`
-          : project.promisedPossession
-            ? formatDate(project.promisedPossession)
-            : "--",
+        possessionLabel: formatPossessionMonthYear(
+          project.possessionMonth,
+          project.possessionYear,
+          project.status as ProjectStatus,
+          project.promisedPossession
+        ),
         reraNumber: project.reraNumber,
         amenityCount: project._count.amenities,
         brochureUrl: project.brochureUrl,

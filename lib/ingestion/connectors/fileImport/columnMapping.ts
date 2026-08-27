@@ -24,8 +24,19 @@ export const PROJECT_COLUMN_ALIASES: Record<string, string[]> = {
   reraStatus: ["rera status"],
 };
 
+/**
+ * Lowercases and collapses underscores/whitespace into single spaces, same as
+ * before, but first splits camelCase word boundaries ("totalUnits" ->
+ * "total Units") -- a scraper (e.g. an Apify actor) naturally emits camelCase
+ * JSON keys matching this codebase's own field names, which otherwise never
+ * matched any alias in these tables (only "total units" or "total_units" did).
+ */
 function normalizeHeader(header: string): string {
-  return header.trim().toLowerCase().replace(/[_\s]+/g, " ");
+  return header
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, " ");
 }
 
 /** Shared by every entity's mapRowToXFields — coerces raw CSV/JSON values to trimmed strings, normalizes header spellings, and resolves the first matching alias per field. */

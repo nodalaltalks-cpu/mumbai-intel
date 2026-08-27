@@ -965,7 +965,11 @@ export async function getBuildersForSelect() {
 
 export async function getProjectsForSelect() {
   return safeQuery("getProjectsForSelect", [], () =>
-    prisma.project.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, slug: true } })
+    prisma.project.findMany({
+      where: { isArchived: false, deletedAt: null },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, slug: true },
+    })
   );
 }
 
