@@ -9,7 +9,7 @@ import { canonicalizeEmail } from "@/lib/email-canonicalize";
 import { friendlyPrismaError } from "@/lib/actions/errors";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { setSessionCookie } from "@/lib/auth/session";
-import { clearPublicSessionCookie, setPublicSessionCookie } from "@/lib/public-auth/session";
+import { clearPublicSessionCookie, getPublicSession, setPublicSessionCookie } from "@/lib/public-auth/session";
 import { sanitizeNextPath } from "@/lib/public-auth/next-path";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
 import { recalculatePublicUserCompletion } from "@/lib/profile-completion";
@@ -175,11 +175,30 @@ export async function loginAction(_prevState: PublicAuthState, formData: FormDat
     return { error: "Invalid email or password" };
   }
 
-  await prisma.publicUser.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+  // Logging back in with the correct password reactivates a deactivated
+  // account (same behavior as Instagram/Facebook) -- deactivation was never
+  // deletion, so there is no separate "reactivate" flow to build.
+  await prisma.publicUser.update({ where: { id: user.id }, data: { lastLoginAt: new Date(), deactivatedAt: null } });
   await setPublicSessionCookie({ userId: user.id, email: user.email, name: user.name, image: user.image });
   await recordResearchEvent("LOGIN_COMPLETED", { entityType: "PublicUser", entityId: user.id, metadata: { method: "credentials" } });
   const loginNext = formData.get("next");
   redirect(typeof loginNext === "string" && loginNext ? sanitizeNextPath(loginNext) : "/account");
+}
+
+// ── Deactivate account (Settings) ──────────────────────────────────────
+
+/**
+ * Deactivation, never deletion -- no row or related data is removed. Signs
+ * the user out immediately; logging back in with the correct password
+ * clears deactivatedAt again (see loginAction above), so there is no
+ * separate reactivation UI to build.
+ */
+export async function deactivateAccountAction(): Promise<void> {
+  const session = await getPublicSession();
+  if (!session) redirect("/login");
+  await prisma.publicUser.update({ where: { id: session.userId }, data: { deactivatedAt: new Date() } });
+  await clearPublicSessionCookie();
+  redirect("/");
 }
 
 export async function logoutAction(): Promise<void> {

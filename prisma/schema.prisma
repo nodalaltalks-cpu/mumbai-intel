@@ -1554,6 +1554,12 @@ model PublicUser {
   /// separate table: the set is small and per-user, same reasoning as every
   /// other small denormalized array on this model (highlights, legalNames elsewhere).
   dismissedPrompts         String[]     @default([])
+  /// Set when the user deactivates their own account from Settings -- null
+  /// means active. Deactivation is NOT deletion: no row or related data is
+  /// removed. Logging back in with the correct password clears this again
+  /// (same reactivate-on-login behavior as Instagram/Facebook), so there is
+  /// no separate "reactivate" flow to build.
+  deactivatedAt            DateTime?
   createdAt                DateTime     @default(now())
   updatedAt                DateTime     @updatedAt
 

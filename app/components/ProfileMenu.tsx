@@ -74,6 +74,13 @@ export default function ProfileMenu({ user }: { user: NavbarPublicUser }) {
             >
               Saved Searches
             </Link>
+            <Link
+              href="/settings"
+              onClick={() => setOpen(false)}
+              className="rounded-sm px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-surface-raised"
+            >
+              Settings
+            </Link>
           </div>
           {/* Logout stays easy to find and tap (no dark patterns) but visually secondary — smaller and muted rather than the dominant action. */}
           <div className="border-t border-border p-1.5">

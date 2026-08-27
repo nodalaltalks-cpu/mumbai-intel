@@ -9,13 +9,17 @@ export const metadata: Metadata = {
 
 export default function DisclaimerPage() {
   return (
-    <LegalPageShell title="Disclaimer" subtitle={`Last updated ${formatDate(new Date("2026-07-01"))}`}>
+    <LegalPageShell
+      title="Disclaimer"
+      subtitle={`Effective ${formatDate(new Date("2026-07-01"))} · Last updated ${formatDate(new Date("2026-08-27"))}`}
+    >
       <h2>Not financial, legal or investment advice</h2>
       <p>
         NoDalalTalks provides real estate market information, including pricing, project status, transaction history,
-        and derived analytics, for general informational purposes only. Nothing on this platform constitutes financial,
-        legal, tax, or investment advice, and it should not be relied upon as the sole basis for any property
-        transaction or investment decision.
+        and derived analytics, for general informational purposes only. Nothing here is a guarantee of property
+        value, investment returns, transaction completion, developer performance, future appreciation, legal title,
+        construction quality, or any other financial outcome. It should not be relied upon as the sole basis for any
+        property transaction or investment decision.
       </p>
 
       <h2>Not a brokerage or transaction facilitator</h2>

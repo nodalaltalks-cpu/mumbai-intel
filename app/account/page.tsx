@@ -492,7 +492,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               </div>
             </div>
 
-            <div className="rounded-sm border border-border bg-surface p-4">
+            <div id="notification-preferences" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
               <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Notification Settings</h2>
               <div className="mt-3">
                 <NotificationPreferencesForm preferences={notificationPreferences} />

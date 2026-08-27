@@ -63,7 +63,10 @@ export async function GET(request: NextRequest) {
     let user = await prisma.publicUser.findUnique({ where: { googleId: profile.sub } });
     let authEvent: "LOGIN_COMPLETED" | "SIGNUP_COMPLETED" = "LOGIN_COMPLETED";
     if (user) {
-      user = await prisma.publicUser.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+      // Same reactivate-on-login behavior as the credentials path
+      // (lib/actions/public-auth.ts's loginAction) -- deactivation is never
+      // deletion, so signing back in via either method undoes it.
+      user = await prisma.publicUser.update({ where: { id: user.id }, data: { lastLoginAt: new Date(), deactivatedAt: null } });
     } else {
       // A CREDENTIALS account may already own this email — link Google to it
       // rather than erroring, so the same person can sign in either way. Matched

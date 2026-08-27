@@ -92,8 +92,7 @@ export default function CookieConsentBanner() {
         <div className="flex flex-col gap-1.5">
           <p className="font-mono text-xs font-semibold uppercase tracking-wide text-foreground">Your privacy</p>
           <p className="text-sm leading-relaxed text-muted sm:text-xs">
-            We use essential cookies to keep you signed in, and — only if you agree — a first-party analytics cookie to
-            understand how people use NoDalalTalks. No advertising cookies, ever.{" "}
+            Essential cookies keep you signed in. Analytics cookies are optional. No ads, ever.{" "}
             <Link href="/cookie-policy" className="text-accent hover:underline">
               Cookie Policy
             </Link>
@@ -114,7 +113,7 @@ export default function CookieConsentBanner() {
             <div className="flex items-start justify-between gap-3 border-t border-border pt-3">
               <div>
                 <p className="text-sm font-medium text-foreground">Analytics cookies</p>
-                <p className="text-xs text-muted">First-party only — helps us understand usage. Never sold or shared with advertisers.</p>
+                <p className="text-xs text-muted">Helps us understand usage. Never sold to advertisers.</p>
               </div>
               <button
                 type="button"

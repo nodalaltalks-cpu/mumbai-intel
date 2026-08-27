@@ -7,9 +7,15 @@ export const metadata: Metadata = {
   description: "The cookies NoDalalTalks uses — essential cookies always, and analytics cookies only with your consent. No advertising cookies.",
 };
 
+const EFFECTIVE_DATE = new Date("2026-07-01");
+const LAST_UPDATED = new Date("2026-08-27");
+
 export default function CookiePolicyPage() {
   return (
-    <LegalPageShell title="Cookie Policy" subtitle={`Last updated ${formatDate(new Date("2026-08-25"))}`}>
+    <LegalPageShell
+      title="Cookie Policy"
+      subtitle={`Effective ${formatDate(EFFECTIVE_DATE)} · Last updated ${formatDate(LAST_UPDATED)}`}
+    >
       <p>
         NoDalalTalks uses two categories of cookies: essential cookies, which are always active, and analytics
         cookies, which are only set if you accept them on the cookie banner. No advertising cookies are used
@@ -39,7 +45,9 @@ export default function CookiePolicyPage() {
         <li>
           <strong>Anonymous visitor cookie</strong>: a random, first-party identifier with no personal information in
           it, used to recognize a returning visitor and understand what an anonymous visitor researched before they
-          registered. It cannot be used to look up your name, email, or phone number.
+          registered. It cannot be used to look up your name, email, or phone number. Setting it also lets us record
+          your traffic source and a coarse, IP-derived location (country/region/city, never GPS or a raw IP address)
+          for that visit.
         </li>
         <li>
           <strong>Referral attribution cookie</strong>: set only if you arrive via someone&apos;s share link, so we can
@@ -53,9 +61,10 @@ export default function CookiePolicyPage() {
 
       <h2>Managing cookies</h2>
       <p>
-        You can change your choice at any time by clearing your browser&apos;s cookies for this site, which will show
-        the banner again on your next visit. Clearing cookies will also sign you out of the Service. Your recent
-        searches are stored using your browser&apos;s local storage, not a cookie, and never leave your device.
+        Change your analytics choice at any time from{" "}
+        <a href="/settings" className="text-accent hover:underline">Settings</a>, or by clearing your browser&apos;s
+        cookies for this site (which also signs you out and shows the banner again). Your recent searches are stored
+        using your browser&apos;s local storage, not a cookie, and never leave your device.
       </p>
 
       <h2>Contact</h2>
