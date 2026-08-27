@@ -5,7 +5,6 @@ import { updatePreferencesAction } from "@/lib/actions/user-preferences";
 import PriceRangeFilter from "@/app/components/PriceRangeFilter";
 import { formatIndianPriceCompact } from "@/lib/price-range";
 import { useProfileCompletion } from "@/lib/profile-completion-client";
-import SkipFieldButton from "./SkipFieldButton";
 
 /** Budget preference — reuses the same From/To-typed-or-dragged Indian-currency PriceRangeFilter already built for the public Transactions/Projects filters, so typing "20 lakhs" / "0.2 Cr" / "20,00,000" all normalize the same way here too. Debounced so a slider drag doesn't fire a save per pixel. */
 export default function BudgetPreferenceForm({ minRupees, maxRupees }: { minRupees: number | null; maxRupees: number | null }) {
@@ -50,7 +49,6 @@ export default function BudgetPreferenceForm({ minRupees, maxRupees }: { minRupe
       <PriceRangeFilter minRupees={minRupees} maxRupees={maxRupees} onCommit={handleCommit} warnOnAmbiguous />
       <div className="flex items-center justify-between">
         <p className="text-[10px] text-muted">{feedback}</p>
-        <SkipFieldButton fieldKey="budget" />
       </div>
     </div>
   );

@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react";
 import { updatePreferencesAction } from "@/lib/actions/user-preferences";
 import { useProfileCompletion } from "@/lib/profile-completion-client";
-import SkipFieldButton from "./SkipFieldButton";
 
 const STATUS_OPTIONS = [
   { value: "PRE_LAUNCH", label: "Pre-launch", hint: "Announced or marketed, but formal construction hasn't started yet." },
@@ -56,7 +55,6 @@ export default function PropertyStatusForm({ preferredReadiness }: { preferredRe
       </div>
       <div className="flex items-center justify-between">
         <p className="text-[10px] text-muted">{isPending ? "Saving…" : savedAt ? "Saved" : "Select any that apply, saved automatically."}</p>
-        <SkipFieldButton fieldKey="readiness" />
       </div>
     </div>
   );

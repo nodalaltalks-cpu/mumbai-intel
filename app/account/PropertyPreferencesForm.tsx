@@ -4,7 +4,6 @@ import { useState, useTransition } from "react";
 import { updatePreferencesAction } from "@/lib/actions/user-preferences";
 import { CATEGORY_LABEL, CONFIGURATION_FILTER_OPTIONS, PROPERTY_CATEGORIES } from "@/lib/project-meta";
 import { useProfileCompletion } from "@/lib/profile-completion-client";
-import SkipFieldButton from "./SkipFieldButton";
 
 // Non-BHK property shapes, kept local to this preference form rather than
 // added to lib/project-meta.ts's CONFIGURATION_FILTER_OPTIONS — that list is
@@ -118,7 +117,6 @@ export default function PropertyPreferencesForm({
 
       <div className="flex items-center justify-between">
         <p className="text-[10px] text-muted">{isPending ? "Saving…" : savedAt ? "Saved" : "Tap to select, saved automatically."}</p>
-        <SkipFieldButton fieldKey="configuration" />
       </div>
     </div>
   );

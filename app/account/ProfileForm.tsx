@@ -5,7 +5,6 @@ import { updatePublicProfileAction } from "@/lib/actions/public-profile";
 import AuthField from "@/app/components/auth/AuthField";
 import { AuthError } from "@/app/components/auth/AuthMessage";
 import PhoneVerificationCard from "./PhoneVerificationCard";
-import SkipFieldButton from "./SkipFieldButton";
 import CountryCodeSelect from "@/app/components/CountryCodeSelect";
 import { DEFAULT_COUNTRY_CODE } from "@/lib/country-codes";
 import { useProfileCompletion } from "@/lib/profile-completion-client";
@@ -363,7 +362,6 @@ export default function ProfileForm({
             <span className="text-xs text-muted">Helps us understand which life stage to tailor research for.</span>
             <div className="flex items-center gap-2">
               <SaveStatus state={saveStates.dob ?? "idle"} />
-              <SkipFieldButton fieldKey="dateOfBirth" />
             </div>
           </div>
         </div>
@@ -385,7 +383,6 @@ export default function ProfileForm({
             ))}
             <SaveStatus state={effectiveSaveState(genderValue, saveStates.gender ?? "idle")} />
           </div>
-          <SkipFieldButton fieldKey="gender" />
         </div>
 
         <p className="text-xs text-muted">Why we ask: these details help us recommend more relevant properties and research for you — never shown publicly.</p>

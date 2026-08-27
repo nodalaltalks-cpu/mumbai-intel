@@ -14,7 +14,6 @@ import {
 
 const UX_MILESTONES_DESC = [...UX_MILESTONES].reverse();
 import {
-  recordFieldSkippedAction,
   recordProfileStartedAction,
   recordSectionClickedAction,
   recordSectionCompletedAction,
@@ -37,6 +36,17 @@ export const FIELD_ANCHORS: Record<string, string> = {
   familyIncome: "family",
 };
 
+/** One anchor id per profile-completion section — the accordion's own navigation (ProfileSectionSelector) jumps by section, not by individual field, so it needs this coarser section -> anchor mapping alongside FIELD_ANCHORS above. Every field in a given section already shares the same anchor (verified against FIELD_ANCHORS), so this is never ambiguous. */
+export const SECTION_ANCHORS: Record<ProfileSectionKey, string> = {
+  personal: "basic-profile",
+  budget: "budget",
+  property: "property-type",
+  status: "property-status",
+  purpose: "purpose",
+  location: "locations",
+  family: "family",
+};
+
 /** A whole section (Personal Details, Budget, ...) just transitioned incomplete -> complete, or the overall profile just reached 100% -- the two celebration moments Section 12/13 ask to distinguish. Replaces the old numeric 25/50/75/90 percent-bracket toast, which fired on arbitrary percent crossings that didn't correspond to anything the user could point to ("what did I just finish?"); a named section is more legible and matches the spec's own examples verbatim. The server-side PROFILE_COMPLETION_25/50/75/90 analytics events (fired from the save actions, unrelated to this UI trigger) are untouched. */
 type Celebration =
   | { kind: "section"; section: ProfileSectionKey; label: string }
@@ -49,6 +59,10 @@ interface ProfileCompletionContextValue {
   guidedActive: boolean;
   celebration: Celebration | null;
   dismissCelebration: () => void;
+  /** Which section's accordion panel is currently expanded (an anchor id, e.g. "budget") — every other panel stays mounted but CSS-hidden, never unmounted, so no field's in-progress value or debounce timer is ever lost switching sections. */
+  activeAnchor: string;
+  /** Expands exactly one section's panel by its anchor id, collapsing the rest — used directly by ProfileSectionSelector's dropdown, and internally by every guided-navigation entry point below so a scroll/focus target is never hidden when it's reached. */
+  setActiveAnchor: (anchorId: string) => void;
   /** Optimistically flips a field's local status the instant the user acts — the real persisted value still comes from the server action running in parallel; this is purely so the visible % and checklist never wait on a round trip. */
   setFieldComplete: (key: string, complete: boolean) => void;
   /** Current complete/incomplete state of one field, read BEFORE a caller's own optimistic setFieldComplete call — lets a card tell "this field just became complete for the first time" apart from "already complete, just being edited/adjusted," so it only auto-advances on a genuine transition (Section 12/18/19). */
@@ -57,7 +71,6 @@ interface ProfileCompletionContextValue {
   firstIncompleteAnchor: () => string | null;
   scrollToFirstIncomplete: (source?: string) => void;
   scrollToNextAfter: (key: string) => void;
-  skipField: (key: string) => void;
   /** Jumps to a whole section — its first incomplete field if one exists, otherwise just the section itself (still useful navigation for an already-complete section). */
   scrollToSection: (section: ProfileSectionKey, source?: string) => void;
   /** Jumps to one specific field by key (e.g. a single "What's left" row) — used when exactly one thing remains, or the user picks a specific item rather than "the first incomplete one." */
@@ -241,6 +254,15 @@ export function ProfileCompletionProvider({
   const [celebration, setCelebration] = useState<Celebration | null>(null);
   const abandonedFiredRef = useRef(false);
 
+  // Accordion's initial panel: the first incomplete section (same "what should
+  // this user see first" logic as firstIncompleteAnchor below), so arriving at
+  // /account?tab=profile lands directly on the first thing worth finishing,
+  // rather than always defaulting to Personal Details.
+  const [activeAnchor, setActiveAnchor] = useState<string>(() => {
+    const firstIncomplete = initialSections.find((s) => !s.complete);
+    return firstIncomplete ? FIELD_ANCHORS[firstIncomplete.key] ?? "basic-profile" : "basic-profile";
+  });
+
   const percent = useMemo(() => {
     const complete = sections.filter((s) => s.complete).length;
     return sections.length ? Math.round((complete / sections.length) * 100) : 0;
@@ -355,7 +377,10 @@ export function ProfileCompletionProvider({
       void recordSectionClickedAction({ trigger: "cta", source });
       const next = sections.find((s) => !s.complete);
       const anchor = next ? FIELD_ANCHORS[next.key] : null;
-      if (anchor) scrollToAnchor(anchor, next?.key);
+      if (anchor) {
+        setActiveAnchor(anchor); // expand that section's accordion panel before scrolling into it — a hidden panel can't be scrolled to or focused
+        scrollToAnchor(anchor, next?.key);
+      }
     },
     [guidedActive, sections, percent]
   );
@@ -366,13 +391,19 @@ export function ProfileCompletionProvider({
       const firstIncompleteInSection = sections.find((s) => s.section === section && !s.complete);
       if (firstIncompleteInSection) {
         const anchor = FIELD_ANCHORS[firstIncompleteInSection.key];
-        if (anchor) scrollToAnchor(anchor, firstIncompleteInSection.key);
+        if (anchor) {
+          setActiveAnchor(anchor);
+          scrollToAnchor(anchor, firstIncompleteInSection.key);
+        }
         return;
       }
       // Section already complete -- still navigate there via its first field's anchor.
       const anyInSection = sections.find((s) => s.section === section);
       const anchor = anyInSection ? FIELD_ANCHORS[anyInSection.key] : null;
-      if (anchor) scrollToAnchor(anchor);
+      if (anchor) {
+        setActiveAnchor(anchor);
+        scrollToAnchor(anchor);
+      }
     },
     [sections]
   );
@@ -381,21 +412,21 @@ export function ProfileCompletionProvider({
     (key: string, source = "whats_left_row") => {
       void recordSectionClickedAction({ field: key, trigger: "click", source });
       const anchor = FIELD_ANCHORS[key];
-      if (anchor) scrollToAnchor(anchor, key);
+      if (anchor) {
+        setActiveAnchor(anchor);
+        scrollToAnchor(anchor, key);
+      }
     },
     []
   );
 
   const scrollToNextAfter = useCallback(
-    (key: string, force = false) => {
-      // The auto-advance-after-save case (ProfileForm's persist(), called on
-      // every field that just transitioned complete) stays gated behind
-      // guidedActive -- a user quietly filling in fields in their own order,
-      // who never asked to be guided, shouldn't get an unsolicited jump.
-      // `force` (skipField below) bypasses that gate: an explicit "Skip for
-      // now" click IS the user asking to move on, and doing nothing in
-      // response is a dead end, not a safe default.
-      if (!guidedActive && !force) return;
+    (key: string) => {
+      // The auto-advance-after-save case (every Form component's persist(),
+      // called on every field that just transitioned complete) stays gated
+      // behind guidedActive -- a user quietly filling in fields in their own
+      // order, who never asked to be guided, shouldn't get an unsolicited jump.
+      if (!guidedActive) return;
       const idx = sections.findIndex((s) => s.key === key);
       const rest = idx >= 0 ? sections.slice(idx + 1) : sections;
       const next = rest.find((s) => !s.complete) ?? sections.find((s) => !s.complete);
@@ -412,20 +443,12 @@ export function ProfileCompletionProvider({
         const snapshotToken = activeNavigationToken;
         window.setTimeout(() => {
           if (activeNavigationToken !== snapshotToken) return;
+          setActiveAnchor(anchor);
           scrollToAnchor(anchor, next.key);
         }, 550);
       }
     },
     [guidedActive, sections]
-  );
-
-  const skipField = useCallback(
-    (key: string) => {
-      void recordFieldSkippedAction(key);
-      setGuidedActive(true); // an explicit Skip is itself entering guided mode, same as the "Complete my profile" CTA -- so a save on the NEXT field also auto-advances
-      scrollToNextAfter(key, true);
-    },
-    [scrollToNextAfter]
   );
 
   // Cross-page arrival signal (Part 1's critical fix): a CTA rendered on a
@@ -510,13 +533,14 @@ export function ProfileCompletionProvider({
     guidedActive,
     celebration,
     dismissCelebration: () => setCelebration(null),
+    activeAnchor,
+    setActiveAnchor,
     setFieldComplete,
     isFieldComplete,
     startGuided: () => setGuidedActive(true),
     firstIncompleteAnchor,
     scrollToFirstIncomplete,
     scrollToNextAfter,
-    skipField,
     scrollToSection,
     scrollToField,
   };

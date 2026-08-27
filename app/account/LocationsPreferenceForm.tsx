@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react";
 import { updatePreferencesAction } from "@/lib/actions/user-preferences";
 import { useProfileCompletion } from "@/lib/profile-completion-client";
-import SkipFieldButton from "./SkipFieldButton";
 
 /**
  * Locations preference — two distinct inputs, stored separately per Section
@@ -149,7 +148,6 @@ export default function LocationsPreferenceForm({
               ? `Your recommendations will now prioritize ${selectedLabels(checkedIds, freeText).join(", ")}.`
               : "Saved automatically."}
         </p>
-        <SkipFieldButton fieldKey="localities" />
       </div>
     </div>
   );

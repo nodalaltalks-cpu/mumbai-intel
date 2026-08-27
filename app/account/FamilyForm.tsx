@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react";
 import { updatePreferencesAction } from "@/lib/actions/user-preferences";
 import { useProfileCompletion } from "@/lib/profile-completion-client";
-import SkipFieldButton from "./SkipFieldButton";
 
 const FAMILY_SIZE_OPTIONS = [
   { value: "1", label: "1" },
@@ -79,7 +78,6 @@ export default function FamilyForm({ familySize, familyIncomeRange }: { familySi
             </button>
           ))}
         </div>
-        <SkipFieldButton fieldKey="familySize" />
       </div>
 
       <div id="field-familyIncome" tabIndex={-1}>
@@ -98,7 +96,6 @@ export default function FamilyForm({ familySize, familyIncomeRange }: { familySi
             </button>
           ))}
         </div>
-        <SkipFieldButton fieldKey="familyIncome" />
       </div>
 
       <p className="text-[10px] text-muted">

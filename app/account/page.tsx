@@ -40,6 +40,9 @@ import BudgetPreferenceForm from "./BudgetPreferenceForm";
 import LocationsPreferenceForm from "./LocationsPreferenceForm";
 import PurposeForm from "./PurposeForm";
 import VerifyEmailButton from "./VerifyEmailButton";
+import ProfileSectionPanel from "./ProfileSectionPanel";
+import ProfileSectionSelector from "./ProfileSectionSelector";
+import SavePreferenceButton from "./SavePreferenceButton";
 import ProfileCompletionBar from "@/app/components/ui/ProfileCompletionBar";
 import ProfileMilestoneToast from "@/app/components/ui/ProfileMilestoneToast";
 import StickyCompletionIndicator from "@/app/components/ui/StickyCompletionIndicator";
@@ -394,7 +397,14 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               <ProfileCompletionBar />
             </div>
 
-            <div id="basic-profile" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
+            <div className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-4 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+              <div className="flex-1">
+                <ProfileSectionSelector />
+              </div>
+              <SavePreferenceButton />
+            </div>
+
+            <ProfileSectionPanel anchorId="basic-profile" className="rounded-sm border border-border bg-surface p-4">
               <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Personal Details</h2>
               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Fact label="Email" value={user.email} />
@@ -426,7 +436,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                   gender={user.gender}
                 />
               </div>
-            </div>
+            </ProfileSectionPanel>
 
             <div>
               <h2 className="font-mono text-sm font-semibold text-foreground">Research Profile</h2>
@@ -437,15 +447,15 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               </p>
             </div>
 
-            <div id="budget" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
+            <ProfileSectionPanel anchorId="budget" className="rounded-sm border border-border bg-surface p-4">
               <h3 className="font-mono text-xs uppercase tracking-wide text-muted">Budget</h3>
               <p className="mt-1 text-[11px] text-muted">Type an amount (e.g. &ldquo;1.2 Cr&rdquo; or &ldquo;75 Lakh&rdquo;) or drag the range. Takes about 20 seconds.</p>
               <div className="mt-3">
                 <BudgetPreferenceForm minRupees={preferences?.preferredBudgetMinRupees ?? null} maxRupees={preferences?.preferredBudgetMaxRupees ?? null} />
               </div>
-            </div>
+            </ProfileSectionPanel>
 
-            <div id="property-type" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
+            <ProfileSectionPanel anchorId="property-type" className="rounded-sm border border-border bg-surface p-4">
               <h3 className="font-mono text-xs uppercase tracking-wide text-muted">Property Type &amp; Configuration</h3>
               <p className="mt-1 text-[11px] text-muted">Tap what applies. Takes about 20 seconds.</p>
               <div className="mt-3">
@@ -454,25 +464,25 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                   preferredConfigurations={preferences?.preferredConfigurations ?? []}
                 />
               </div>
-            </div>
+            </ProfileSectionPanel>
 
-            <div id="property-status" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
+            <ProfileSectionPanel anchorId="property-status" className="rounded-sm border border-border bg-surface p-4">
               <h3 className="font-mono text-xs uppercase tracking-wide text-muted">Property Status</h3>
               <p className="mt-1 text-[11px] text-muted">What construction stage are you open to? Select any that apply.</p>
               <div className="mt-3">
                 <PropertyStatusForm preferredReadiness={preferences?.preferredReadiness ?? []} />
               </div>
-            </div>
+            </ProfileSectionPanel>
 
-            <div id="purpose" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
+            <ProfileSectionPanel anchorId="purpose" className="rounded-sm border border-border bg-surface p-4">
               <h3 className="font-mono text-xs uppercase tracking-wide text-muted">What are you looking for?</h3>
               <p className="mt-1 text-[11px] text-muted">Select any that apply. You can be both.</p>
               <div className="mt-3">
                 <PurposeForm purposes={preferences?.purposes ?? []} />
               </div>
-            </div>
+            </ProfileSectionPanel>
 
-            <div id="locations" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
+            <ProfileSectionPanel anchorId="locations" className="rounded-sm border border-border bg-surface p-4">
               <h3 className="font-mono text-xs uppercase tracking-wide text-muted">Preferred Locations</h3>
               <p className="mt-1 text-[11px] text-muted">Add a location or landmark. Takes about 30 seconds.</p>
               <div className="mt-3">
@@ -482,15 +492,15 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                   localities={localities}
                 />
               </div>
-            </div>
+            </ProfileSectionPanel>
 
-            <div id="family" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
+            <ProfileSectionPanel anchorId="family" className="rounded-sm border border-border bg-surface p-4">
               <h3 className="font-mono text-xs uppercase tracking-wide text-muted">Family / Household</h3>
               <p className="mt-1 text-[11px] text-muted">Optional and private — never shown publicly. Helps us understand space and budget needs.</p>
               <div className="mt-3">
                 <FamilyForm familySize={preferences?.familySize ?? null} familyIncomeRange={preferences?.familyIncomeRange ?? null} />
               </div>
-            </div>
+            </ProfileSectionPanel>
 
             <div id="notification-preferences" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
               <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Notification Settings</h2>
