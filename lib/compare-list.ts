@@ -87,9 +87,13 @@ export function useCompareList(): string[] {
   const [list, setList] = useState<string[]>([]);
 
   useEffect(() => {
-    setList(readCompareList());
+    const initial = readCompareList();
+    console.log("[mi-compare-debug] mount effect ran, readCompareList() =", initial);
+    setList(initial);
     function onChange() {
-      setList(readCompareList());
+      const next = readCompareList();
+      console.log("[mi-compare-debug] onChange fired, readCompareList() =", next);
+      setList(next);
     }
     window.addEventListener(EVENT, onChange);
     window.addEventListener("storage", onChange);
@@ -98,6 +102,7 @@ export function useCompareList(): string[] {
       window.removeEventListener("storage", onChange);
     };
   }, []);
+  console.log("[mi-compare-debug] render, list =", list);
 
   return list;
 }
