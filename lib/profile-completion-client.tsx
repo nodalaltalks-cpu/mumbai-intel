@@ -59,10 +59,10 @@ interface ProfileCompletionContextValue {
   guidedActive: boolean;
   celebration: Celebration | null;
   dismissCelebration: () => void;
-  /** Which section's accordion panel is currently expanded (an anchor id, e.g. "budget") — every other panel stays mounted but CSS-hidden, never unmounted, so no field's in-progress value or debounce timer is ever lost switching sections. */
-  activeAnchor: string;
-  /** Expands exactly one section's panel by its anchor id, collapsing the rest — used directly by ProfileSectionSelector's dropdown, and internally by every guided-navigation entry point below so a scroll/focus target is never hidden when it's reached. */
-  setActiveAnchor: (anchorId: string) => void;
+  /** Which section's accordion panel is currently expanded (an anchor id, e.g. "budget"), or null if every panel is collapsed — every panel stays mounted but CSS-hidden when not active, never unmounted, so no field's in-progress value or debounce timer is ever lost switching sections. */
+  activeAnchor: string | null;
+  /** Expands exactly one section's panel by its anchor id (collapsing the rest), or collapses everything when passed null — called by each ProfileAccordionSection's own header on tap, and internally by every guided-navigation entry point below so a scroll/focus target is never hidden when it's reached. */
+  setActiveAnchor: (anchorId: string | null) => void;
   /** Optimistically flips a field's local status the instant the user acts — the real persisted value still comes from the server action running in parallel; this is purely so the visible % and checklist never wait on a round trip. */
   setFieldComplete: (key: string, complete: boolean) => void;
   /** Current complete/incomplete state of one field, read BEFORE a caller's own optimistic setFieldComplete call — lets a card tell "this field just became complete for the first time" apart from "already complete, just being edited/adjusted," so it only auto-advances on a genuine transition (Section 12/18/19). */
@@ -258,7 +258,7 @@ export function ProfileCompletionProvider({
   // this user see first" logic as firstIncompleteAnchor below), so arriving at
   // /account?tab=profile lands directly on the first thing worth finishing,
   // rather than always defaulting to Personal Details.
-  const [activeAnchor, setActiveAnchor] = useState<string>(() => {
+  const [activeAnchor, setActiveAnchor] = useState<string | null>(() => {
     const firstIncomplete = initialSections.find((s) => !s.complete);
     return firstIncomplete ? FIELD_ANCHORS[firstIncomplete.key] ?? "basic-profile" : "basic-profile";
   });

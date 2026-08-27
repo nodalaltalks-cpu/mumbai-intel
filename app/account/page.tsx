@@ -41,7 +41,6 @@ import LocationsPreferenceForm from "./LocationsPreferenceForm";
 import PurposeForm from "./PurposeForm";
 import VerifyEmailButton from "./VerifyEmailButton";
 import ProfileSectionPanel from "./ProfileSectionPanel";
-import ProfileSectionSelector from "./ProfileSectionSelector";
 import SavePreferenceButton from "./SavePreferenceButton";
 import ProfileCompletionBar from "@/app/components/ui/ProfileCompletionBar";
 import ProfileMilestoneToast from "@/app/components/ui/ProfileMilestoneToast";
@@ -388,7 +387,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
 
         {tab === "profile" ? (
           <ProfileCompletionProvider userId={user.id} initialSections={completionSections} initialPercent={user.profileCompletionPercent}>
-          <section className="flex flex-col gap-6">
+          <section className="flex flex-col gap-6 pb-24">
             <p className="text-[11px] text-muted">
               Research freely, with no phone number required and no spam calls. Everything below is private, optional, and never shared with brokers or developers.
             </p>
@@ -397,16 +396,8 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               <ProfileCompletionBar />
             </div>
 
-            <div className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-4 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
-              <div className="flex-1">
-                <ProfileSectionSelector />
-              </div>
-              <SavePreferenceButton />
-            </div>
-
-            <ProfileSectionPanel anchorId="basic-profile" className="rounded-sm border border-border bg-surface p-4">
-              <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Personal Details</h2>
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <ProfileSectionPanel anchorId="basic-profile" section="personal" title="Personal Details">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Fact label="Email" value={user.email} />
                 <Fact
                   label="Sign-in method"
@@ -447,17 +438,15 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               </p>
             </div>
 
-            <ProfileSectionPanel anchorId="budget" className="rounded-sm border border-border bg-surface p-4">
-              <h3 className="font-mono text-xs uppercase tracking-wide text-muted">Budget</h3>
-              <p className="mt-1 text-[11px] text-muted">Type an amount (e.g. &ldquo;1.2 Cr&rdquo; or &ldquo;75 Lakh&rdquo;) or drag the range. Takes about 20 seconds.</p>
+            <ProfileSectionPanel anchorId="budget" section="budget" title="Budget">
+              <p className="text-[11px] text-muted">Type an amount (e.g. &ldquo;1.2 Cr&rdquo; or &ldquo;75 Lakh&rdquo;) or drag the range. Takes about 20 seconds.</p>
               <div className="mt-3">
                 <BudgetPreferenceForm minRupees={preferences?.preferredBudgetMinRupees ?? null} maxRupees={preferences?.preferredBudgetMaxRupees ?? null} />
               </div>
             </ProfileSectionPanel>
 
-            <ProfileSectionPanel anchorId="property-type" className="rounded-sm border border-border bg-surface p-4">
-              <h3 className="font-mono text-xs uppercase tracking-wide text-muted">Property Type &amp; Configuration</h3>
-              <p className="mt-1 text-[11px] text-muted">Tap what applies. Takes about 20 seconds.</p>
+            <ProfileSectionPanel anchorId="property-type" section="property" title="Property Type & Configuration">
+              <p className="text-[11px] text-muted">Tap what applies. Takes about 20 seconds.</p>
               <div className="mt-3">
                 <PropertyPreferencesForm
                   preferredCategories={preferences?.preferredCategories ?? []}
@@ -466,25 +455,22 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               </div>
             </ProfileSectionPanel>
 
-            <ProfileSectionPanel anchorId="property-status" className="rounded-sm border border-border bg-surface p-4">
-              <h3 className="font-mono text-xs uppercase tracking-wide text-muted">Property Status</h3>
-              <p className="mt-1 text-[11px] text-muted">What construction stage are you open to? Select any that apply.</p>
+            <ProfileSectionPanel anchorId="property-status" section="status" title="Property Status">
+              <p className="text-[11px] text-muted">What construction stage are you open to? Select any that apply.</p>
               <div className="mt-3">
                 <PropertyStatusForm preferredReadiness={preferences?.preferredReadiness ?? []} />
               </div>
             </ProfileSectionPanel>
 
-            <ProfileSectionPanel anchorId="purpose" className="rounded-sm border border-border bg-surface p-4">
-              <h3 className="font-mono text-xs uppercase tracking-wide text-muted">What are you looking for?</h3>
-              <p className="mt-1 text-[11px] text-muted">Select any that apply. You can be both.</p>
+            <ProfileSectionPanel anchorId="purpose" section="purpose" title="What are you looking for?">
+              <p className="text-[11px] text-muted">Select any that apply. You can be both.</p>
               <div className="mt-3">
                 <PurposeForm purposes={preferences?.purposes ?? []} />
               </div>
             </ProfileSectionPanel>
 
-            <ProfileSectionPanel anchorId="locations" className="rounded-sm border border-border bg-surface p-4">
-              <h3 className="font-mono text-xs uppercase tracking-wide text-muted">Preferred Locations</h3>
-              <p className="mt-1 text-[11px] text-muted">Add a location or landmark. Takes about 30 seconds.</p>
+            <ProfileSectionPanel anchorId="locations" section="location" title="Preferred Locations">
+              <p className="text-[11px] text-muted">Add a location or landmark. Takes about 30 seconds.</p>
               <div className="mt-3">
                 <LocationsPreferenceForm
                   preferredLocalityIds={preferences?.preferredLocalityIds ?? []}
@@ -494,9 +480,8 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               </div>
             </ProfileSectionPanel>
 
-            <ProfileSectionPanel anchorId="family" className="rounded-sm border border-border bg-surface p-4">
-              <h3 className="font-mono text-xs uppercase tracking-wide text-muted">Family / Household</h3>
-              <p className="mt-1 text-[11px] text-muted">Optional and private — never shown publicly. Helps us understand space and budget needs.</p>
+            <ProfileSectionPanel anchorId="family" section="family" title="Family / Household">
+              <p className="text-[11px] text-muted">Optional and private — never shown publicly. Helps us understand space and budget needs.</p>
               <div className="mt-3">
                 <FamilyForm familySize={preferences?.familySize ?? null} familyIncomeRange={preferences?.familyIncomeRange ?? null} />
               </div>
@@ -535,6 +520,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
           </section>
           <ProfileMilestoneToast />
           <StickyCompletionIndicator anchorId="profile-completion-top" />
+          <SavePreferenceButton />
           </ProfileCompletionProvider>
         ) : null}
       </main>
