@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
 /**
  * Client-only, localStorage-backed Compare list — anonymous-friendly (no
@@ -89,6 +89,16 @@ function getServerSnapshot() {
 
 export function useCompareList(): string[] {
   const raw = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  // getServerSnapshot always returns "[]" (no way to read localStorage during SSR), and on
+  // some consumers (observed on /compare's own list, not e.g. the Navbar badge or the
+  // per-project toggle button) React's post-hydration reconciliation never re-invokes
+  // getSnapshot on its own if nothing subsequently changes the store, leaving the page stuck
+  // on the server snapshot even when the real localStorage list is non-empty. Firing the same
+  // event `write()` already uses forces every subscribed instance to recheck getSnapshot once,
+  // safe to do unconditionally since a no-op recheck is harmless.
+  useEffect(() => {
+    window.dispatchEvent(new Event(EVENT));
+  }, []);
   try {
     return JSON.parse(raw) as string[];
   } catch {
