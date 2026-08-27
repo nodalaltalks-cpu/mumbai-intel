@@ -71,6 +71,7 @@ export default function CompareView() {
 
   return (
     <>
+      <div data-mi-debug-slugs={JSON.stringify(slugs)} data-mi-debug-projects={projects === null ? "null" : String(projects.length)} />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-mono text-2xl font-bold text-foreground">Compare Projects</h1>
