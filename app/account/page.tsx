@@ -13,8 +13,6 @@ import {
   getUserPreferences,
   getNotificationPreferences,
   getDashboardNextActionSignals,
-  getPublicNotifications,
-  getPublicUnreadNotificationCount,
 } from "@/lib/queries/dashboard";
 import { removeWishlistItemAction } from "@/lib/actions/wishlist";
 import { toggleSavedProjectAction } from "@/lib/actions/saved-projects";
@@ -34,7 +32,6 @@ import ClearAllButton from "@/app/components/ClearAllButton";
 import NextActionCard from "@/app/components/NextActionCard";
 import SavedSearchAlertToggle from "./SavedSearchAlertToggle";
 import NotificationPreferencesForm from "./NotificationPreferencesForm";
-import NotificationHistorySection from "./NotificationHistorySection";
 import ProfileForm from "./ProfileForm";
 import PropertyPreferencesForm from "./PropertyPreferencesForm";
 import PropertyStatusForm from "./PropertyStatusForm";
@@ -91,7 +88,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
   // and the next-action signals are the exceptions: the header and the
   // dashboard-wide "what should I do next" card render on every tab.
   // eslint-disable-next-line prefer-const -- `user` is reassigned below by the referralCode lazy-backfill
-  let [user, savedProjects, wishlist, recentViews, savedSearches, preferences, notificationPreferences, localities, nextActionSignals, profileNotifications, profileUnreadCount] =
+  let [user, savedProjects, wishlist, recentViews, savedSearches, preferences, notificationPreferences, localities, nextActionSignals] =
     await Promise.all([
     prisma.publicUser.findUnique({ where: { id: session.userId } }),
     tab === "profile" ? getSavedProjectsForUser(session.userId) : Promise.resolve([]),
@@ -102,9 +99,6 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
     tab === "profile" ? getNotificationPreferences(session.userId) : Promise.resolve(null),
     tab === "profile" ? getLocalitiesForSelect() : Promise.resolve([]),
     getDashboardNextActionSignals(session.userId),
-    // Part 3/4 — the same Notification data NotificationBell already reads (getPublicNotifications/getPublicUnreadNotificationCount), just also rendered as a full history list on this tab.
-    tab === "profile" ? getPublicNotifications(session.userId) : Promise.resolve([]),
-    tab === "profile" ? getPublicUnreadNotificationCount(session.userId) : Promise.resolve(0),
   ]);
   if (!user) notFound();
 
@@ -433,9 +427,6 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                 />
               </div>
             </div>
-
-            {/* Directly below My Profile (not buried at the bottom, and not requiring the top-right bell to be opened first) -- same underlying Notification data the bell reads, just rendered as a full history list here. */}
-            <NotificationHistorySection initialNotifications={profileNotifications} initialUnreadCount={profileUnreadCount} />
 
             <div>
               <h2 className="font-mono text-sm font-semibold text-foreground">Research Profile</h2>

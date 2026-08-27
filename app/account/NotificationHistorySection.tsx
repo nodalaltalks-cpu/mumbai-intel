@@ -19,14 +19,13 @@ function dayGroupLabel(date: Date): string {
 }
 
 /**
- * Part 3/4 — full notification history, directly below My Profile. Reuses
- * the exact same Notification table / server actions NotificationBell.tsx
- * already uses (fetchPublicNotificationsAction's initial page is passed in
- * as a prop from app/account/page.tsx, matching how every other tab on this
- * page is server-fetched) — this is a second RENDERING of the same data,
- * never a second notification system. Strict per-user isolation is already
- * enforced server-side in every action this calls (recipientPublicUserId
- * scoped to the signed-in session, see lib/actions/notifications.ts).
+ * Full notification history, rendered on its own page (app/notifications/page.tsx),
+ * reached from the navbar bell's "View all" link. Reuses the exact same
+ * Notification table / server actions NotificationBell.tsx already uses —
+ * this is a second RENDERING of the same data, never a second notification
+ * system. Strict per-user isolation is already enforced server-side in every
+ * action this calls (recipientPublicUserId scoped to the signed-in session,
+ * see lib/actions/notifications.ts).
  */
 export default function NotificationHistorySection({
   initialNotifications,

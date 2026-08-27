@@ -236,8 +236,8 @@ export default function NotificationBell({
             ) : null}
           </div>
           <div className="border-t border-border px-3 py-2">
-            <Link href="/account" onClick={() => setOpen(false)} className="text-[10px] text-accent hover:underline">
-              View account →
+            <Link href="/notifications" onClick={() => setOpen(false)} className="text-[10px] text-accent hover:underline">
+              View all →
             </Link>
           </div>
         </div>

@@ -33,7 +33,7 @@ export default function BudgetPreferenceForm({ minRupees, maxRupees }: { minRupe
         setSaved({ min, max });
         if (!wasComplete && (min !== null || max !== null)) scrollToNextAfter("budget");
       });
-    }, 400);
+    }, 1200);
   }
 
   const feedback =

@@ -86,6 +86,12 @@ export default function ProfileForm({
   const [genderValue, setGenderValue] = useState(gender ?? "");
   const [saveStates, setSaveStates] = useState<Record<string, SaveState>>({});
   const [formError, setFormError] = useState<string | undefined>(undefined);
+  // Shown directly below the phone field instead of the generic bottom
+  // AuthError box -- a duplicate-phone collision is specific to this field,
+  // so the message belongs right where the user is looking, not at the
+  // bottom of an unrelated section. Cleared the instant the user edits the
+  // number again (handlePhoneChange), not just on the next successful save.
+  const [phoneError, setPhoneError] = useState<string | undefined>(undefined);
   const phoneInputRef = useRef<HTMLInputElement>(null);
   const { setFieldComplete, isFieldComplete, scrollToNextAfter } = useProfileCompletion();
 
@@ -120,7 +126,9 @@ export default function ProfileForm({
     build: (fd: FormData) => void,
     completionKey: string,
     isNowComplete: boolean,
-    onSuccess?: () => void
+    onSuccess?: () => void,
+    /** When provided, routes this field's error (or its clearing, on success) here instead of the shared bottom formError -- used by phone/phoneCountryCode so a duplicate-number collision shows directly below the phone field. */
+    setFieldError?: (message: string | undefined) => void
   ) {
     const wasComplete = isFieldComplete(completionKey);
     const seq = (requestSeqRef.current[fieldKey] ?? 0) + 1;
@@ -133,17 +141,19 @@ export default function ProfileForm({
     if (!isCurrent()) return; // a newer request for this field has since superseded this one -- this response is stale, ignore it
     if (result.error) {
       setSaveStates((prev) => ({ ...prev, [fieldKey]: "error" }));
-      setFormError(result.error);
+      if (setFieldError) setFieldError(result.error);
+      else setFormError(result.error);
       return;
     }
-    setFormError(undefined);
+    if (setFieldError) setFieldError(undefined);
+    else setFormError(undefined);
     setFieldComplete(completionKey, isNowComplete);
     setSaveStates((prev) => ({ ...prev, [fieldKey]: "saved" }));
     onSuccess?.();
     if (!wasComplete && isNowComplete) scrollToNextAfter(completionKey);
   }
 
-  /** Debounced text-field auto-save — fires ~700ms after typing stops rather than on every keystroke (Section 9's "sensible debouncing", avoids one DB write per character). */
+  /** Debounced text-field auto-save — fires ~1200ms after typing stops rather than on every keystroke, so the user gets TYPE -> PAUSE -> AUTO-SAVE instead of a save per keystroke. Restarts on every change (existing timer cleared first), never stacking duplicate saves. */
   function debouncedPersist(
     fieldKey: string,
     build: (fd: FormData) => void,
@@ -155,7 +165,7 @@ export default function ProfileForm({
     if (existing) clearTimeout(existing);
     debounceRefs.current[fieldKey] = setTimeout(() => {
       void persist(fieldKey, build, completionKey, isNowComplete, onSuccess);
-    }, 700);
+    }, 1200);
   }
 
   useEffect(() => {
@@ -173,22 +183,23 @@ export default function ProfileForm({
   /** The single place a phone save actually fires (debounce timeout or blur-flush both funnel through this) — marks inFlightValueRef the instant the request starts, so the OTHER trigger can recognize this exact value is already being saved and skip a redundant duplicate. */
   function firePhoneSave(value: string) {
     inFlightValueRef.current.phone = value;
-    void persist("phone", (fd) => fd.set("phone", value), "phone", Boolean(value.trim()), () => setSavedPhone(value)).finally(() => {
+    void persist("phone", (fd) => fd.set("phone", value), "phone", Boolean(value.trim()), () => setSavedPhone(value), setPhoneError).finally(() => {
       if (inFlightValueRef.current.phone === value) inFlightValueRef.current.phone = undefined;
     });
   }
 
   function handlePhoneChange(value: string) {
     setPhoneValue(value);
+    setPhoneError(undefined); // clear any stale duplicate-number error the instant the user edits the number again
     const existing = debounceRefs.current.phone;
     if (existing) clearTimeout(existing);
-    debounceRefs.current.phone = setTimeout(() => firePhoneSave(value), 700);
+    debounceRefs.current.phone = setTimeout(() => firePhoneSave(value), 1200);
   }
 
-  /** A discrete selection, not typed text — saves immediately, no debounce. Completion never changes here: the phone SECTION is scored on the local number alone (PROFILE_COMPLETION_SECTIONS' "phone" predicate), so this always passes the field's current completion state through unchanged. */
+  /** A discrete selection, not typed text — saves immediately, no debounce. Completion never changes here: the phone SECTION is scored on the local number alone (PROFILE_COMPLETION_SECTIONS' "phone" predicate), so this always passes the field's current completion state through unchanged. Routed through setPhoneError too -- the (countryCode, phone) pair is what's actually unique, so changing just the country code can equally collide with another account. */
   function handleCountryCodeChange(dialCode: string) {
     setPhoneCountryCodeValue(dialCode);
-    void persist("phoneCountryCode", (fd) => fd.set("phoneCountryCode", dialCode), "phone", Boolean(phoneValue.trim()));
+    void persist("phoneCountryCode", (fd) => fd.set("phoneCountryCode", dialCode), "phone", Boolean(phoneValue.trim()), undefined, setPhoneError);
   }
 
   function handleCityChange(value: string) {
@@ -250,7 +261,7 @@ export default function ProfileForm({
                 onBlur={() => {
                   // Flush immediately on blur rather than waiting out the debounce, so
                   // "typed but not saved" (PhoneVerificationCard's Case 2) closes as
-                  // soon as the user leaves the field, not up to 700ms later.
+                  // soon as the user leaves the field, not up to 1200ms later.
                   const existing = debounceRefs.current.phone;
                   if (existing) clearTimeout(existing);
                   const trimmed = phoneValue.trim();
@@ -265,10 +276,17 @@ export default function ProfileForm({
                   firePhoneSave(phoneValue);
                 }}
                 placeholder="98765 43210"
-                className="w-full min-w-0 rounded-lg border border-border bg-surface px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted transition-shadow focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/10"
+                aria-invalid={phoneError ? true : undefined}
+                className={`w-full min-w-0 rounded-lg border bg-surface px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted transition-shadow focus:outline-none focus:ring-4 ${
+                  phoneError ? "border-negative focus:border-negative focus:ring-negative/10" : "border-border focus:border-accent focus:ring-accent/10"
+                }`}
               />
             </div>
-            <SaveStatus state={effectiveSaveState(phoneValue, saveStates.phone ?? "idle")} />
+            {phoneError ? (
+              <p className="text-[11px] text-negative">{phoneError}</p>
+            ) : (
+              <SaveStatus state={effectiveSaveState(phoneValue, saveStates.phone ?? "idle")} />
+            )}
           </div>
           <div className="flex flex-col gap-1">
             <AuthField label="City (optional)" name="city" value={cityValue} onChange={(e) => handleCityChange(e.target.value)} placeholder="Mumbai" />
