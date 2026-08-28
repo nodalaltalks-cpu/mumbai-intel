@@ -33,6 +33,60 @@ function Confetti() {
   );
 }
 
+// Reserved for the single biggest moment (100% complete) — a fuller, wider,
+// more colorful burst than the modest one above, still a fixed deterministic
+// set (not Math.random) and still reusing only colors already in this app's
+// own palette (the qualitative chart-1..7 set from globals.css, plus
+// accent/positive), just drawing on more of it at once for real variety.
+const GRAND_CONFETTI_PIECES = [
+  { left: "2%", delay: "0ms", x: "-18px", rotate: "120deg", color: "var(--chart-1)", w: 6, h: 10, round: false },
+  { left: "9%", delay: "90ms", x: "10px", rotate: "260deg", color: "var(--positive)", w: 8, h: 8, round: true },
+  { left: "16%", delay: "40ms", x: "-8px", rotate: "180deg", color: "var(--chart-6)", w: 6, h: 10, round: false },
+  { left: "23%", delay: "140ms", x: "14px", rotate: "300deg", color: "var(--chart-3)", w: 7, h: 7, round: true },
+  { left: "30%", delay: "20ms", x: "-12px", rotate: "200deg", color: "var(--chart-4)", w: 6, h: 10, round: false },
+  { left: "37%", delay: "110ms", x: "6px", rotate: "240deg", color: "var(--accent)", w: 8, h: 8, round: true },
+  { left: "44%", delay: "60ms", x: "-16px", rotate: "160deg", color: "var(--chart-5)", w: 6, h: 10, round: false },
+  { left: "51%", delay: "150ms", x: "12px", rotate: "280deg", color: "var(--chart-2)", w: 7, h: 7, round: true },
+  { left: "58%", delay: "10ms", x: "-6px", rotate: "220deg", color: "var(--chart-7)", w: 6, h: 10, round: false },
+  { left: "65%", delay: "100ms", x: "16px", rotate: "320deg", color: "var(--positive)", w: 8, h: 8, round: true },
+  { left: "72%", delay: "50ms", x: "-14px", rotate: "180deg", color: "var(--chart-1)", w: 6, h: 10, round: false },
+  { left: "79%", delay: "130ms", x: "8px", rotate: "260deg", color: "var(--chart-6)", w: 7, h: 7, round: true },
+  { left: "86%", delay: "30ms", x: "-10px", rotate: "200deg", color: "var(--accent)", w: 6, h: 10, round: false },
+  { left: "93%", delay: "120ms", x: "14px", rotate: "300deg", color: "var(--chart-3)", w: 8, h: 8, round: true },
+  { left: "12%", delay: "180ms", x: "-4px", rotate: "160deg", color: "var(--chart-4)", w: 6, h: 10, round: false },
+  { left: "27%", delay: "200ms", x: "10px", rotate: "240deg", color: "var(--chart-2)", w: 7, h: 7, round: true },
+  { left: "48%", delay: "170ms", x: "-14px", rotate: "220deg", color: "var(--chart-7)", w: 6, h: 10, round: false },
+  { left: "63%", delay: "210ms", x: "6px", rotate: "280deg", color: "var(--positive)", w: 8, h: 8, round: true },
+  { left: "81%", delay: "190ms", x: "-8px", rotate: "180deg", color: "var(--chart-5)", w: 6, h: 10, round: false },
+  { left: "97%", delay: "160ms", x: "12px", rotate: "260deg", color: "var(--accent)", w: 7, h: 7, round: true },
+] as const;
+
+function GrandConfetti() {
+  return (
+    <>
+      {GRAND_CONFETTI_PIECES.map((p, i) => (
+        <span
+          key={i}
+          aria-hidden="true"
+          className="mi-confetti-piece--grand"
+          style={
+            {
+              left: p.left,
+              animationDelay: p.delay,
+              backgroundColor: p.color,
+              width: `${p.w}px`,
+              height: `${p.h}px`,
+              borderRadius: p.round ? "50%" : "1px",
+              "--mi-confetti-x": p.x,
+              "--mi-confetti-rotate": p.rotate,
+            } as React.CSSProperties
+          }
+        />
+      ))}
+    </>
+  );
+}
+
 /**
  * Three distinct celebration moments (Phase 3C Parts 2-4):
  *  - "section": a small, brief corner toast when one section (Personal
@@ -51,7 +105,7 @@ export default function ProfileMilestoneToast() {
 
   useEffect(() => {
     if (!celebration) return;
-    const duration = celebration.kind === "complete" ? 8000 : celebration.kind === "milestone" ? 6000 : 5500;
+    const duration = celebration.kind === "complete" ? 9500 : celebration.kind === "milestone" ? 6000 : 5500;
     const t = setTimeout(dismissCelebration, duration);
     return () => clearTimeout(t);
   }, [celebration, dismissCelebration]);
@@ -69,7 +123,7 @@ export default function ProfileMilestoneToast() {
           className="mi-pop-in relative flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-none border-0 bg-surface p-6 text-center shadow-2xl sm:h-auto sm:max-w-md sm:rounded-lg sm:border sm:border-accent/30 sm:p-8"
           onClick={(e) => e.stopPropagation()}
         >
-          <Confetti />
+          <GrandConfetti />
           <button
             type="button"
             onClick={dismissCelebration}
@@ -78,14 +132,16 @@ export default function ProfileMilestoneToast() {
           >
             ✕
           </button>
-          <p className="text-5xl">🎉</p>
+          <p className="mi-bounce-in text-3xl sm:text-4xl">
+            <span aria-hidden="true">🎊</span> <span aria-hidden="true">🎉</span> <span aria-hidden="true">🎊</span>
+          </p>
           {/* "Profile Complete" -- deliberately distinct from Phone Verified / Email
               Verified badges elsewhere: this claims only that every optional field
               is filled in, never identity/phone/government verification. */}
-          <span className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-positive/40 bg-positive/10 px-3.5 py-1.5 font-mono text-xs font-semibold uppercase tracking-wide text-positive">
+          <span className="mi-bounce-in mt-4 inline-flex items-center gap-1.5 rounded-full border border-positive/40 bg-positive/10 px-4 py-1.5 font-mono text-sm font-semibold uppercase tracking-wide text-positive">
             <span aria-hidden="true">✓</span> Profile Complete
           </span>
-          <p className="mt-4 font-mono text-xl font-bold text-foreground sm:text-2xl">Your research profile is complete</p>
+          <p className="mt-4 font-mono text-2xl font-bold text-foreground sm:text-3xl">Your research profile is complete!</p>
           <p className="mt-3 max-w-xs text-sm leading-relaxed text-muted">
             NoDalalTalks can now make your research experience more relevant to you.
           </p>

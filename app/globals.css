@@ -162,6 +162,64 @@ button:focus-visible,
   }
 }
 
+/* The single biggest celebration moment (100% profile complete) gets a
+   fuller, wider, longer-falling burst than the small per-section/milestone
+   one above -- reserved for that one moment so it still reads as the
+   grandest, not just "the same confetti again." */
+@keyframes mi-confetti-fall-grand {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--mi-confetti-x, 0), 260px, 0) rotate(var(--mi-confetti-rotate, 180deg));
+  }
+}
+.mi-confetti-piece--grand {
+  position: absolute;
+  top: -12px;
+  border-radius: 1px;
+  animation: mi-confetti-fall-grand 1500ms ease-in forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mi-confetti-piece--grand {
+    animation: none;
+    display: none;
+  }
+}
+
+/* A short, springy "pop" for the celebration's own badge/emoji -- more
+   noticeable than the generic fade-scale-in, reserved for celebration
+   moments so it reads as a deliberate flourish, not a default transition. */
+@keyframes mi-bounce-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  80% {
+    transform: scale(0.92);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.mi-bounce-in {
+  animation: mi-bounce-in 550ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .mi-bounce-in {
+    animation: fade-in 120ms ease-out;
+  }
+}
+
 /* Phase 3C milestone celebration (ProfileMilestoneToast, "milestone" kind) —
    two halves entering from opposite edges, meeting in the center, per the
    product spec's "animation can enter from both left and right." Respects

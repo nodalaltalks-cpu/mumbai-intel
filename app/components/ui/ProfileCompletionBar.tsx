@@ -60,25 +60,16 @@ export default function ProfileCompletionBar() {
   const incomplete = sections.filter((s) => !s.complete);
   const singleRemaining = incomplete.length === 1 ? incomplete[0] : null;
 
-  if (percent >= 100) {
-    return (
-      <div className="flex flex-col items-start gap-3">
-        <div>
-          {/* Deliberately says "Research Profile Complete", never "Verified" -- Section 14: must never imply identity/KYC/phone verification that hasn't actually happened. */}
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-positive/40 bg-positive/10 px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-wide text-positive">
-            <span aria-hidden="true">✓</span> Research Profile Complete
-          </span>
-          <p className="mt-2 text-sm text-foreground">Your preferences are saved. NoDalalTalks can now make your research more relevant.</p>
-        </div>
-        <Button href="/projects" variant="secondary" size="sm">
-          Continue research
-        </Button>
-      </div>
-    );
-  }
+  // Nothing to show once complete -- the verified-profile tick beside the
+  // user's name (and its tap-to-explain dialog) already covers "you're 100%
+  // complete" and why, and the one-time full-screen celebration already
+  // covers the moment itself. A second "Research Profile Complete" card here
+  // was purely repetitive of both.
+  if (percent >= 100) return null;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="rounded-sm border border-border bg-surface p-4">
+      <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <span className="font-mono text-xs uppercase tracking-wide text-muted">Your Research Profile</span>
@@ -151,6 +142,7 @@ export default function ProfileCompletionBar() {
       >
         {singleRemaining ? `Complete ${singleRemaining.label}` : "Complete my profile"}
       </Button>
+      </div>
     </div>
   );
 }

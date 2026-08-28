@@ -58,22 +58,15 @@ export default function PhoneVerificationCard({
   }
 
   return (
-    <div className="mt-3 rounded-sm border border-border bg-background p-3">
-      <p className="text-xs text-foreground">Want faster updates on new launches, offers and availability?</p>
-      <p className="mt-1 text-[11px] text-muted">
-        You can optionally verify your phone number to receive relevant updates from us. Your number is optional and will not be required to
-        research properties. We&apos;ll never share it with brokers or developers.
-      </p>
-      <div className="mt-2">
-        {message ? (
-          <p className={`mb-2 text-[11px] ${message.tone === "error" ? "text-negative" : message.tone === "success" ? "text-positive" : "text-accent"}`}>
-            {message.text}
-          </p>
-        ) : null}
-        <Button type="button" variant="secondary" size="sm" onClick={handleClick} disabled={isPending}>
-          {isPending ? "Requesting..." : "Request verification"}
-        </Button>
-      </div>
+    <div className="mt-3 flex flex-col gap-2">
+      {message ? (
+        <p className={`text-[11px] ${message.tone === "error" ? "text-negative" : message.tone === "success" ? "text-positive" : "text-accent"}`}>
+          {message.text}
+        </p>
+      ) : null}
+      <Button type="button" variant="secondary" size="sm" className="self-start" onClick={handleClick} disabled={isPending}>
+        {isPending ? "Requesting..." : "Verify phone number"}
+      </Button>
     </div>
   );
 }

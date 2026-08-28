@@ -385,7 +385,6 @@ export default function ProfileForm({
           </div>
         </div>
 
-        <p className="text-xs text-muted">Why we ask: these details help us recommend more relevant properties and research for you — never shown publicly.</p>
         <AuthError message={formError} />
       </div>
 

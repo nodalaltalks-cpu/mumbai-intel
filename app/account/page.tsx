@@ -394,7 +394,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
         {tab === "profile" ? (
           <ProfileCompletionProvider userId={user.id} initialSections={completionSections} initialPercent={user.profileCompletionPercent}>
           <section className="flex flex-col gap-6 pb-24">
-            <div id="profile-completion-top" className="rounded-sm border border-border bg-surface p-4">
+            <div id="profile-completion-top" className="scroll-mt-24">
               <ProfileCompletionBar />
             </div>
 
