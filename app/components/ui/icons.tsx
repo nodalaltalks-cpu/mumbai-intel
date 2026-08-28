@@ -76,3 +76,16 @@ export function IconInfo({ className = "h-3.5 w-3.5", ...props }: IconProps) {
     </svg>
   );
 }
+
+/** Scalloped badge + checkmark — the familiar "verified" shape (Twitter/Instagram-style), used here strictly as a PROFILE COMPLETION indicator, never identity/KYC verification. Fill uses currentColor so callers control the (blue/accent) color via text-*. */
+export function IconVerifiedBadge({ className = "h-4 w-4", ...props }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden {...props}>
+      <path
+        fill="currentColor"
+        d="M12 1.5l2.4 1.6 2.85-.53 1.2 2.65 2.65 1.2-.53 2.85L22.5 12l-1.93 2.13.53 2.85-2.65 1.2-1.2 2.65-2.85-.53L12 22.5l-2.4-1.6-2.85.53-1.2-2.65-2.65-1.2.53-2.85L1.5 12l1.93-2.13-.53-2.85 2.65-1.2 1.2-2.65 2.85.53L12 1.5z"
+      />
+      <path d="M8.2 12.3l2.4 2.4 5-5.4" stroke="white" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}

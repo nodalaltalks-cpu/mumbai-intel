@@ -42,6 +42,7 @@ import PurposeForm from "./PurposeForm";
 import VerifyEmailButton from "./VerifyEmailButton";
 import ProfileSectionPanel from "./ProfileSectionPanel";
 import SavePreferenceButton from "./SavePreferenceButton";
+import VerifiedProfileBadge from "./VerifiedProfileBadge";
 import ProfileCompletionBar from "@/app/components/ui/ProfileCompletionBar";
 import ProfileMilestoneToast from "@/app/components/ui/ProfileMilestoneToast";
 import StickyCompletionIndicator from "@/app/components/ui/StickyCompletionIndicator";
@@ -158,17 +159,18 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
             )}
           </div>
           <div className="min-w-0">
-            <h1 className="truncate font-mono text-xl font-bold text-foreground sm:text-2xl">
-              {greeting()}
-              {user.name ? `, ${user.name.split(" ")[0]}` : ""}
+            <h1 className="flex items-center gap-1.5 truncate font-mono text-xl font-bold text-foreground sm:text-2xl">
+              <span className="truncate">
+                {greeting()}
+                {user.name ? `, ${user.name.split(" ")[0]}` : ""}
+              </span>
+              <VerifiedProfileBadge complete={user.profileCompletionPercent >= 100} />
             </h1>
             <p className="text-sm text-muted">Your property research home</p>
           </div>
         </div>
 
         {nextAction ? <NextActionCard action={nextAction} /> : null}
-
-        <ShareReferralCard referralCode={user.referralCode as string} />
 
         <div className="grid grid-cols-4 gap-1.5 border-b border-border pb-3 sm:flex sm:items-center sm:gap-2 sm:pb-px">
           {TABS.map((t) =>
@@ -388,10 +390,6 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
         {tab === "profile" ? (
           <ProfileCompletionProvider userId={user.id} initialSections={completionSections} initialPercent={user.profileCompletionPercent}>
           <section className="flex flex-col gap-6 pb-24">
-            <p className="text-[11px] text-muted">
-              Research freely, with no phone number required and no spam calls. Everything below is private, optional, and never shared with brokers or developers.
-            </p>
-
             <div id="profile-completion-top" className="rounded-sm border border-border bg-surface p-4">
               <ProfileCompletionBar />
             </div>
@@ -429,63 +427,60 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               </div>
             </ProfileSectionPanel>
 
-            <div>
-              <h2 className="font-mono text-sm font-semibold text-foreground">Research Profile</h2>
-              <p className="mt-1 text-xs text-muted">
-                Tell us what you&apos;re looking for and we&apos;ll make your property research more relevant. Answer what&apos;s useful to you, skip
-                the rest, and come back anytime. <span className="text-foreground">Why we ask:</span> filling these details helps us recommend
-                properties that are more relevant to you — it&apos;s never used for anything else.
-              </p>
+            <h2 className="font-mono text-sm font-semibold text-foreground">Research Profile</h2>
+
+            <div className="grid grid-cols-2 gap-2 sm:gap-3">
+              <ProfileSectionPanel anchorId="budget" section="budget" title="Budget" compact>
+                <p className="text-[11px] text-muted">Type an amount (e.g. &ldquo;1.2 Cr&rdquo; or &ldquo;75 Lakh&rdquo;) or drag the range. Takes about 20 seconds.</p>
+                <div className="mt-3">
+                  <BudgetPreferenceForm minRupees={preferences?.preferredBudgetMinRupees ?? null} maxRupees={preferences?.preferredBudgetMaxRupees ?? null} />
+                </div>
+              </ProfileSectionPanel>
+
+              <ProfileSectionPanel anchorId="property-type" section="property" title="Property Type & Configuration" compact>
+                <p className="text-[11px] text-muted">Tap what applies. Takes about 20 seconds.</p>
+                <div className="mt-3">
+                  <PropertyPreferencesForm
+                    preferredCategories={preferences?.preferredCategories ?? []}
+                    preferredConfigurations={preferences?.preferredConfigurations ?? []}
+                  />
+                </div>
+              </ProfileSectionPanel>
+
+              <ProfileSectionPanel anchorId="property-status" section="status" title="Property Status" compact>
+                <p className="text-[11px] text-muted">What construction stage are you open to? Select any that apply.</p>
+                <div className="mt-3">
+                  <PropertyStatusForm preferredReadiness={preferences?.preferredReadiness ?? []} />
+                </div>
+              </ProfileSectionPanel>
+
+              <ProfileSectionPanel anchorId="purpose" section="purpose" title="What are you looking for?" compact>
+                <p className="text-[11px] text-muted">Select any that apply. You can be both.</p>
+                <div className="mt-3">
+                  <PurposeForm purposes={preferences?.purposes ?? []} />
+                </div>
+              </ProfileSectionPanel>
+
+              <ProfileSectionPanel anchorId="locations" section="location" title="Preferred Locations" compact>
+                <p className="text-[11px] text-muted">Add a location or landmark. Takes about 30 seconds.</p>
+                <div className="mt-3">
+                  <LocationsPreferenceForm
+                    preferredLocalityIds={preferences?.preferredLocalityIds ?? []}
+                    localityFreeText={preferences?.localityFreeText ?? []}
+                    localities={localities}
+                  />
+                </div>
+              </ProfileSectionPanel>
+
+              <ProfileSectionPanel anchorId="family" section="family" title="Family / Household" compact>
+                <p className="text-[11px] text-muted">Optional and private — never shown publicly. Helps us understand space and budget needs.</p>
+                <div className="mt-3">
+                  <FamilyForm familySize={preferences?.familySize ?? null} familyIncomeRange={preferences?.familyIncomeRange ?? null} />
+                </div>
+              </ProfileSectionPanel>
             </div>
 
-            <ProfileSectionPanel anchorId="budget" section="budget" title="Budget">
-              <p className="text-[11px] text-muted">Type an amount (e.g. &ldquo;1.2 Cr&rdquo; or &ldquo;75 Lakh&rdquo;) or drag the range. Takes about 20 seconds.</p>
-              <div className="mt-3">
-                <BudgetPreferenceForm minRupees={preferences?.preferredBudgetMinRupees ?? null} maxRupees={preferences?.preferredBudgetMaxRupees ?? null} />
-              </div>
-            </ProfileSectionPanel>
-
-            <ProfileSectionPanel anchorId="property-type" section="property" title="Property Type & Configuration">
-              <p className="text-[11px] text-muted">Tap what applies. Takes about 20 seconds.</p>
-              <div className="mt-3">
-                <PropertyPreferencesForm
-                  preferredCategories={preferences?.preferredCategories ?? []}
-                  preferredConfigurations={preferences?.preferredConfigurations ?? []}
-                />
-              </div>
-            </ProfileSectionPanel>
-
-            <ProfileSectionPanel anchorId="property-status" section="status" title="Property Status">
-              <p className="text-[11px] text-muted">What construction stage are you open to? Select any that apply.</p>
-              <div className="mt-3">
-                <PropertyStatusForm preferredReadiness={preferences?.preferredReadiness ?? []} />
-              </div>
-            </ProfileSectionPanel>
-
-            <ProfileSectionPanel anchorId="purpose" section="purpose" title="What are you looking for?">
-              <p className="text-[11px] text-muted">Select any that apply. You can be both.</p>
-              <div className="mt-3">
-                <PurposeForm purposes={preferences?.purposes ?? []} />
-              </div>
-            </ProfileSectionPanel>
-
-            <ProfileSectionPanel anchorId="locations" section="location" title="Preferred Locations">
-              <p className="text-[11px] text-muted">Add a location or landmark. Takes about 30 seconds.</p>
-              <div className="mt-3">
-                <LocationsPreferenceForm
-                  preferredLocalityIds={preferences?.preferredLocalityIds ?? []}
-                  localityFreeText={preferences?.localityFreeText ?? []}
-                  localities={localities}
-                />
-              </div>
-            </ProfileSectionPanel>
-
-            <ProfileSectionPanel anchorId="family" section="family" title="Family / Household">
-              <p className="text-[11px] text-muted">Optional and private — never shown publicly. Helps us understand space and budget needs.</p>
-              <div className="mt-3">
-                <FamilyForm familySize={preferences?.familySize ?? null} familyIncomeRange={preferences?.familyIncomeRange ?? null} />
-              </div>
-            </ProfileSectionPanel>
+            <ShareReferralCard referralCode={user.referralCode as string} />
 
             <div id="notification-preferences" className="scroll-mt-24 rounded-sm border border-border bg-surface p-4">
               <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Notification Settings</h2>

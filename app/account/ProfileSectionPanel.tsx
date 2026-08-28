@@ -17,26 +17,32 @@ export default function ProfileSectionPanel({
   anchorId,
   section,
   title,
+  compact = false,
   className = "",
   children,
 }: {
   anchorId: string;
   section: ProfileSectionKey;
   title: string;
+  /** Renders as a dense grid tile when collapsed (smaller title/status text, tighter padding) and expands back to the normal spacious row when active -- lets several sections stay visible together on mobile without a long scroll, while every existing field inside `children` is untouched. Pass alongside a `grid grid-cols-2` wrapper; this component applies its own col-span so the active tile spans both columns. */
+  compact?: boolean;
   className?: string;
   children: React.ReactNode;
 }) {
   const { sections, activeAnchor, setActiveAnchor, scrollToSection } = useProfileCompletion();
   const isActive = activeAnchor === anchorId;
+  const isTight = compact && !isActive;
   const sectionProgress = getSectionProgress(sections).find((sp) => sp.section === section);
   const isComplete = Boolean(sectionProgress && sectionProgress.totalCount > 0 && sectionProgress.completeCount === sectionProgress.totalCount);
   const statusLabel = !sectionProgress || sectionProgress.totalCount === 0
     ? null
     : isComplete
-      ? "✓ Complete"
+      ? (isTight ? "✓" : "✓ Complete")
       : sectionProgress.completeCount === 0
-        ? "Not completed"
-        : `${Math.round((sectionProgress.completeCount / sectionProgress.totalCount) * 100)}% Complete`;
+        ? (isTight ? null : "Not completed")
+        : isTight
+          ? `${Math.round((sectionProgress.completeCount / sectionProgress.totalCount) * 100)}%`
+          : `${Math.round((sectionProgress.completeCount / sectionProgress.totalCount) * 100)}% Complete`;
 
   function handleToggle() {
     if (isActive) {
@@ -47,19 +53,24 @@ export default function ProfileSectionPanel({
   }
 
   return (
-    <div id={anchorId} className={`scroll-mt-24 overflow-hidden rounded-lg border border-border bg-surface ${className}`}>
+    <div
+      id={anchorId}
+      className={`scroll-mt-24 overflow-hidden rounded-lg border border-border bg-surface ${compact ? (isActive ? "col-span-2" : "col-span-1") : ""} ${className}`}
+    >
       <button
         type="button"
         onClick={handleToggle}
         aria-expanded={isActive}
-        className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left active:bg-surface-raised"
+        className={`flex w-full items-center justify-between gap-2 text-left active:bg-surface-raised ${isTight ? "px-3 py-3" : "px-4 py-4"}`}
       >
         <span className="flex min-w-0 items-center gap-2.5">
-          <span className="truncate text-base font-semibold text-foreground">{title}</span>
+          <span className={`truncate font-semibold text-foreground ${isTight ? "text-sm" : "text-base"}`}>{title}</span>
         </span>
-        <span className="flex shrink-0 items-center gap-2">
+        <span className="flex shrink-0 items-center gap-1.5">
           {statusLabel ? (
-            <span className={`whitespace-nowrap font-mono text-[11px] uppercase tracking-wide ${isComplete ? "text-positive" : "text-muted"}`}>
+            <span
+              className={`whitespace-nowrap font-mono uppercase tracking-wide ${isTight ? "text-[10px]" : "text-[11px]"} ${isComplete ? "text-positive" : "text-muted"}`}
+            >
               {statusLabel}
             </span>
           ) : null}

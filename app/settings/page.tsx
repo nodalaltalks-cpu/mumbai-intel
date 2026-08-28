@@ -52,14 +52,6 @@ export default async function SettingsPage() {
             <Row title="Profile" description="Edit your name, phone, and research preferences." href="/account?tab=profile" label="Edit" />
             <Row title="Notifications" description="Choose which updates you receive." href="/account?tab=profile#notification-preferences" label="Manage" />
             <Row title="Password" description="Reset your password by email." href="/forgot-password" label="Reset" />
-            <div className="flex items-center justify-between gap-3 py-3">
-              <form action={logoutAction}>
-                <Button type="submit" variant="secondary" size="sm">
-                  Logout
-                </Button>
-              </form>
-              <DeactivateAccountControl />
-            </div>
           </div>
         </section>
 
@@ -79,6 +71,15 @@ export default async function SettingsPage() {
             <Row title="Disclaimer" description="Important notes about our information." href="/disclaimer" label="View" />
           </div>
         </section>
+
+        <div className="mt-4 flex items-center justify-between gap-3 px-1">
+          <form action={logoutAction}>
+            <Button type="submit" variant="secondary" size="sm">
+              Logout
+            </Button>
+          </form>
+          <DeactivateAccountControl />
+        </div>
       </main>
       <Footer />
     </div>
