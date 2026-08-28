@@ -487,6 +487,12 @@ export function ProfileCompletionProvider({
   // ref is reset the moment guideParam is next seen as anything other than "1".
   const searchParams = useSearchParams();
   const guideParam = searchParams.get("guide");
+  if (typeof document !== "undefined") {
+    document.body.setAttribute("data-mi-debug-render-guide", String(guideParam));
+  }
+  useEffect(() => {
+    document.body.setAttribute("data-mi-debug-canary", "1");
+  }, []);
   // Part 5 (notification deep-linking) -- read once alongside guideParam, same
   // "handled" gating below, so a notification's actionUrl
   // (/account?tab=profile&guide=1&section=budget&field=...) lands on the
