@@ -7,7 +7,7 @@ import { getPublicSession } from "@/lib/public-auth/session";
 import { recalculatePublicUserCompletion, getMilestoneCrossed } from "@/lib/profile-completion";
 import { recordResearchEvent } from "@/lib/analytics/research-events";
 import { friendlyPrismaError } from "@/lib/actions/errors";
-import { COUNTRY_CALLING_CODES } from "@/lib/country-codes";
+import { COUNTRY_CALLING_CODES, isValidPhoneNumber } from "@/lib/country-codes";
 
 const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefined ? undefined : v);
 
@@ -16,6 +16,9 @@ const VALID_DIAL_CODES = new Set(COUNTRY_CALLING_CODES.map((c) => c.dialCode));
 
 const profileSchema = z.object({
   name: z.preprocess(emptyToUndefined, z.string().trim().min(1).optional()),
+  // Real length validated below (against phoneCountryCode, which may not be
+  // part of THIS particular per-field save -- see the `before.phoneCountryCode`
+  // fallback further down) -- min(6) here is just a cheap first-pass filter.
   phone: z.preprocess(emptyToUndefined, z.string().trim().min(6, "Enter a valid phone number").optional()),
   phoneCountryCode: z.preprocess(emptyToUndefined, z.string().refine((v) => VALID_DIAL_CODES.has(v), "Unrecognized country code").optional()),
   city: z.preprocess(emptyToUndefined, z.string().trim().min(1).optional()),
@@ -100,8 +103,23 @@ export async function updatePublicProfileAction(_prevState: ProfileFormState, fo
 
   const before = await prisma.publicUser.findUnique({
     where: { id: session.userId },
-    select: { profileCompletionPercent: true, name: true, phone: true, dateOfBirth: true, gender: true },
+    select: { profileCompletionPercent: true, name: true, phone: true, phoneCountryCode: true, dateOfBirth: true, gender: true },
   });
+
+  // A save for "phone" alone (the common case -- see the file-level comment
+  // above) never carries phoneCountryCode in the same FormData, so validate
+  // against whichever dial code IS part of this save if present, otherwise
+  // the one already on the account. A non-empty phone that fails this check
+  // is rejected outright rather than silently persisted -- this is the actual
+  // fix for the reported bug: an incomplete number (e.g. 7 digits of a
+  // 10-digit Indian mobile number) previously passed the old min(6) check
+  // and saved as if valid.
+  if (formData.has("phone") && parsed.data.phone) {
+    const dialCode = parsed.data.phoneCountryCode ?? before?.phoneCountryCode ?? "+91";
+    if (!isValidPhoneNumber(parsed.data.phone, dialCode)) {
+      return { error: dialCode === "+91" ? "Enter a valid 10-digit phone number." : "Enter a valid phone number." };
+    }
+  }
 
   const data: { name?: string | null; phone?: string | null; phoneCountryCode?: string; city?: string | null; currentLocality?: string | null; dateOfBirth?: Date | null; gender?: string | null } = {};
   if (formData.has("name")) data.name = parsed.data.name ?? null;

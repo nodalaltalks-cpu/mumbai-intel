@@ -254,3 +254,22 @@ export const DEFAULT_COUNTRY_CODE = "+91";
 export function findCountryByDialCode(dialCode: string): CountryCallingCode | undefined {
   return COUNTRY_CALLING_CODES.find((c) => c.dialCode === dialCode);
 }
+
+/**
+ * Real digit-count validity check, not just "non-empty" -- a bare min(6)
+ * length check (the previous validation) let through obviously-incomplete
+ * numbers like a 7-digit fragment of a 10-digit Indian mobile number, and
+ * silently saved them as "valid". Strips spaces/hyphens/parens/dots before
+ * counting digits, since those are harmless to type but shouldn't count
+ * against length. India's +91 mobile numbers are always exactly 10 digits;
+ * no other country has per-country length data in this file, so those fall
+ * back to the ITU E.164 national-number length range (a real published
+ * bound, not invented here) rather than rejecting numbers this app has no
+ * authoritative length for.
+ */
+export function isValidPhoneNumber(phone: string, dialCode: string): boolean {
+  const digitsOnly = phone.replace(/[\s\-().]/g, "");
+  if (!/^\d+$/.test(digitsOnly)) return false;
+  if (dialCode === "+91") return digitsOnly.length === 10;
+  return digitsOnly.length >= 7 && digitsOnly.length <= 15;
+}
