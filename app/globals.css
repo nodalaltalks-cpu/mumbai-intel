@@ -75,12 +75,27 @@ body {
   color-scheme: light;
 }
 
-button,
-input,
-select,
-textarea {
-  font: inherit;
-  color: inherit;
+/* In `@layer base` (not left unlayered) so Tailwind's utilities layer --
+   declared later in the `@layer theme, base, components, utilities;` order
+   `@import "tailwindcss"` sets up -- correctly wins over this reset by layer
+   order, the way cascade layers are supposed to work. Left unlayered, this
+   rule silently beat ANY text-color utility (text-white, text-accent, ...)
+   applied directly to a <button> regardless of that utility's specificity --
+   unlayered CSS always outranks layered CSS, specificity or source order
+   notwithstanding. That was live-confirmed breaking Button's primary variant
+   (bg-accent text-white) on every plain <button> use of it site-wide
+   (Save Preference, Complete my profile, Save notification settings, ...) --
+   the white text silently fell back to the inherited dark foreground color.
+   <Link>-rendered buttons (an <a>, not in this selector list) were never
+   affected, which is why this wasn't obviously broken everywhere at once. */
+@layer base {
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
 }
 
 img,

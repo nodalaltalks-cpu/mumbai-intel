@@ -70,10 +70,10 @@ export default function ProfileForm({
   gender: string | null;
 }) {
   const [nameValue, setNameValue] = useState(name ?? "");
-  // Live-tracked so PhoneVerificationCard can tell "typed but not saved yet"
-  // apart from "field is genuinely empty" — auto-save narrows this window to
-  // a debounce interval, but the check still matters if verification is
-  // requested mid-debounce.
+  // Live-tracked (vs. the separate `savedPhone` below) so PhoneVerificationCard
+  // can tell "typed but not saved yet" apart from "field is genuinely empty" --
+  // phone deliberately does NOT auto-save, so this gap can persist indefinitely
+  // until the user taps Save Preference, not just for a brief debounce window.
   const [phoneValue, setPhoneValue] = useState(phone ?? "");
   const [savedPhone, setSavedPhone] = useState(phone ?? "");
   const [phoneCountryCodeValue, setPhoneCountryCodeValue] = useState(phoneCountryCode || DEFAULT_COUNTRY_CODE);
@@ -92,14 +92,14 @@ export default function ProfileForm({
   // number again (handlePhoneChange), not just on the next successful save.
   const [phoneError, setPhoneError] = useState<string | undefined>(undefined);
   const phoneInputRef = useRef<HTMLInputElement>(null);
-  const { setFieldComplete, isFieldComplete, scrollToNextAfter } = useProfileCompletion();
+  const { setFieldComplete, isFieldComplete, scrollToNextAfter, registerManualSave } = useProfileCompletion();
 
   const debounceRefs = useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
   // The value currently being sent to the server for a given fieldKey (set the
   // instant a request starts, cleared once it settles) — lets a second trigger
-  // for the SAME field (e.g. phone's debounce firing, then blur firing a
-  // fraction later) recognize "this exact value is already in flight" instead
-  // of firing a redundant duplicate request. See handlePhoneChange/onBlur.
+  // for the SAME field recognize "this exact value is already in flight"
+  // instead of firing a redundant duplicate request (e.g. a fast double-tap
+  // of Save Preference for phone). See firePhoneSave/registerManualSave.
   const inFlightValueRef = useRef<Record<string, string | undefined>>({});
   // Per-field request sequence — every persist() call for a fieldKey gets the
   // next number, and only the response matching the CURRENT (latest) number
@@ -179,7 +179,7 @@ export default function ProfileForm({
     debouncedPersist("name", (fd) => fd.set("name", value), "name", Boolean(value.trim()));
   }
 
-  /** The single place a phone save actually fires (debounce timeout or blur-flush both funnel through this) — marks inFlightValueRef the instant the request starts, so the OTHER trigger can recognize this exact value is already being saved and skip a redundant duplicate. */
+  /** The single place a phone save actually fires — marks inFlightValueRef the instant the request starts, so a second trigger for the same value can recognize it's already in flight and skip a redundant duplicate. Deliberately NOT auto-triggered by typing/blur (Section: phone numbers are too easy to mistype for a silent auto-save) — only the "Save Preference" button's registered manual-save call (below) and the phone-verification retry reach this. */
   function firePhoneSave(value: string) {
     inFlightValueRef.current.phone = value;
     void persist("phone", (fd) => fd.set("phone", value), "phone", Boolean(value.trim()), () => setSavedPhone(value), setPhoneError).finally(() => {
@@ -190,10 +190,34 @@ export default function ProfileForm({
   function handlePhoneChange(value: string) {
     setPhoneValue(value);
     setPhoneError(undefined); // clear any stale duplicate-number error the instant the user edits the number again
-    const existing = debounceRefs.current.phone;
-    if (existing) clearTimeout(existing);
-    debounceRefs.current.phone = setTimeout(() => firePhoneSave(value), 1200);
+    // No auto-save here (deliberately) -- a previous "✓ Saved" no longer
+    // describes THIS value the moment it's edited further, so drop back to
+    // idle rather than leave a stale confirmation showing.
+    setSaveStates((prev) => (prev.phone && prev.phone !== "idle" ? { ...prev, phone: "idle" } : prev));
   }
+
+  // Registers the phone save with the shared "Save Preference" button
+  // (lib/profile-completion-client.tsx) -- always reads the LATEST typed
+  // value/savedPhone via refs so the registered function itself never needs
+  // to be re-registered on every keystroke.
+  const phoneValueRef = useRef(phoneValue);
+  useEffect(() => {
+    phoneValueRef.current = phoneValue;
+  }, [phoneValue]);
+  const savedPhoneRef = useRef(savedPhone);
+  useEffect(() => {
+    savedPhoneRef.current = savedPhone;
+  }, [savedPhone]);
+  useEffect(() => {
+    registerManualSave("phone", () => {
+      const trimmed = phoneValueRef.current.trim();
+      if (trimmed === savedPhoneRef.current.trim()) return; // nothing changed since the last save
+      if (inFlightValueRef.current.phone === phoneValueRef.current) return; // already in flight
+      firePhoneSave(phoneValueRef.current);
+    });
+    return () => registerManualSave("phone", null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally registered once; the function itself always reads current values via refs
+  }, []);
 
   /** A discrete selection, not typed text — saves immediately, no debounce. Completion never changes here: the phone SECTION is scored on the local number alone (PROFILE_COMPLETION_SECTIONS' "phone" predicate), so this always passes the field's current completion state through unchanged. Routed through setPhoneError too -- the (countryCode, phone) pair is what's actually unique, so changing just the country code can equally collide with another account. */
   function handleCountryCodeChange(dialCode: string) {
@@ -257,23 +281,6 @@ export default function ProfileForm({
                 type="tel"
                 value={phoneValue}
                 onChange={(e) => handlePhoneChange(e.target.value)}
-                onBlur={() => {
-                  // Flush immediately on blur rather than waiting out the debounce, so
-                  // "typed but not saved" (PhoneVerificationCard's Case 2) closes as
-                  // soon as the user leaves the field, not up to 1200ms later.
-                  const existing = debounceRefs.current.phone;
-                  if (existing) clearTimeout(existing);
-                  const trimmed = phoneValue.trim();
-                  if (trimmed === savedPhone.trim()) return; // already persisted
-                  // The debounce timer may have already fired (or another blur already
-                  // fired) for this exact value a moment ago and is still in flight --
-                  // firing a second identical request here would race it and risk a
-                  // later-arriving duplicate's failure clobbering the first one's
-                  // success in the UI (the actual root cause of the phone "Couldn't
-                  // save" bug). Skip; that in-flight request will settle savedPhone.
-                  if (inFlightValueRef.current.phone?.trim() === trimmed) return;
-                  firePhoneSave(phoneValue);
-                }}
                 placeholder="98765 43210"
                 aria-invalid={phoneError ? true : undefined}
                 className={`w-full min-w-0 rounded-lg border bg-surface px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted transition-shadow focus:outline-none focus:ring-4 ${
@@ -283,6 +290,10 @@ export default function ProfileForm({
             </div>
             {phoneError ? (
               <p className="text-[11px] text-negative">{phoneError}</p>
+            ) : phoneValue.trim() !== savedPhone.trim() ? (
+              <p className="text-[11px] text-muted">
+                Tap <span className="font-medium text-foreground">Save Preference</span> below to save this number.
+              </p>
             ) : (
               <SaveStatus state={effectiveSaveState(phoneValue, saveStates.phone ?? "idle")} />
             )}

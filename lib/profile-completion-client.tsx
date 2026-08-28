@@ -75,6 +75,10 @@ interface ProfileCompletionContextValue {
   scrollToSection: (section: ProfileSectionKey, source?: string) => void;
   /** Jumps to one specific field by key (e.g. a single "What's left" row) — used when exactly one thing remains, or the user picks a specific item rather than "the first incomplete one." */
   scrollToField: (key: string, source?: string) => void;
+  /** Registers (or, passing null, unregisters) a save function for a field that deliberately does NOT auto-save (currently just phone — a mistyped number shouldn't get silently persisted). The "Save Preference" button calls every currently-registered function on click; this is how it goes from purely cosmetic to actually persisting those specific fields, without those fields' components needing any relationship to that button. */
+  registerManualSave: (key: string, save: (() => void) | null) => void;
+  /** Runs every currently-registered manual-save function — called by the "Save Preference" button. */
+  runManualSaves: () => void;
 }
 
 const ProfileCompletionContext = createContext<ProfileCompletionContextValue | null>(null);
@@ -420,6 +424,19 @@ export function ProfileCompletionProvider({
     []
   );
 
+  // Manual-save registry (currently just phone) -- a plain ref, not state:
+  // registering a handler must never itself trigger a re-render, and
+  // runManualSaves always needs the LATEST registered functions, not ones
+  // captured in a stale closure.
+  const manualSaveHandlersRef = useRef<Record<string, () => void>>({});
+  const registerManualSave = useCallback((key: string, save: (() => void) | null) => {
+    if (save) manualSaveHandlersRef.current[key] = save;
+    else delete manualSaveHandlersRef.current[key];
+  }, []);
+  const runManualSaves = useCallback(() => {
+    Object.values(manualSaveHandlersRef.current).forEach((save) => save());
+  }, []);
+
   const scrollToNextAfter = useCallback(
     (key: string) => {
       // The auto-advance-after-save case (every Form component's persist(),
@@ -543,6 +560,8 @@ export function ProfileCompletionProvider({
     scrollToNextAfter,
     scrollToSection,
     scrollToField,
+    registerManualSave,
+    runManualSaves,
   };
 
   return <ProfileCompletionContext.Provider value={value}>{children}</ProfileCompletionContext.Provider>;

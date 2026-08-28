@@ -8,11 +8,10 @@ import Button from "@/app/components/ui/Button";
  * Three explicit cases, checked client-side first (server action re-checks
  * everything too — this is UX, not the security boundary):
  * 1. Field empty -> red error, focus the phone field.
- * 2. Typed but the auto-save for it hasn't landed yet (differs from the
- *    last-saved `savedPhone` prop, which the phone field's own debounce/blur
- *    auto-save updates within under a second) -> ask them to wait a moment,
- *    refocus the phone field. There's no "Save" button anymore (Section 9) —
- *    this closes almost immediately since the field auto-saves on blur.
+ * 2. Typed but not saved yet (differs from the last-saved `savedPhone` prop —
+ *    the phone field deliberately does NOT auto-save; only "Save Preference"
+ *    persists it) -> ask them to tap Save Preference first, refocus the
+ *    phone field.
  * 3. Saved and unverified -> call the real request-verification action.
  * 4. Already verified -> static confirmation, never re-request.
  */
@@ -46,7 +45,7 @@ export default function PhoneVerificationCard({
       return;
     }
     if (trimmed !== (savedPhone ?? "").trim()) {
-      setMessage({ tone: "info", text: "Give it just a moment — we're still saving your number." });
+      setMessage({ tone: "info", text: "Tap Save Preference below to save your number first, then try again." });
       onFocusPhoneField();
       return;
     }
