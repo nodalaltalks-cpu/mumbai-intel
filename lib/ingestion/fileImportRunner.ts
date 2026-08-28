@@ -40,12 +40,15 @@ export async function runProjectFileImport(params: {
   fileText: string;
   fileFormat: FileFormat;
   dataSource: DataSource;
-  triggeredByUserId: string;
+  /** Omitted for an unattended/scheduled run (e.g. the Apify webhook bridge) — no human triggered it. */
+  triggeredByUserId?: string;
+  /** Defaults to "manual" (the only value every existing caller has ever passed) so nothing changes for them. */
+  trigger?: "manual" | "scheduled";
 }): Promise<ConnectorRunSummary> {
-  const { sourceKey, fileText, fileFormat, dataSource, triggeredByUserId } = params;
+  const { sourceKey, fileText, fileFormat, dataSource, triggeredByUserId, trigger = "manual" } = params;
 
   const batch = await prisma.ingestBatch.create({
-    data: { sourceKey, trigger: "manual", triggeredByUserId, status: "running" },
+    data: { sourceKey, trigger, triggeredByUserId: triggeredByUserId ?? null, status: "running" },
   });
 
   const summary: ConnectorRunSummary = { written: 0, skipped: 0, staged: 0, failed: 0 };
