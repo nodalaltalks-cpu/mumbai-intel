@@ -21,9 +21,14 @@ export default function VerifiedProfileBadge({ complete }: { complete: boolean }
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Profile complete — tap to learn more"
-        className="inline-flex shrink-0 items-center text-accent"
+        className="inline-flex shrink-0 items-center"
       >
-        <IconVerifiedBadge className="h-5 w-5" />
+        {/* color set on the svg itself, not the button -- globals.css's unlayered
+            `button, input, select, textarea { color: inherit }` reset always wins
+            over a layered Tailwind text-* utility placed on the <button> element,
+            silently forcing it back to the inherited foreground color. svg isn't
+            in that reset list, so text-accent resolves correctly placed here. */}
+        <IconVerifiedBadge className="h-5 w-5 text-accent" />
       </button>
       {open ? (
         <Dialog title="Profile verified" onClose={() => setOpen(false)}>
