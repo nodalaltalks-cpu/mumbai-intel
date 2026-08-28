@@ -487,12 +487,6 @@ export function ProfileCompletionProvider({
   // ref is reset the moment guideParam is next seen as anything other than "1".
   const searchParams = useSearchParams();
   const guideParam = searchParams.get("guide");
-  if (typeof document !== "undefined") {
-    document.body.setAttribute("data-mi-debug-render-guide", String(guideParam));
-  }
-  useEffect(() => {
-    document.body.setAttribute("data-mi-debug-canary", "1");
-  }, []);
   // Part 5 (notification deep-linking) -- read once alongside guideParam, same
   // "handled" gating below, so a notification's actionUrl
   // (/account?tab=profile&guide=1&section=budget&field=...) lands on the
@@ -502,18 +496,12 @@ export function ProfileCompletionProvider({
   const fieldParam = searchParams.get("field");
   const guideHandledRef = useRef(false);
   useEffect(() => {
-    document.body.setAttribute("data-mi-debug-effect-ran", "1");
-    document.body.setAttribute("data-mi-debug-guide-param", String(guideParam));
-    document.body.setAttribute("data-mi-debug-section-param", String(sectionParam));
-    document.body.setAttribute("data-mi-debug-field-param", String(fieldParam));
-    document.body.setAttribute("data-mi-debug-handled-ref", String(guideHandledRef.current));
     if (guideParam !== "1") {
       guideHandledRef.current = false;
       return;
     }
     if (guideHandledRef.current) return;
     guideHandledRef.current = true;
-    document.body.setAttribute("data-mi-debug-proceeded", "1");
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       params.delete("guide");
