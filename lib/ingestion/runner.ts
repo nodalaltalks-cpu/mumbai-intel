@@ -114,46 +114,39 @@ export async function runIngestBatch(
       }
 
       try {
+        // Every candidate is staged for review, never written live directly —
+        // matches the same "never auto-publish imported catalog data" policy
+        // the Project/Builder/Locality/Transaction file importers already
+        // follow. This used to create a brand-new (non-duplicate) InfraAsset
+        // live immediately, which was the one ingestion path in this codebase
+        // that could put scraped/external content on the public site (locality
+        // pages, project "Nearby places") with zero admin review — an
+        // unattended nightly cron run could publish it the same night.
+        // applyInfraAssetApproval (lib/actions/ingestion.ts) already handles
+        // both the merge (targetId set) and create (targetId null) cases, so
+        // routing the "new" branch through staging needed no new approval code.
         const duplicate = findPossibleDuplicateInfraAsset(unsourcedAssets, candidate.type, candidate.name, candidate.latitude, candidate.longitude);
-        if (duplicate) {
-          await prisma.ingestStagingRecord.create({
-            data: {
-              batchId: batch.id,
-              entityType: "InfraAsset",
-              targetId: duplicate.existingId,
-              payload: candidate as unknown as Prisma.InputJsonValue,
-              matchedExistingId: duplicate.existingId,
-              matchConfidence: duplicate.confidence,
-            },
-          });
-          summary.staged += 1;
-          writesUsed += 1;
-          await logEntry(
-            batch.id,
-            "InfraAsset",
-            duplicate.existingId,
-            "STAGED",
-            `Possible duplicate of an existing manually-curated record (confidence ${duplicate.confidence.toFixed(2)}) — awaiting review`
-          );
-          continue;
-        }
-
-        const created = await prisma.infraAsset.create({
+        await prisma.ingestStagingRecord.create({
           data: {
-            cityId: city.id,
-            type: candidate.type,
-            name: candidate.name,
-            latitude: candidate.latitude,
-            longitude: candidate.longitude,
-            detail: candidate.detail ?? null,
-            dataSource: "EXTERNAL_OPEN_DATA",
-            sourceRef: candidate.sourceRef,
-            ingestBatchId: batch.id,
+            batchId: batch.id,
+            entityType: "InfraAsset",
+            targetId: duplicate?.existingId ?? null,
+            payload: candidate as unknown as Prisma.InputJsonValue,
+            matchedExistingId: duplicate?.existingId ?? null,
+            matchConfidence: duplicate?.confidence ?? null,
           },
         });
-        summary.written += 1;
+        summary.staged += 1;
         writesUsed += 1;
-        await logEntry(batch.id, "InfraAsset", created.id, "CREATED", null);
+        await logEntry(
+          batch.id,
+          "InfraAsset",
+          duplicate?.existingId ?? null,
+          "STAGED",
+          duplicate
+            ? `Possible duplicate of an existing manually-curated record (confidence ${duplicate.confidence.toFixed(2)}) — awaiting review`
+            : "New infrastructure point from external source — awaiting review"
+        );
       } catch (error) {
         summary.failed += 1;
         writesUsed += 1;
