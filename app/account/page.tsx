@@ -159,13 +159,17 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
             )}
           </div>
           <div className="min-w-0">
-            <h1 className="flex items-center gap-1.5 truncate font-mono text-xl font-bold text-foreground sm:text-2xl">
-              <span className="truncate">
+            {/* VerifiedProfileBadge kept as a sibling, not a child, of the truncate h1 -- white-space:nowrap
+                (part of `truncate`) is inherited, and the badge's Dialog is a fixed-position DOM DESCENDANT
+                (fixed positioning doesn't escape the DOM tree for CSS inheritance), so nesting it inside the
+                h1 was forcing its explanation text onto one unwrapped, horizontally-scrolling line. */}
+            <div className="flex min-w-0 items-center gap-1.5">
+              <h1 className="truncate font-mono text-xl font-bold text-foreground sm:text-2xl">
                 {greeting()}
                 {user.name ? `, ${user.name.split(" ")[0]}` : ""}
-              </span>
+              </h1>
               <VerifiedProfileBadge complete={user.profileCompletionPercent >= 100} />
-            </h1>
+            </div>
             <p className="text-sm text-muted">Your property research home</p>
           </div>
         </div>
