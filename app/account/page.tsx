@@ -431,17 +431,15 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               </div>
             </ProfileSectionPanel>
 
-            <h2 className="font-mono text-sm font-semibold text-foreground">Research Profile</h2>
-
-            <div className="grid grid-cols-2 gap-2 sm:gap-3">
-              <ProfileSectionPanel anchorId="budget" section="budget" title="Budget" compact>
+            <div className="flex flex-col gap-2 sm:gap-3">
+              <ProfileSectionPanel anchorId="budget" section="budget" title="Budget">
                 <p className="text-[11px] text-muted">Type an amount (e.g. &ldquo;1.2 Cr&rdquo; or &ldquo;75 Lakh&rdquo;) or drag the range. Takes about 20 seconds.</p>
                 <div className="mt-3">
                   <BudgetPreferenceForm minRupees={preferences?.preferredBudgetMinRupees ?? null} maxRupees={preferences?.preferredBudgetMaxRupees ?? null} />
                 </div>
               </ProfileSectionPanel>
 
-              <ProfileSectionPanel anchorId="property-type" section="property" title="Property Type & Configuration" compact>
+              <ProfileSectionPanel anchorId="property-type" section="property" title="Property Type & Configuration">
                 <p className="text-[11px] text-muted">Tap what applies. Takes about 20 seconds.</p>
                 <div className="mt-3">
                   <PropertyPreferencesForm
@@ -451,21 +449,21 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                 </div>
               </ProfileSectionPanel>
 
-              <ProfileSectionPanel anchorId="property-status" section="status" title="Property Status" compact>
+              <ProfileSectionPanel anchorId="property-status" section="status" title="Property Status">
                 <p className="text-[11px] text-muted">What construction stage are you open to? Select any that apply.</p>
                 <div className="mt-3">
                   <PropertyStatusForm preferredReadiness={preferences?.preferredReadiness ?? []} />
                 </div>
               </ProfileSectionPanel>
 
-              <ProfileSectionPanel anchorId="purpose" section="purpose" title="What are you looking for?" compact>
+              <ProfileSectionPanel anchorId="purpose" section="purpose" title="What are you looking for?">
                 <p className="text-[11px] text-muted">Select any that apply. You can be both.</p>
                 <div className="mt-3">
                   <PurposeForm purposes={preferences?.purposes ?? []} />
                 </div>
               </ProfileSectionPanel>
 
-              <ProfileSectionPanel anchorId="locations" section="location" title="Preferred Locations" compact>
+              <ProfileSectionPanel anchorId="locations" section="location" title="Preferred Locations">
                 <p className="text-[11px] text-muted">Add a location or landmark. Takes about 30 seconds.</p>
                 <div className="mt-3">
                   <LocationsPreferenceForm
@@ -476,7 +474,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
                 </div>
               </ProfileSectionPanel>
 
-              <ProfileSectionPanel anchorId="family" section="family" title="Family / Household" compact>
+              <ProfileSectionPanel anchorId="family" section="family" title="Family / Household">
                 <p className="text-[11px] text-muted">Optional and private — never shown publicly. Helps us understand space and budget needs.</p>
                 <div className="mt-3">
                   <FamilyForm familySize={preferences?.familySize ?? null} familyIncomeRange={preferences?.familyIncomeRange ?? null} />
