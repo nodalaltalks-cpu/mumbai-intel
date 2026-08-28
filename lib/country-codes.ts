@@ -273,3 +273,8 @@ export function isValidPhoneNumber(phone: string, dialCode: string): boolean {
   if (dialCode === "+91") return digitsOnly.length === 10;
   return digitsOnly.length >= 7 && digitsOnly.length <= 15;
 }
+
+/** Hard digit cap for the phone input itself (truncates while typing, not just an after-the-fact error) -- kept in sync with isValidPhoneNumber's own length rule so the field never lets a user type past what would fail validation anyway. */
+export function getMaxPhoneDigits(dialCode: string): number {
+  return dialCode === "+91" ? 10 : 15;
+}

@@ -6,7 +6,7 @@ import AuthField from "@/app/components/auth/AuthField";
 import { AuthError } from "@/app/components/auth/AuthMessage";
 import PhoneVerificationCard from "./PhoneVerificationCard";
 import CountryCodeSelect from "@/app/components/CountryCodeSelect";
-import { DEFAULT_COUNTRY_CODE } from "@/lib/country-codes";
+import { DEFAULT_COUNTRY_CODE, getMaxPhoneDigits } from "@/lib/country-codes";
 import { useProfileCompletion } from "@/lib/profile-completion-client";
 
 const GENDER_OPTIONS = [
@@ -187,7 +187,12 @@ export default function ProfileForm({
     });
   }
 
-  function handlePhoneChange(value: string) {
+  function handlePhoneChange(rawValue: string) {
+    // Strips anything that isn't a digit and hard-caps the length while
+    // typing (10 for India's +91, 15 -- the ITU E.164 bound -- otherwise),
+    // rather than only rejecting an out-of-range number after the fact on
+    // save. Kept in sync with isValidPhoneNumber's own length rule.
+    const value = rawValue.replace(/\D/g, "").slice(0, getMaxPhoneDigits(phoneCountryCodeValue));
     setPhoneValue(value);
     setPhoneError(undefined); // clear any stale duplicate-number error the instant the user edits the number again
     // No auto-save here (deliberately) -- a previous "✓ Saved" no longer
@@ -279,6 +284,8 @@ export default function ProfileForm({
                 ref={phoneInputRef}
                 name="phone"
                 type="tel"
+                inputMode="numeric"
+                maxLength={getMaxPhoneDigits(phoneCountryCodeValue)}
                 value={phoneValue}
                 onChange={(e) => handlePhoneChange(e.target.value)}
                 placeholder="98765 43210"
