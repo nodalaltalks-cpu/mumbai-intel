@@ -52,19 +52,23 @@ export default async function SettingsPage() {
             <Row title="Profile" description="Edit your name, phone, and research preferences." href="/account?tab=profile" label="Edit" />
             <Row title="Notifications" description="Choose which updates you receive." href="/account?tab=profile#notification-preferences" label="Manage" />
             <Row title="Password" description="Reset your password by email." href="/forgot-password" label="Reset" />
+            <div className="flex items-center justify-between gap-3 py-3">
+              <form action={logoutAction}>
+                <Button type="submit" variant="secondary" size="sm">
+                  Logout
+                </Button>
+              </form>
+              <DeactivateAccountControl />
+            </div>
           </div>
         </section>
 
         <section className="mt-4 rounded-sm border border-border bg-surface px-4">
           <h2 className="pt-3 text-[11px] font-semibold uppercase tracking-wide text-muted">Privacy</h2>
-          <div className="divide-y divide-border">
-            <div className="py-3">
-              <p className="text-sm font-medium text-foreground">Cookie preferences</p>
-              <p className="mb-2 text-xs text-muted">Control analytics cookies at any time.</p>
-              <SettingsCookiePreferences />
-            </div>
-            <Row title="Cookie Policy" description="What cookies we use and why." href="/cookie-policy" label="View" />
-            <Row title="Privacy Policy" description="How we handle your data." href="/privacy" label="View" />
+          <div className="py-3">
+            <p className="text-sm font-medium text-foreground">Cookie preferences</p>
+            <p className="mb-2 text-xs text-muted">Control analytics cookies at any time.</p>
+            <SettingsCookiePreferences />
           </div>
         </section>
 
@@ -73,18 +77,6 @@ export default async function SettingsPage() {
           <div className="divide-y divide-border">
             <Row title="Terms of Service" description="Rules for using NoDalalTalks." href="/terms" label="View" />
             <Row title="Disclaimer" description="Important notes about our information." href="/disclaimer" label="View" />
-          </div>
-        </section>
-
-        <section className="mt-4 rounded-sm border border-border bg-surface p-4">
-          <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-muted">Account management</h2>
-          <div className="flex flex-col gap-3">
-            <form action={logoutAction}>
-              <Button type="submit" variant="secondary" size="sm">
-                Logout
-              </Button>
-            </form>
-            <DeactivateAccountControl />
           </div>
         </section>
       </main>
