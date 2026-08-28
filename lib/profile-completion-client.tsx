@@ -496,14 +496,18 @@ export function ProfileCompletionProvider({
   const fieldParam = searchParams.get("field");
   const guideHandledRef = useRef(false);
   useEffect(() => {
-    console.log("[mi-deeplink-debug] effect ran, guideParam =", guideParam, "sectionParam =", sectionParam, "fieldParam =", fieldParam, "guideHandledRef =", guideHandledRef.current);
+    document.body.setAttribute("data-mi-debug-effect-ran", "1");
+    document.body.setAttribute("data-mi-debug-guide-param", String(guideParam));
+    document.body.setAttribute("data-mi-debug-section-param", String(sectionParam));
+    document.body.setAttribute("data-mi-debug-field-param", String(fieldParam));
+    document.body.setAttribute("data-mi-debug-handled-ref", String(guideHandledRef.current));
     if (guideParam !== "1") {
       guideHandledRef.current = false;
       return;
     }
     if (guideHandledRef.current) return;
     guideHandledRef.current = true;
-    console.log("[mi-deeplink-debug] proceeding with replaceState + scroll");
+    document.body.setAttribute("data-mi-debug-proceeded", "1");
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       params.delete("guide");
