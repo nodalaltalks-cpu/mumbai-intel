@@ -19,7 +19,7 @@ export const PROJECT_COLUMN_ALIASES: Record<string, string[]> = {
   possessionDate: ["possession date", "possession", "promised possession", "handover date"],
   launchDate: ["launch date", "launch"],
   builderName: ["builder", "builder name", "developer", "developer name"],
-  localityName: ["locality", "locality name", "area", "neighbourhood", "neighborhood"],
+  localityName: ["locality", "locality name", "localityname", "area", "neighbourhood", "neighborhood"],
   description: ["description", "about", "overview"],
   reraStatus: ["rera status"],
 };
