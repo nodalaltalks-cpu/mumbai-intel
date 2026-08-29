@@ -1,6 +1,8 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { runProjectFileImport } from "./fileImportRunner";
+import { normalizeMagicBricksListings } from "./connectors/magicBricks/normalizeMagicBricksListings";
+import type { MagicBricksListing, SourceAvailabilityFilter } from "./connectors/magicBricks/types";
 import type { ConnectorRunSummary } from "./types";
 
 /**
@@ -32,6 +34,8 @@ export type ApifyBridgeOutcome =
   | { kind: "config_error"; error: string }
   | { kind: "dataset_fetch_failed"; runId: string; actorId: string; error: string }
   | { kind: "empty_dataset"; runId: string; actorId: string }
+  /** A recognized MagicBricks run whose listings normalized into zero usable project candidates (all unresolved and/or conflicting) -- not a transient failure, so Apify should not retry it. */
+  | { kind: "magicbricks_unresolved"; runId: string; actorId: string; unresolvedCount: number; conflictCount: number }
   | { kind: "import_failed"; runId: string; actorId: string; received: number; error: string }
   | { kind: "imported"; runId: string; actorId: string; batchId: string; received: number; summary: ConnectorRunSummary };
 
@@ -40,6 +44,34 @@ const APIFY_API_BASE = "https://api.apify.com/v2";
 /** Idempotency key: unique per (actor, run) — see processApifyWebhook's dedup check. Also becomes each staged row's sourceRef prefix (via runProjectFileImport's own `${sourceKey}:row-N` fallback), so every Project traces back to the exact run + row that produced it. */
 function buildSourceKey(actorId: string, runId: string): string {
   return `apify:${actorId}:${runId}`;
+}
+
+/**
+ * Source identification (Phase 12): the webhook payload itself carries no
+ * "which scraper produced this" field — only Apify's own actorId, which is
+ * exactly why that's the signal used here rather than guessing from dataset
+ * shape. MAGICBRICKS_ACTOR_ID must be explicitly configured (an env var, not
+ * hardcoded) before any run is ever routed through the MagicBricks
+ * normalizer; unset (the default today) means every run — including the
+ * existing NDT test Actor — takes the unchanged, pre-Phase-12 generic path.
+ */
+function isMagicBricksRun(actorId: string): boolean {
+  const configuredActorId = process.env.MAGICBRICKS_ACTOR_ID;
+  return Boolean(configuredActorId) && actorId === configuredActorId;
+}
+
+/**
+ * The Actor's own input parameters (e.g. its `availability` filter) are not
+ * present in the webhook payload either, and fetching the run's full options
+ * would be a second, unrequested Apify API call — out of scope for "the
+ * smallest possible adapter". Configuring the filter alongside the actor ID
+ * keeps status FILTER_DERIVED (never guessed from listing text) without
+ * expanding the bridge's API surface. Returns null on anything unset or not
+ * one of the two values the normalizer actually understands — never a guess.
+ */
+function resolveMagicBricksStatusFilter(): SourceAvailabilityFilter | null {
+  const raw = process.env.MAGICBRICKS_STATUS_FILTER;
+  return raw === "under-construction" || raw === "ready-to-move" ? raw : null;
 }
 
 async function fetchDatasetItems(datasetId: string, token: string): Promise<unknown[]> {
@@ -133,10 +165,59 @@ export async function processApifyWebhook(payload: ApifyWebhookPayload): Promise
     return { kind: "empty_dataset", runId, actorId };
   }
 
+  // Phase 12: MagicBricks listing-level datasets are grouped into
+  // project-level candidates BEFORE reaching the existing, unmodified
+  // runProjectFileImport() — every other Actor (including the existing NDT
+  // test Actor) is completely unaffected by this branch, since
+  // isMagicBricksRun() only ever returns true for an explicitly configured
+  // actorId.
+  let fileText = JSON.stringify(items);
+  if (isMagicBricksRun(actorId)) {
+    const statusFilter = resolveMagicBricksStatusFilter();
+    if (!statusFilter) {
+      return {
+        kind: "config_error",
+        error: "MAGICBRICKS_STATUS_FILTER is not configured (or not a recognized value) — cannot safely assign a Project status for a MagicBricks run without guessing",
+      };
+    }
+
+    const normalized = normalizeMagicBricksListings(items as MagicBricksListing[], { filterAvailability: statusFilter });
+
+    if (normalized.unresolved.length > 0 || normalized.conflicts.length > 0) {
+      console.info(
+        `[apify-bridge] actor=${actorId} run=${runId}: MagicBricks normalization found ${normalized.unresolved.length} unresolved and ${normalized.conflicts.length} conflicting listing group(s) — never silently merged`,
+        {
+          unresolved: normalized.unresolved.map((u) => ({ reason: u.reason, listingId: u.listing.listing_id })),
+          conflicts: normalized.conflicts.map((c) => ({
+            type: c.type,
+            projectName: c.projectName,
+            locality: c.locality,
+            listingIds: c.listings.map((l) => l.listing_id),
+          })),
+        }
+      );
+    }
+
+    if (normalized.candidates.length === 0) {
+      return {
+        kind: "magicbricks_unresolved",
+        runId,
+        actorId,
+        unresolvedCount: normalized.unresolved.length,
+        conflictCount: normalized.conflicts.length,
+      };
+    }
+
+    console.info(
+      `[apify-bridge] actor=${actorId} run=${runId}: MagicBricks normalized ${items.length} listing(s) into ${normalized.candidates.length} project candidate(s)`
+    );
+    fileText = JSON.stringify(normalized.candidates.map((c) => c.row));
+  }
+
   try {
     const summary = await runProjectFileImport({
       sourceKey,
-      fileText: JSON.stringify(items),
+      fileText,
       fileFormat: "json",
       dataSource: "EXTERNAL_OPEN_DATA",
       trigger: "scheduled",

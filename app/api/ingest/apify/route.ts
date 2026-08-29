@@ -14,6 +14,9 @@ const STATUS_BY_OUTCOME: Record<ApifyBridgeOutcome["kind"], number> = {
   config_error: 500,
   dataset_fetch_failed: 502,
   empty_dataset: 200,
+  // Normalization ran correctly but found nothing safely resolvable (all
+  // unresolved/conflicting) -- not a transient error, so Apify should not retry.
+  magicbricks_unresolved: 200,
   import_failed: 500,
   imported: 200,
 };
