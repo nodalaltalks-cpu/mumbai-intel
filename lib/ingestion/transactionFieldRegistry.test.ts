@@ -114,6 +114,25 @@ describe("Transaction registry does NOT include Project-only fields (Part D: no 
   });
 });
 
+describe("buildTransactionReviewCompleteness — Phase 19: possible-duplicate NEEDS_REVIEW", () => {
+  it("flags sourceRef NEEDS_REVIEW only when a real possibleDuplicateNote is passed (never manufactured)", () => {
+    const withoutNote = buildTransactionReviewCompleteness(PARTIAL_PAYLOAD);
+    const withoutByKey = new Map(withoutNote.groups.flatMap((g) => g.fields).map((f) => [f.key, f]));
+    expect(withoutByKey.get("sourceRef")?.status).toBe("RECEIVED");
+    expect(withoutNote.needsReviewCount).toBe(0);
+
+    const withNote = buildTransactionReviewCompleteness(PARTIAL_PAYLOAD, {
+      possibleDuplicateNote: "Registration number matches staging record abc123",
+    });
+    const withByKey = new Map(withNote.groups.flatMap((g) => g.fields).map((f) => [f.key, f]));
+    expect(withByKey.get("sourceRef")?.status).toBe("NEEDS_REVIEW");
+    expect(withByKey.get("sourceRef")?.reviewNote).toBe("Registration number matches staging record abc123");
+    expect(withNote.needsReviewCount).toBe(1);
+    // NEEDS_REVIEW is neither RECEIVED nor MISSING -- denominator math still holds.
+    expect(withNote.totalFields).toBe(withNote.receivedCount + withNote.missingCount + withNote.needsReviewCount);
+  });
+});
+
 describe("Project Review remains unaffected by the new Transaction registry", () => {
   it("buildProjectReviewCompleteness still returns the full 44-field Project registry, untouched", () => {
     const projectPayload: ProjectImportPayload = {

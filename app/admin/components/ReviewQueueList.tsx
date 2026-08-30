@@ -10,8 +10,10 @@ import {
 } from "@/lib/actions/ingestion";
 import { formatDate } from "@/lib/format";
 import type { ReviewCompleteness } from "@/lib/ingestion/reviewFieldRegistry";
+import { enrichProjectAction, type EnrichProjectResult } from "@/lib/actions/enrichment";
 import ConfirmButton from "./ConfirmButton";
 import ReviewDataDetailsDialog from "./ReviewDataDetailsDialog";
+import EnrichmentDialog from "./EnrichmentDialog";
 
 export interface ReviewRecord {
   id: string;
@@ -26,6 +28,13 @@ export interface ReviewRecord {
   noMatchNote: string | null;
   /** Full field-by-field completeness breakdown (Phase 14C) -- null only for an entityType this hasn't been built for yet; never partially fabricated. */
   completeness: ReviewCompleteness | null;
+  /** Phase 29 Part A — gates the "Enrich Project" button to Project records only. */
+  isProject: boolean;
+}
+
+interface EnrichmentViewState {
+  loading: boolean;
+  result: EnrichProjectResult | null;
 }
 
 export default function ReviewQueueList({ records }: { records: ReviewRecord[] }) {
@@ -35,6 +44,20 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [detailsRecordId, setDetailsRecordId] = useState<string | null>(null);
   const detailsRecord = records.find((r) => r.id === detailsRecordId) ?? null;
+
+  const [enrichmentRecordId, setEnrichmentRecordId] = useState<string | null>(null);
+  const [enrichmentByRecordId, setEnrichmentByRecordId] = useState<Record<string, EnrichmentViewState>>({});
+  const enrichmentRecord = records.find((r) => r.id === enrichmentRecordId) ?? null;
+  const enrichmentState = enrichmentRecordId ? enrichmentByRecordId[enrichmentRecordId] : null;
+
+  function runEnrichment(recordId: string) {
+    setEnrichmentRecordId(recordId);
+    setEnrichmentByRecordId((prev) => ({ ...prev, [recordId]: { loading: true, result: null } }));
+    startTransition(async () => {
+      const result = await enrichProjectAction(recordId);
+      setEnrichmentByRecordId((prev) => ({ ...prev, [recordId]: { loading: false, result } }));
+    });
+  }
 
   function toggleOne(id: string) {
     setSelected((prev) => {
@@ -157,6 +180,15 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
                 className="border-positive/40 text-positive hover:border-positive hover:text-positive"
               />
               <ConfirmButton action={rejectStagingRecordAction.bind(null, record.id)} label="Reject" confirmLabel="Reject?" />
+              {record.isProject ? (
+                <button
+                  type="button"
+                  onClick={() => runEnrichment(record.id)}
+                  className="rounded-sm border border-accent/40 px-2 py-1 text-[11px] font-mono uppercase text-accent hover:bg-accent/10"
+                >
+                  Enrich Project
+                </button>
+              ) : null}
             </div>
           </div>
 
@@ -190,6 +222,18 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
           sourceKey={detailsRecord.sourceKey}
           completeness={detailsRecord.completeness}
           onClose={() => setDetailsRecordId(null)}
+        />
+      ) : null}
+
+      {enrichmentRecord && enrichmentState ? (
+        <EnrichmentDialog
+          title={enrichmentRecord.proposedTitle}
+          loading={enrichmentState.loading}
+          status={enrichmentState.result?.status ?? null}
+          fields={enrichmentState.result?.fields ?? null}
+          error={enrichmentState.result?.error ?? null}
+          onClose={() => setEnrichmentRecordId(null)}
+          onRetry={() => runEnrichment(enrichmentRecord.id)}
         />
       ) : null}
     </div>

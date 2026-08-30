@@ -1,4 +1,4 @@
-import type { DataSource, ProjectStatus, PropertyCategory } from "@/lib/project-meta";
+import type { Confidence, DataSource, ProjectStatus, PropertyCategory } from "@/lib/project-meta";
 
 /**
  * What gets stored as IngestStagingRecord.payload for a Project file-import
@@ -71,4 +71,8 @@ export interface TransactionImportPayload {
   unitLabel?: string;
   dataSource: DataSource;
   sourceRef: string;
+  /** Real-world confidence in this row's own values (e.g. a hand-typed IGR entry vs. a verified deal sheet) — distinct from the batch-level `dataSource`. Optional: falls back to the Transaction schema's own MEDIUM default when absent. */
+  confidence?: Confidence;
+  /** Free-text note on where a manual/IGR figure came from — maps directly to `Transaction.sourceNote`. */
+  sourceNote?: string;
 }

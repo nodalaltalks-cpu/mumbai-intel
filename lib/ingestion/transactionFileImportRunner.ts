@@ -7,6 +7,7 @@ import { parseCsv } from "./connectors/fileImport/csvParser";
 import { mapRowToTransactionFields } from "./connectors/fileImport/columnMapping";
 import { validateTransactionRow, type ValidatedTransactionRow } from "./connectors/fileImport/validateTransactionRow";
 import type { TransactionImportPayload } from "./connectors/fileImport/types";
+import { findPossibleDuplicateTransaction } from "./duplicateMatch";
 import type { ConnectorRunSummary } from "./types";
 import type { FileFormat } from "./fileImportRunner";
 
@@ -84,7 +85,13 @@ export async function runTransactionFileImport(params: {
 
   const summary: ConnectorRunSummary = { written: 0, skipped: 0, staged: 0, failed: 0 };
   const logEntries: PendingLogEntry[] = [];
-  const stagingRecords: { entityType: "Transaction"; targetId: null; payload: Prisma.InputJsonValue }[] = [];
+  const stagingRecords: {
+    entityType: "Transaction";
+    targetId: null;
+    matchedExistingId: string | null;
+    matchConfidence: number | null;
+    payload: Prisma.InputJsonValue;
+  }[] = [];
 
   try {
     const rawRows = parseRows(fileText, fileFormat);
@@ -94,14 +101,44 @@ export async function runTransactionFileImport(params: {
     if (!city) throw new Error(`Primary city "${PRIMARY_CITY_SLUG}" is not seeded`);
 
     // Batch reads — once per run, not once per row.
-    const [localities, projects, existingSourceRefs] = await Promise.all([
-      prisma.locality.findMany({ where: { cityId: city.id }, select: { id: true, name: true } }),
+    const [localities, projects, existingSourceRefs, pendingTransactionStaging] = await Promise.all([
+      prisma.locality.findMany({
+        where: { cityId: city.id },
+        // Phase 19: LocalityAlias already existed (its own doc comment names
+        // "IGR" as an example alias source) but had no consumer yet -- wiring
+        // it in here lets "Andheri W." / colloquial IGR spellings resolve
+        // without creating a duplicate Locality or a new matching system.
+        select: { id: true, name: true, aliases: { select: { alias: true } } },
+      }),
       prisma.project.findMany({ where: { cityId: city.id }, select: { id: true, name: true } }),
-      prisma.transaction.findMany({ where: { dataSource }, select: { sourceRef: true } }),
+      prisma.transaction.findMany({ where: { dataSource }, select: { id: true, sourceRef: true } }),
+      // The only other place a duplicate real-world document number could
+      // already be sitting is another still-PENDING Transaction staging
+      // record (nothing has become a live Transaction yet) -- checked
+      // separately from existingSourceRefs above, which only covers rows
+      // already approved into the live table.
+      prisma.ingestStagingRecord.findMany({
+        where: { entityType: "Transaction", status: "PENDING" },
+        select: { id: true, payload: true },
+      }),
     ]);
-    const localityByName = new Map(localities.map((l) => [l.name.trim().toLowerCase(), l.id]));
+    const localityByName = new Map<string, string>();
+    for (const locality of localities) {
+      localityByName.set(locality.name.trim().toLowerCase(), locality.id);
+      for (const { alias } of locality.aliases) {
+        const key = alias.trim().toLowerCase();
+        if (!localityByName.has(key)) localityByName.set(key, locality.id);
+      }
+    }
     const projectByName = new Map(projects.map((p) => [p.name.trim().toLowerCase(), p.id]));
     const existingSourceRefSet = new Set(existingSourceRefs.map((t) => t.sourceRef).filter((r): r is string => r !== null));
+    const liveTransactionBySourceRef = new Map(
+      existingSourceRefs.filter((t): t is typeof t & { sourceRef: string } => t.sourceRef !== null).map((t) => [t.sourceRef, t.id])
+    );
+    const pendingStagingCandidates = pendingTransactionStaging.map((r) => ({
+      id: r.id,
+      sourceRef: (r.payload as unknown as TransactionImportPayload).sourceRef ?? null,
+    }));
     // Guards against the same file containing two literally-identical rows.
     const seenInThisRun = new Set<string>();
 
@@ -131,18 +168,33 @@ export async function runTransactionFileImport(params: {
 
         const projectId = row.projectName ? projectByName.get(row.projectName.trim().toLowerCase()) : undefined;
 
-        const sourceRef = computeSourceRef(sourceKey, row);
-        if (existingSourceRefSet.has(sourceRef) || seenInThisRun.has(sourceRef)) {
-          summary.skipped += 1;
-          logEntries.push({
-            entityType: "Transaction",
-            entityId: null,
-            action: "SKIPPED_DUPLICATE",
-            message: `Row ${rowNumber}: an identical transaction has already been imported (sourceRef "${sourceRef}")`,
-          });
-          continue;
+        // A real external document/registration number (when supplied) IS the
+        // sourceRef -- a genuine identifier, and the strongest possible dedup
+        // signal (Phase 19 Part I). Only falls back to the synthetic content
+        // hash when a source doesn't provide one, exactly as before.
+        const hasRealRegistrationNumber = Boolean(row.registrationNumber);
+        const sourceRef = row.registrationNumber?.trim() || computeSourceRef(sourceKey, row);
+
+        // The synthetic content hash encodes every relevant field at once, so
+        // an exact match there truly does mean identical content -- safe to
+        // silently skip, exactly as before. A REAL registration number
+        // matching is NOT the same guarantee (two genuinely different
+        // transactions could share a mistyped document number while
+        // differing everywhere else) -- so it is never silently skipped here;
+        // it always stages, and is instead flagged for human review below.
+        if (!hasRealRegistrationNumber) {
+          if (existingSourceRefSet.has(sourceRef) || seenInThisRun.has(sourceRef)) {
+            summary.skipped += 1;
+            logEntries.push({
+              entityType: "Transaction",
+              entityId: null,
+              action: "SKIPPED_DUPLICATE",
+              message: `Row ${rowNumber}: an identical transaction has already been imported (sourceRef "${sourceRef}")`,
+            });
+            continue;
+          }
+          seenInThisRun.add(sourceRef);
         }
-        seenInThisRun.add(sourceRef);
 
         const payload: TransactionImportPayload = {
           localityId,
@@ -156,19 +208,53 @@ export async function runTransactionFileImport(params: {
           unitLabel: row.unitLabel,
           dataSource,
           sourceRef,
+          confidence: row.confidence,
+          sourceNote: row.sourceNote,
         };
 
         // Transactions are discrete event records, not "the same place possibly
-        // duplicated" the way Project/Builder/Locality are — there is no
-        // duplicate-match candidate here, only the sourceRef idempotency check
-        // above. Every valid row not already imported is staged for review.
-        stagingRecords.push({ entityType: "Transaction", targetId: null, payload: payload as unknown as Prisma.InputJsonValue });
+        // duplicated" the way Project/Builder/Locality are -- targetId stays
+        // null always (no merge concept, per applyTransactionApproval). But a
+        // real registration number matching another still-PENDING staging
+        // record IS a genuine "look at this" signal (Phase 19 Part I) --
+        // surfaced via matchedExistingId/matchConfidence (purely informational
+        // columns; never read by the approval/merge logic, confirmed against
+        // lib/actions/ingestion.ts), never silently merged or discarded.
+        const possibleDuplicate = hasRealRegistrationNumber
+          ? findPossibleDuplicateTransaction(pendingStagingCandidates, { registrationNumber: row.registrationNumber })
+          : null;
+
+        // A real registration number matching an ALREADY-APPROVED live
+        // Transaction is the other real-world case (an overlapping re-import)
+        // -- matchedExistingId can't point at it the same way (the Review
+        // Queue only resolves that column against other staging records, not
+        // live Transactions), so this is surfaced the same way any other
+        // "look before approving" fact is: appended to the row's own
+        // sourceNote, which the Review Queue already displays -- never a
+        // silent skip, never a silent duplicate creation.
+        const liveMatchId = hasRealRegistrationNumber ? liveTransactionBySourceRef.get(sourceRef) : undefined;
+        if (liveMatchId) {
+          const warning = `⚠ Registration number matches an already-approved transaction (id ${liveMatchId}) — verify before approving.`;
+          payload.sourceNote = payload.sourceNote ? `${warning} ${payload.sourceNote}` : warning;
+        }
+
+        stagingRecords.push({
+          entityType: "Transaction",
+          targetId: null,
+          matchedExistingId: possibleDuplicate?.existingId ?? null,
+          matchConfidence: possibleDuplicate?.confidence ?? null,
+          payload: payload as unknown as Prisma.InputJsonValue,
+        });
         summary.staged += 1;
         logEntries.push({
           entityType: "Transaction",
           entityId: null,
-          action: "STAGED",
-          message: `Row ${rowNumber}: ${row.type} in "${row.localityName}"${row.projectName ? ` (${row.projectName})` : ""} — awaiting review`,
+          action: possibleDuplicate || liveMatchId ? "STAGED_POSSIBLE_DUPLICATE" : "STAGED",
+          message: possibleDuplicate
+            ? `Row ${rowNumber}: ${row.type} in "${row.localityName}" — registration number matches a transaction already pending review (staging record ${possibleDuplicate.existingId}); flagged for human review, not merged`
+            : liveMatchId
+              ? `Row ${rowNumber}: ${row.type} in "${row.localityName}" — registration number matches already-approved transaction ${liveMatchId}; staged anyway with a source-note warning, not merged`
+              : `Row ${rowNumber}: ${row.type} in "${row.localityName}"${row.projectName ? ` (${row.projectName})` : ""} — awaiting review`,
         });
       } catch (error) {
         summary.failed += 1;
@@ -183,7 +269,16 @@ export async function runTransactionFileImport(params: {
 
     await Promise.allSettled([
       ...stagingRecords.map((r) =>
-        prisma.ingestStagingRecord.create({ data: { batchId: batch.id, entityType: r.entityType, targetId: r.targetId, payload: r.payload } })
+        prisma.ingestStagingRecord.create({
+          data: {
+            batchId: batch.id,
+            entityType: r.entityType,
+            targetId: r.targetId,
+            matchedExistingId: r.matchedExistingId,
+            matchConfidence: r.matchConfidence,
+            payload: r.payload,
+          },
+        })
       ),
       ...logEntries.map((l) =>
         prisma.ingestLogEntry.create({ data: { batchId: batch.id, entityType: l.entityType, entityId: l.entityId, action: l.action, message: l.message } })

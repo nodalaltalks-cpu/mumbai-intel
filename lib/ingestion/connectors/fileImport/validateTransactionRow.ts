@@ -1,4 +1,4 @@
-import { TRANSACTION_TYPES, type TransactionType } from "@/lib/project-meta";
+import { CONFIDENCE_LEVELS, TRANSACTION_TYPES, type Confidence, type TransactionType } from "@/lib/project-meta";
 
 function normalizeLabel(value: string): string {
   return value.trim().toLowerCase().replace(/[_\s-]+/g, " ");
@@ -22,6 +22,10 @@ export interface ValidatedTransactionRow {
   bedrooms?: number;
   tower?: string;
   unitLabel?: string;
+  /** A real external document/registration number, when the source provides one — never fabricated. */
+  registrationNumber?: string;
+  confidence?: Confidence;
+  sourceNote?: string;
 }
 
 export type TransactionValidationResult = { ok: true; data: ValidatedTransactionRow } | { ok: false; error: string };
@@ -61,6 +65,14 @@ export function validateTransactionRow(mapped: Record<string, string>): Transact
     bedrooms = n;
   }
 
+  // Confidence is optional and never blocks staging (the schema itself
+  // defaults to MEDIUM) -- an unrecognized value is simply ignored rather
+  // than rejecting an otherwise-valid row, mirroring category's leniency
+  // in validateProjectRow.ts rather than status's strict rejection.
+  const confidence = mapped.confidence
+    ? (CONFIDENCE_LEVELS.find((c) => c === normalizeLabel(mapped.confidence).toUpperCase()) as Confidence | undefined)
+    : undefined;
+
   return {
     ok: true,
     data: {
@@ -73,6 +85,9 @@ export function validateTransactionRow(mapped: Record<string, string>): Transact
       bedrooms,
       tower: mapped.tower || undefined,
       unitLabel: mapped.unitLabel || undefined,
+      registrationNumber: mapped.registrationNumber || undefined,
+      confidence,
+      sourceNote: mapped.sourceNote || undefined,
     },
   };
 }

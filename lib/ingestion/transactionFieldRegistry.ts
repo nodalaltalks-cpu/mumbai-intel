@@ -1,5 +1,5 @@
 import { formatDate, formatPaise, formatPricePerSqft, formatSqft } from "@/lib/format";
-import { CONFIDENCE_LABEL, SOURCE_LABEL, TRANSACTION_TYPE_LABEL, type Confidence, type DataSource } from "@/lib/project-meta";
+import { CONFIDENCE_LABEL, SOURCE_LABEL, TRANSACTION_TYPE_LABEL, type DataSource } from "@/lib/project-meta";
 import type { TransactionImportPayload } from "./connectors/fileImport/types";
 import { isMeaningfulValue } from "./reviewFieldRegistry";
 import type { FieldStatus, ReviewField, ReviewFieldGroup, ReviewCompleteness } from "./reviewFieldRegistry";
@@ -17,9 +17,9 @@ import type { FieldStatus, ReviewField, ReviewFieldGroup, ReviewCompleteness } f
 
 export type { FieldStatus, ReviewField, ReviewFieldGroup, ReviewCompleteness };
 
-function field(key: string, label: string, rawValue: unknown, displayValue: string | null): ReviewField {
-  const status: FieldStatus = isMeaningfulValue(rawValue) ? "RECEIVED" : "MISSING";
-  return { key, label, status, value: status === "MISSING" ? null : displayValue };
+function field(key: string, label: string, rawValue: unknown, displayValue: string | null, reviewNote?: string): ReviewField {
+  const status: FieldStatus = reviewNote ? "NEEDS_REVIEW" : isMeaningfulValue(rawValue) ? "RECEIVED" : "MISSING";
+  return { key, label, status, value: status === "MISSING" ? null : displayValue, reviewNote };
 }
 
 function summarize(groups: ReviewFieldGroup[]): ReviewCompleteness {
@@ -36,27 +36,35 @@ function summarize(groups: ReviewFieldGroup[]): ReviewCompleteness {
 export interface TransactionReviewContext {
   localityName?: string;
   projectName?: string;
+  /** Set only when a real possible-duplicate signal exists (see buildTransactionReviewCompleteness's doc comment) -- never fabricated. */
+  possibleDuplicateNote?: string;
 }
 
 /**
  * Builds the 16-field TRANSACTION / PROPERTY / SOURCE & VERIFICATION
  * breakdown for a Transaction staging candidate. `locality`/`project`/`type`/
  * `registrationDate`/`value`/`carpetSqft`/`bedrooms`/`tower`/`unitLabel`/
- * `dataSource`/`sourceRef` are real keys on `TransactionImportPayload`
- * (lib/ingestion/connectors/fileImport/types.ts) and are already populated by
- * the existing runTransactionFileImport(). `builtUpSqft`, `pricePerSqftRupees`,
- * `floor`, `confidence`, and `sourceNote` are real columns on the `Transaction`
- * model and real fields on TransactionForm.tsx, but are NOT yet part of the
- * staging payload type -- read via a raw untyped cast (same pattern as the
- * Project registry) so a future importer extension that DOES populate one of
- * these is picked up automatically rather than hardcoded to always show
- * missing.
+ * `dataSource`/`sourceRef`/`confidence`/`sourceNote` are real keys on
+ * `TransactionImportPayload` (lib/ingestion/connectors/fileImport/types.ts,
+ * extended in Phase 19) and are already populated by the existing
+ * runTransactionFileImport(). `builtUpSqft`, `pricePerSqftRupees`, and `floor`
+ * are real columns on the `Transaction` model and real fields on
+ * TransactionForm.tsx, but are NOT yet part of the staging payload type --
+ * read via a raw untyped cast (same pattern as the Project registry) so a
+ * future importer extension that DOES populate one of these is picked up
+ * automatically rather than hardcoded to always show missing.
+ *
+ * `possibleDuplicateNote`, when passed, marks the `sourceRef` field
+ * NEEDS_REVIEW -- reserved for a real signal only (IngestStagingRecord.
+ * matchedExistingId pointing at another still-PENDING Transaction staging
+ * record with the same real registration number), never manufactured.
  */
 export function buildTransactionReviewCompleteness(
   payload: TransactionImportPayload,
   context: TransactionReviewContext = {}
 ): ReviewCompleteness {
   const raw = payload as unknown as Record<string, unknown>;
+  const { possibleDuplicateNote } = context;
 
   const transactionGroup: ReviewFieldGroup = {
     key: "transaction",
@@ -98,10 +106,10 @@ export function buildTransactionReviewCompleteness(
     key: "sourceVerification",
     label: "Source & Verification",
     fields: [
-      field("sourceRef", "Source Reference", payload.sourceRef, payload.sourceRef ?? null),
+      field("sourceRef", "Source Reference", payload.sourceRef, payload.sourceRef ?? null, possibleDuplicateNote),
       field("dataSource", "Data Source", payload.dataSource, payload.dataSource ? SOURCE_LABEL[payload.dataSource as DataSource] : null),
-      field("confidence", "Confidence", raw.confidence, typeof raw.confidence === "string" ? CONFIDENCE_LABEL[raw.confidence as Confidence] : null),
-      field("sourceNote", "Source Note", raw.sourceNote, typeof raw.sourceNote === "string" ? raw.sourceNote : null),
+      field("confidence", "Confidence", payload.confidence, payload.confidence ? CONFIDENCE_LABEL[payload.confidence] : null),
+      field("sourceNote", "Source Note", payload.sourceNote, payload.sourceNote ?? null),
     ],
   };
 

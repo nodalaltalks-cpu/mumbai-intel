@@ -221,6 +221,7 @@ export default async function DataSyncReviewPage() {
       matchLines,
       noMatchNote,
       completeness,
+      isProject,
     };
   });
 

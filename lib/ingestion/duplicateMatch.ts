@@ -137,6 +137,37 @@ export function findPossibleDuplicateBuilder(
   return best;
 }
 
+export interface ExistingTransactionStagingCandidate {
+  id: string;
+  sourceRef: string | null;
+}
+
+export interface TransactionDuplicateMatch extends DuplicateMatch {
+  reason: "registration_number";
+}
+
+/**
+ * Flags a likely-duplicate Transaction candidate already sitting PENDING in
+ * the Transaction Review Queue (Phase 19) -- deliberately narrower than every
+ * other findPossibleDuplicate* above: it only ever fires on an exact match of
+ * a REAL external registration/document number, never on the synthetic
+ * content-hash transactionFileImportRunner.ts falls back to when a source
+ * doesn't supply one. A hash collision there already means byte-identical
+ * content (handled separately, silently, as a true re-upload), so this
+ * function's only job is the genuinely ambiguous case: the same real-world
+ * document number appearing twice, which a human should look at rather than
+ * either silently merge or silently duplicate.
+ */
+export function findPossibleDuplicateTransaction(
+  pendingCandidates: ExistingTransactionStagingCandidate[],
+  candidate: { registrationNumber?: string }
+): TransactionDuplicateMatch | null {
+  if (!candidate.registrationNumber) return null;
+  const target = candidate.registrationNumber.trim().toUpperCase();
+  const exact = pendingCandidates.find((c) => c.sourceRef && c.sourceRef.trim().toUpperCase() === target);
+  return exact ? { existingId: exact.id, confidence: 1, reason: "registration_number" } : null;
+}
+
 export interface ExistingLocalityCandidate {
   id: string;
   name: string;

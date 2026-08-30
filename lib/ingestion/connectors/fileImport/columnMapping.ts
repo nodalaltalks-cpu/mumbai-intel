@@ -107,6 +107,12 @@ export const TRANSACTION_COLUMN_ALIASES: Record<string, string[]> = {
   bedrooms: ["bedrooms", "bhk", "configuration"],
   tower: ["tower", "building", "wing"],
   unitLabel: ["unit", "unit label", "flat no", "unit number"],
+  // Real external identifier (e.g. an IGR document number) — a strong dedup
+  // signal, distinct from the content-hash fallback computeSourceRef() uses
+  // when a source doesn't provide one (see transactionFileImportRunner.ts).
+  registrationNumber: ["registration number", "document number", "doc number", "regn no", "reg no", "registration no"],
+  confidence: ["confidence"],
+  sourceNote: ["source note", "note", "notes"],
 };
 
 export function mapRowToTransactionFields(row: Record<string, unknown>): Record<string, string> {

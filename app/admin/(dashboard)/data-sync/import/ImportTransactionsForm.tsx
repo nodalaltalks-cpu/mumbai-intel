@@ -39,10 +39,16 @@ export default function ImportTransactionsForm() {
           <span className="text-foreground">Optional:</span> project, type (sale/resale/lease), carpet sqft,
           bedrooms, tower, unit label.
         </p>
+        <p className="mt-1">
+          <span className="text-foreground">Also optional (Phase 19 — e.g. Maharashtra IGR data):</span> registration
+          number / document number (a real external identifier — used for duplicate detection instead of the
+          content-hash fallback when present), confidence (High/Medium/Low), source note (free text on where a
+          figure came from).
+        </p>
         <p className="mt-2">
-          Every row is staged for review — nothing is written directly. Transactions have no duplicate-match step
-          (each row is a discrete event); a row already imported from this exact file is skipped automatically on
-          re-upload.
+          Every row is staged for review — nothing is written directly. A row already imported from this exact file
+          is skipped automatically on re-upload; a registration number matching a transaction still pending review is
+          staged anyway and flagged as a possible duplicate for you to check, never silently merged or discarded.
         </p>
       </div>
 
@@ -51,7 +57,7 @@ export default function ImportTransactionsForm() {
       {state.summary ? (
         <p className="text-xs text-positive">
           Staged {state.summary.staged}, skipped {state.summary.skipped}, failed {state.summary.failed}.{" "}
-          <Link href="/admin/data-sync/review" className="underline">
+          <Link href="/admin/data-sync/transaction-review" className="underline">
             Review now →
           </Link>
         </p>

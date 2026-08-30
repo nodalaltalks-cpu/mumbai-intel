@@ -12,16 +12,20 @@ export const metadata: Metadata = { title: "Transaction Review — NoDalalTalks 
 export const dynamic = "force-dynamic";
 
 /**
- * Transaction Review Queue (Phase 16B) — a SEPARATE page from the existing
- * Project Review Queue (/admin/data-sync/review, untouched by this phase).
- * Reuses the same existing `getPendingStagingRecords()` query (no new query,
- * no new persistence) and simply filters to `entityType === "Transaction"`,
- * exactly mirroring how the Project page already filters its own records by
- * entityType. Transactions never carry a `matchedExistingId` (see
- * transactionFileImportRunner.ts — `targetId` is always null; a Transaction
- * is deduplicated by a content-hash `sourceRef` check at import time, not
- * proposed as a merge candidate), so there is no "possible match" panel here
- * the way the Project queue has one.
+ * Transaction Review Queue (Phase 16B, extended Phase 19) — a SEPARATE page
+ * from the existing Project Review Queue (/admin/data-sync/review, untouched
+ * by this and every prior phase). Reuses the same existing
+ * `getPendingStagingRecords()` query (no new query, no new persistence) and
+ * simply filters to `entityType === "Transaction"`, exactly mirroring how the
+ * Project page already filters its own records by entityType.
+ *
+ * `targetId` stays permanently null for every Transaction (no merge concept,
+ * per applyTransactionApproval) -- but Phase 19 wires up `matchedExistingId`/
+ * `matchConfidence` (purely informational columns, never read by the
+ * approval/merge logic) to flag a real registration-number collision against
+ * another still-PENDING Transaction staging record. When set, this page
+ * resolves that OTHER staging record's own payload to build a real,
+ * human-readable "possible duplicate of ..." note -- never a fabricated one.
  */
 export default async function TransactionReviewPage() {
   const records = await getPendingStagingRecords();
@@ -47,6 +51,14 @@ export default async function TransactionReviewPage() {
     : [];
   const projectNameById = new Map(projects.map((p) => [p.id, p.name]));
 
+  const matchedStagingIds = [
+    ...new Set(transactionRecords.map((r) => r.matchedExistingId).filter((id): id is string => Boolean(id))),
+  ];
+  const matchedStagingRecords = matchedStagingIds.length
+    ? await prisma.ingestStagingRecord.findMany({ where: { id: { in: matchedStagingIds } }, select: { id: true, payload: true, createdAt: true } })
+    : [];
+  const matchedStagingById = new Map(matchedStagingRecords.map((r) => [r.id, r]));
+
   const reviewRecords: TransactionReviewRecord[] = transactionRecords.map((record) => {
     const payload = record.payload as unknown as TransactionImportPayload;
     const localityName = localityNameById.get(payload.localityId);
@@ -57,7 +69,22 @@ export default async function TransactionReviewPage() {
       [localityName ?? "Unknown locality", projectName].filter(Boolean).join(" · "),
     ];
 
-    const completeness = buildTransactionReviewCompleteness(payload, { localityName, projectName });
+    const matched = record.matchedExistingId ? matchedStagingById.get(record.matchedExistingId) : null;
+    let matchNote =
+      "New transaction record — no duplicate/merge check applies (transactions are deduplicated by a content hash or registration number at import time, never proposed as a merge).";
+    let possibleDuplicateNote: string | undefined;
+    if (matched) {
+      const matchedPayload = matched.payload as unknown as TransactionImportPayload;
+      const confidencePct = record.matchConfidence !== null ? Math.round(Number(record.matchConfidence) * 100) : null;
+      possibleDuplicateNote = `Registration number matches staging record ${matched.id} (staged ${formatDate(matched.createdAt)})`;
+      matchNote = `🟠 Possible duplicate — registration number "${payload.sourceRef}" matches a transaction already pending review: ${
+        TRANSACTION_TYPE_LABEL[matchedPayload.type as TransactionType]
+      } · ${formatDate(matchedPayload.registrationDateIso)} · ${formatPaise(matchedPayload.valueRupees * 100)}${
+        confidencePct !== null ? ` (confidence ${confidencePct}%)` : ""
+      }. Not merged automatically — review both before approving.`;
+    }
+
+    const completeness = buildTransactionReviewCompleteness(payload, { localityName, projectName, possibleDuplicateNote });
 
     return {
       id: record.id,
@@ -65,7 +92,8 @@ export default async function TransactionReviewPage() {
       sourceKey: record.batch.sourceKey,
       proposedTitle: `${TRANSACTION_TYPE_LABEL[payload.type as TransactionType]} · ${formatDate(payload.registrationDateIso)}`,
       proposedLines,
-      matchNote: "New transaction record — no duplicate/merge check applies (transactions are deduplicated by a content hash at import time, never proposed as a merge).",
+      matchNote,
+      hasPossibleDuplicate: Boolean(matched),
       completeness,
     };
   });

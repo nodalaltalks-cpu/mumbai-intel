@@ -20,6 +20,8 @@ export interface TransactionReviewRecord {
   proposedTitle: string;
   proposedLines: string[];
   matchNote: string;
+  /** Real signal only (Phase 19): a registration-number collision against another PENDING Transaction staging record. */
+  hasPossibleDuplicate: boolean;
   completeness: ReviewCompleteness;
 }
 
@@ -158,6 +160,10 @@ export default function TransactionReviewList({ records }: { records: Transactio
               </span>
               <span className="text-positive">🟢 {record.completeness.receivedCount} Received</span>
               <span className="text-negative">🔴 {record.completeness.missingCount} Missing</span>
+              {record.completeness.needsReviewCount > 0 ? (
+                <span className="text-warning">🟠 {record.completeness.needsReviewCount} Needs Review</span>
+              ) : null}
+              {record.hasPossibleDuplicate ? <span className="text-warning">🟠 Possible Duplicate</span> : null}
             </div>
             <button
               type="button"
