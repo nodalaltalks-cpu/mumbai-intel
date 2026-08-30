@@ -254,6 +254,7 @@ export function extractGodrejSkyShoreFacts(html: string): SourceFactsMap {
         confidence: "High",
         ambiguous: true,
         note: `Named list: ${names.join(", ")}. Real, structured content -- still routed to human confirmation before publishing, per this project's prior review determination.`,
+        items: names,
       };
     }
   } catch {
@@ -274,7 +275,7 @@ export function extractGodrejSkyShoreFacts(html: string): SourceFactsMap {
       .map((i) => (i?.img_upload as Record<string, unknown> | undefined)?.url)
       .filter((u): u is string => typeof u === "string" && u.length > 0);
     if (urls.length) {
-      facts.images = { value: `${urls.length} image(s)`, confidence: "High", note: "Gallery image URLs found on the official page." };
+      facts.images = { value: `${urls.length} image(s)`, confidence: "High", note: "Gallery image URLs found on the official page.", items: urls };
     }
   } catch {
     /* ignore */
@@ -307,8 +308,16 @@ export function extractGodrejSkyShoreFacts(html: string): SourceFactsMap {
   try {
     const docs = Array.isArray(item.compliance) ? (item.compliance as Record<string, unknown>[]) : [];
     const titles = docs.map((d) => d?.title).filter((t): t is string => typeof t === "string" && t.length > 0);
+    const urls = docs
+      .map((d) => (d?.pdf as Record<string, unknown> | undefined)?.url)
+      .filter((u): u is string => typeof u === "string" && u.length > 0);
     if (titles.length) {
-      facts.documents = { value: `${titles.length} document(s)`, confidence: "High", note: `Compliance filing(s): ${titles.join(", ")}.` };
+      facts.documents = {
+        value: `${titles.length} document(s)`,
+        confidence: "High",
+        note: `Compliance filing(s): ${titles.join(", ")}.`,
+        items: urls.length === titles.length ? urls : titles,
+      };
     }
   } catch {
     /* ignore */

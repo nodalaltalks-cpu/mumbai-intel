@@ -13,32 +13,32 @@ const CLASSIFICATION_BADGE: Record<EnrichmentClassification, { tone: BadgeTone; 
   MISSING: { tone: "muted", label: "Missing", icon: "⚪" },
 };
 
-type FieldDecision = "accepted" | "reviewed" | "kept_current" | "accept_proposed";
-
-const DECISION_LABEL: Record<FieldDecision, string> = {
-  accepted: "Marked accepted (not yet saved)",
-  reviewed: "Marked reviewed (not yet saved)",
-  kept_current: "Marked: keep current (not yet saved)",
-  accept_proposed: "Marked: accept proposed (not yet saved)",
-};
+type FieldSaveState = "idle" | "saving" | "saved" | "error" | "kept";
 
 /**
  * Project Enrichment proposal table (Phase 28 Part I, field-level actions
- * added Phase 29 Part E).
+ * added Phase 29 Part E, PERSISTED as of Phase 32 Part E).
  *
- * The per-field Accept/Review/Keep Current/Accept Proposed buttons below are
- * LOCAL UI STATE ONLY -- clicking one does not write to the database, does
- * not change the Project row, and is not persisted anywhere (no caching/
- * storage mechanism was authorized this phase). They exist so a reviewer can
- * track their own in-progress decisions while reading through a project's
- * fields; the state resets the next time this dialog is opened. Applying any
- * of these decisions to the actual Project record, and approving the
- * project itself, are both explicitly out of scope for this phase and remain
- * a separate, already-existing action (the Review Queue's own Approve
- * button) -- enrichment must never substitute for that approval step.
+ * Accept/Review/Accept Proposed now call `onAcceptField`, which the parent
+ * (ReviewQueueList.tsx) wires to `acceptEnrichmentFieldAction` -- this SAVES
+ * the accepted value into the existing PENDING staging record's payload.
+ * "Keep Current" for a CONFLICT field stays a pure client-side
+ * acknowledgment -- nothing changes, so nothing is sent to the server.
+ *
+ * This never touches the live Project and never approves/rejects the
+ * staging record -- that remains the Review Queue's own separate Approve
+ * button. Confirmation copy is deliberately "Saved to pending review", never
+ * "Project updated" (Phase 32 Part P).
  */
-export default function EnrichmentProposalPanel({ fields }: { fields: EnrichmentField[] }) {
-  const [decisions, setDecisions] = useState<Record<string, FieldDecision>>({});
+export default function EnrichmentProposalPanel({
+  fields,
+  onAcceptField,
+}: {
+  fields: EnrichmentField[];
+  onAcceptField: (field: EnrichmentField) => Promise<{ ok: boolean; error?: string }>;
+}) {
+  const [saveState, setSaveState] = useState<Record<string, FieldSaveState>>({});
+  const [saveError, setSaveError] = useState<Record<string, string>>({});
 
   const byGroup = new Map<string, EnrichmentField[]>();
   for (const field of fields) {
@@ -55,8 +55,28 @@ export default function EnrichmentProposalPanel({ fields }: { fields: Enrichment
     { CONFIRMED: 0, GREEN_NEW: 0, YELLOW: 0, CONFLICT: 0, MISSING: 0 } as Record<EnrichmentClassification, number>
   );
 
-  function setDecision(key: string, decision: FieldDecision) {
-    setDecisions((prev) => ({ ...prev, [key]: decision }));
+  async function handleAccept(field: EnrichmentField) {
+    setSaveState((prev) => ({ ...prev, [field.key]: "saving" }));
+    const result = await onAcceptField(field);
+    if (result.ok) {
+      setSaveState((prev) => ({ ...prev, [field.key]: "saved" }));
+    } else {
+      setSaveState((prev) => ({ ...prev, [field.key]: "error" }));
+      setSaveError((prev) => ({ ...prev, [field.key]: result.error ?? "Could not save this field." }));
+    }
+  }
+
+  function handleKeepCurrent(fieldKey: string) {
+    setSaveState((prev) => ({ ...prev, [fieldKey]: "kept" }));
+  }
+
+  function statusLine(fieldKey: string) {
+    const state = saveState[fieldKey];
+    if (state === "saving") return <span className="text-[10px] text-muted">Saving...</span>;
+    if (state === "saved") return <span className="text-[10px] text-positive">✓ Saved to pending review</span>;
+    if (state === "kept") return <span className="text-[10px] text-muted">Keeping current value — no change made</span>;
+    if (state === "error") return <span className="text-[10px] text-negative">{saveError[fieldKey]}</span>;
+    return null;
   }
 
   return (
@@ -70,8 +90,8 @@ export default function EnrichmentProposalPanel({ fields }: { fields: Enrichment
       </div>
 
       <p className="rounded-sm border border-border bg-surface-raised px-3 py-2 text-[10px] text-muted">
-        Field actions below only track your own review progress in this view — nothing is saved. Approving the project&apos;s data still happens from the
-        Review Queue&apos;s own Approve button.
+        Accepting a field saves it to this project&apos;s pending review record only — the live project listing is unaffected until you use the Review
+        Queue&apos;s own Approve button.
       </p>
 
       {[...byGroup.entries()].map(([group, groupFields]) => (
@@ -79,7 +99,9 @@ export default function EnrichmentProposalPanel({ fields }: { fields: Enrichment
           <p className="mb-1.5 text-[10px] font-mono uppercase tracking-wide text-muted">{group}</p>
           <div className="flex flex-col divide-y divide-border rounded-sm border border-border">
             {groupFields.map((field) => {
-              const decision = decisions[field.key];
+              const state = saveState[field.key] ?? "idle";
+              const busy = state === "saving";
+              const done = state === "saved" || state === "kept";
               return (
                 <div key={field.key} className="flex flex-col gap-1 px-3 py-2 text-xs">
                   <div className="flex items-center justify-between gap-2">
@@ -110,12 +132,13 @@ export default function EnrichmentProposalPanel({ fields }: { fields: Enrichment
                     <div className="mt-1 flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setDecision(field.key, "accepted")}
-                        className="rounded-sm border border-positive/40 px-2 py-0.5 text-[10px] font-mono uppercase text-positive hover:bg-positive/10"
+                        disabled={busy || done}
+                        onClick={() => handleAccept(field)}
+                        className="rounded-sm border border-positive/40 px-2 py-0.5 text-[10px] font-mono uppercase text-positive hover:bg-positive/10 disabled:opacity-50"
                       >
                         Accept
                       </button>
-                      {decision ? <span className="text-[10px] text-muted">{DECISION_LABEL[decision]}</span> : null}
+                      {statusLine(field.key)}
                     </div>
                   ) : null}
 
@@ -123,12 +146,14 @@ export default function EnrichmentProposalPanel({ fields }: { fields: Enrichment
                     <div className="mt-1 flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setDecision(field.key, "reviewed")}
-                        className="rounded-sm border border-warning/40 px-2 py-0.5 text-[10px] font-mono uppercase text-warning hover:bg-warning/10"
+                        disabled={busy || done}
+                        onClick={() => handleAccept(field)}
+                        className="rounded-sm border border-warning/40 px-2 py-0.5 text-[10px] font-mono uppercase text-warning hover:bg-warning/10 disabled:opacity-50"
+                        title="This value is source-backed but lower confidence -- you're accepting it despite that."
                       >
-                        Review
+                        Accept (lower confidence)
                       </button>
-                      {decision ? <span className="text-[10px] text-muted">{DECISION_LABEL[decision]}</span> : null}
+                      {statusLine(field.key)}
                     </div>
                   ) : null}
 
@@ -136,19 +161,21 @@ export default function EnrichmentProposalPanel({ fields }: { fields: Enrichment
                     <div className="mt-1 flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setDecision(field.key, "kept_current")}
-                        className="rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-foreground hover:text-foreground"
+                        disabled={busy || done}
+                        onClick={() => handleKeepCurrent(field.key)}
+                        className="rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-foreground hover:text-foreground disabled:opacity-50"
                       >
                         Keep Current
                       </button>
                       <button
                         type="button"
-                        onClick={() => setDecision(field.key, "accept_proposed")}
-                        className="rounded-sm border border-negative/40 px-2 py-0.5 text-[10px] font-mono uppercase text-negative hover:bg-negative/10"
+                        disabled={busy || done}
+                        onClick={() => handleAccept(field)}
+                        className="rounded-sm border border-negative/40 px-2 py-0.5 text-[10px] font-mono uppercase text-negative hover:bg-negative/10 disabled:opacity-50"
                       >
                         Accept Proposed
                       </button>
-                      {decision ? <span className="text-[10px] text-muted">{DECISION_LABEL[decision]}</span> : null}
+                      {statusLine(field.key)}
                     </div>
                   ) : null}
                 </div>

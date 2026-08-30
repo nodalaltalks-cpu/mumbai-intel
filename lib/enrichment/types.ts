@@ -44,6 +44,16 @@ export interface RawSourceFact {
   confidence: EnrichmentConfidence;
   ambiguous?: boolean;
   note?: string;
+  /**
+   * The real underlying list a source found, for a field the Project
+   * registry displays as a count (amenities, images, faqs, etc.) -- e.g. the
+   * actual amenity names, not just "14 selected". Optional: `value` alone
+   * remains the only thing the UI/classifier ever compares or displays.
+   * Phase 32 reads this (when present) so accepting the field can persist
+   * the real list rather than a lossy count string into the staging
+   * payload's array-shaped fields.
+   */
+  items?: string[];
 }
 
 export type SourceFactsMap = Partial<Record<string, RawSourceFact>>;
@@ -65,6 +75,8 @@ export interface EnrichmentField {
   confidence: EnrichmentConfidence | null;
   classification: EnrichmentClassification;
   reason: string;
+  /** Pass-through of RawSourceFact.items (Phase 32) -- the real list behind a count-displayed field, when the source provided one. */
+  proposedItems?: string[];
 }
 
 /**

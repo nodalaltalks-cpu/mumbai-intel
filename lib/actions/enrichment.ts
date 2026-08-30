@@ -4,10 +4,14 @@ import { requireMutateSession } from "@/lib/auth/guard";
 import { prisma } from "@/lib/prisma";
 import { classifyProjectEnrichment } from "@/lib/enrichment/classifyEnrichment";
 import { resolveDeveloperDomain } from "@/lib/enrichment/developerDomainRegistry";
+import { applyAcceptedField } from "@/lib/enrichment/applyAcceptedField";
 import { godrejPropertiesAdapter, GODREJ_SKY_SHORE_PROJECT_URL } from "@/lib/enrichment/adapters/godrejPropertiesAdapter";
 import { adaniRealtyAdapter, ADANI_LINKBAY_RESIDENCES_PROJECT_URL } from "@/lib/enrichment/adapters/adaniRealtyAdapter";
 import type { EnrichmentField, OfficialSourceAdapter } from "@/lib/enrichment/types";
+import { buildProjectReviewCompleteness } from "@/lib/ingestion/reviewFieldRegistry";
 import type { ProjectImportPayload } from "@/lib/ingestion/connectors/fileImport/types";
+import { friendlyPrismaError } from "./errors";
+import type { Prisma } from "@prisma/client";
 
 export type EnrichProjectStatus = "SUCCESS" | "NO_SOURCE" | "SOURCE_UNAVAILABLE" | "NO_NEW_INFO" | "ERROR";
 
@@ -89,4 +93,73 @@ export async function enrichProjectAction(stagingRecordId: string): Promise<Enri
   }
 
   return { status: "SUCCESS", fields };
+}
+
+export type AcceptEnrichmentFieldStatus = "SUCCESS" | "NOT_FOUND" | "NOT_PENDING" | "INVALID_FIELD" | "INVALID_VALUE" | "ERROR";
+
+export interface AcceptEnrichmentFieldResult {
+  status: AcceptEnrichmentFieldStatus;
+  error?: string;
+}
+
+/**
+ * Persists ONE accepted enrichment field into the existing PENDING staging
+ * record's payload (Phase 32 Part E) -- never writes to Project, Transaction,
+ * Builder, or Locality, and never touches the staging record's own status.
+ * The existing Approve/Reject workflow (approveStagingRecordAction) is the
+ * only thing that ever moves data into the live catalog; this action only
+ * makes the PENDING record itself more complete before that step.
+ *
+ * Reuses the existing 44-field registry (buildProjectReviewCompleteness) to
+ * validate `fieldKey` is a real Project field, and the existing
+ * IngestStagingRecord.payload Json column as the persistence target -- no
+ * new table, model, or column. `proposedItems`, when given, is the real
+ * underlying list behind a count-displayed field (e.g. actual amenity names,
+ * not just "14 selected") -- see lib/enrichment/types.ts's RawSourceFact.items.
+ *
+ * Same auth bar as enrichProjectAction (Part K) -- accepting a field is a
+ * staging-only write, not the higher-stakes catalog write approval requires.
+ */
+export async function acceptEnrichmentFieldAction(
+  stagingRecordId: string,
+  fieldKey: string,
+  proposedValue: string,
+  proposedItems?: string[]
+): Promise<AcceptEnrichmentFieldResult> {
+  await requireMutateSession();
+
+  const record = await prisma.ingestStagingRecord.findUnique({ where: { id: stagingRecordId } });
+  if (!record) {
+    return { status: "NOT_FOUND", error: "Staging record not found." };
+  }
+  if (record.entityType !== "Project") {
+    return { status: "ERROR", error: "Enrichment acceptance is only available for Project staging records." };
+  }
+  if (record.status !== "PENDING") {
+    return { status: "NOT_PENDING", error: "This record is no longer pending review -- it has already been approved or rejected." };
+  }
+
+  const payload = record.payload as unknown as Record<string, unknown>;
+
+  const completeness = buildProjectReviewCompleteness(payload as unknown as ProjectImportPayload, {});
+  const validKeys = new Set(completeness.groups.flatMap((g) => g.fields.map((f) => f.key)));
+  if (!validKeys.has(fieldKey)) {
+    return { status: "INVALID_FIELD", error: `"${fieldKey}" is not a recognized Project field.` };
+  }
+
+  const applied = applyAcceptedField(payload, fieldKey, proposedValue, proposedItems);
+  if (!applied.ok) {
+    return { status: "INVALID_VALUE", error: applied.error };
+  }
+
+  try {
+    await prisma.ingestStagingRecord.update({
+      where: { id: stagingRecordId },
+      data: { payload: applied.payload as unknown as Prisma.InputJsonValue },
+    });
+  } catch (error) {
+    return { status: "ERROR", error: friendlyPrismaError(error) };
+  }
+
+  return { status: "SUCCESS" };
 }

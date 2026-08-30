@@ -10,7 +10,8 @@ import {
 } from "@/lib/actions/ingestion";
 import { formatDate } from "@/lib/format";
 import type { ReviewCompleteness } from "@/lib/ingestion/reviewFieldRegistry";
-import { enrichProjectAction, type EnrichProjectResult } from "@/lib/actions/enrichment";
+import { acceptEnrichmentFieldAction, enrichProjectAction, type EnrichProjectResult } from "@/lib/actions/enrichment";
+import type { EnrichmentField } from "@/lib/enrichment/types";
 import ConfirmButton from "./ConfirmButton";
 import ReviewDataDetailsDialog from "./ReviewDataDetailsDialog";
 import EnrichmentDialog from "./EnrichmentDialog";
@@ -57,6 +58,16 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
       const result = await enrichProjectAction(recordId);
       setEnrichmentByRecordId((prev) => ({ ...prev, [recordId]: { loading: false, result } }));
     });
+  }
+
+  async function handleAcceptField(field: EnrichmentField): Promise<{ ok: boolean; error?: string }> {
+    if (!enrichmentRecordId) return { ok: false, error: "No record open." };
+    const result = await acceptEnrichmentFieldAction(enrichmentRecordId, field.key, field.proposedValue ?? "", field.proposedItems);
+    if (result.status === "SUCCESS") {
+      router.refresh(); // re-derives the completeness counter/badges from the freshly persisted staging payload
+      return { ok: true };
+    }
+    return { ok: false, error: result.error ?? "Could not save this field." };
   }
 
   function toggleOne(id: string) {
@@ -234,6 +245,7 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
           error={enrichmentState.result?.error ?? null}
           onClose={() => setEnrichmentRecordId(null)}
           onRetry={() => runEnrichment(enrichmentRecord.id)}
+          onAcceptField={handleAcceptField}
         />
       ) : null}
     </div>

@@ -20,6 +20,7 @@ export default function EnrichmentDialog({
   error,
   onClose,
   onRetry,
+  onAcceptField,
 }: {
   title: string;
   loading: boolean;
@@ -28,6 +29,7 @@ export default function EnrichmentDialog({
   error: string | null;
   onClose: () => void;
   onRetry: () => void;
+  onAcceptField: (field: EnrichmentField) => Promise<{ ok: boolean; error?: string }>;
 }) {
   return (
     <Dialog title={`Enrich: ${title}`} onClose={onClose} maxWidth="max-w-2xl">
@@ -37,7 +39,7 @@ export default function EnrichmentDialog({
         ) : status === "SUCCESS" && fields ? (
           <>
             <p className="text-xs text-positive">Enrichment results ready.</p>
-            <EnrichmentProposalPanel fields={fields} />
+            <EnrichmentProposalPanel fields={fields} onAcceptField={onAcceptField} />
           </>
         ) : status === "NO_SOURCE" || status === "SOURCE_UNAVAILABLE" || status === "NO_NEW_INFO" ? (
           <div className="flex flex-col gap-3">

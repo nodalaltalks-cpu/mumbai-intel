@@ -106,6 +106,7 @@ export function classifyProjectEnrichment(
         confidence: fact.confidence,
         classification,
         reason,
+        proposedItems: fact.items,
       });
     }
   }

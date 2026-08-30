@@ -267,6 +267,7 @@ export function extractAdaniLinkbayFacts(html: string): SourceFactsMap {
         confidence: "High",
         ambiguous: true,
         note: `Named list: ${names.join(", ")}.`,
+        items: names,
       };
     }
   } catch {
@@ -278,7 +279,7 @@ export function extractAdaniLinkbayFacts(html: string): SourceFactsMap {
     const faqs = Array.isArray(faqComponent?.faqs) ? (faqComponent!.faqs as Record<string, unknown>[]) : [];
     const questions = faqs.map((f) => f.title).filter((t): t is string => typeof t === "string" && t.length > 0);
     if (questions.length) {
-      facts.faqs = { value: `${questions.length} listed`, confidence: "High", note: `Questions: ${questions.join(" | ")}` };
+      facts.faqs = { value: `${questions.length} listed`, confidence: "High", note: `Questions: ${questions.join(" | ")}`, items: questions };
     }
   } catch {
     /* ignore */
@@ -304,7 +305,9 @@ export function extractAdaniLinkbayFacts(html: string): SourceFactsMap {
     const gallery = componentFields(components, "GalleryHighlights")?.galleryHighlights;
     const entries = Array.isArray(gallery) ? (gallery as Record<string, unknown>[]) : [];
     const urls = entries.map((e) => e.src).filter((u): u is string => typeof u === "string" && u.length > 0);
-    if (urls.length) facts.images = { value: `${urls.length} image(s)`, confidence: "High", note: "Gallery image URLs found on the official page." };
+    if (urls.length) {
+      facts.images = { value: `${urls.length} image(s)`, confidence: "High", note: "Gallery image URLs found on the official page.", items: urls };
+    }
   } catch {
     /* ignore */
   }
