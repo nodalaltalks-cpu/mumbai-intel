@@ -72,7 +72,8 @@ const NAV_SECTIONS: { label: string; links: { label: string; href: string }[] }[
     links: [
       { label: "Sync Dashboard", href: "/admin/data-sync" },
       { label: "Import Data", href: "/admin/data-sync/import" },
-      { label: "Review Queue", href: "/admin/data-sync/review" },
+      { label: "Project Review", href: "/admin/data-sync/review" },
+      { label: "Transaction Review", href: "/admin/data-sync/transaction-review" },
     ],
   },
   {
