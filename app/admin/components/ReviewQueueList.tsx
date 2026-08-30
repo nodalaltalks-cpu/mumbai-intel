@@ -9,7 +9,9 @@ import {
   rejectStagingRecordAction,
 } from "@/lib/actions/ingestion";
 import { formatDate } from "@/lib/format";
+import type { ReviewCompleteness } from "@/lib/ingestion/reviewFieldRegistry";
 import ConfirmButton from "./ConfirmButton";
+import ReviewDataDetailsDialog from "./ReviewDataDetailsDialog";
 
 export interface ReviewRecord {
   id: string;
@@ -22,6 +24,8 @@ export interface ReviewRecord {
   matchTitle: string | null;
   matchLines: string[];
   noMatchNote: string | null;
+  /** Full field-by-field completeness breakdown (Phase 14C) -- null only for an entityType this hasn't been built for yet; never partially fabricated. */
+  completeness: ReviewCompleteness | null;
 }
 
 export default function ReviewQueueList({ records }: { records: ReviewRecord[] }) {
@@ -29,6 +33,8 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
   const [bulkError, setBulkError] = useState<string | null>(null);
+  const [detailsRecordId, setDetailsRecordId] = useState<string | null>(null);
+  const detailsRecord = records.find((r) => r.id === detailsRecordId) ?? null;
 
   function toggleOne(id: string) {
     setSelected((prev) => {
@@ -153,8 +159,39 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
               <ConfirmButton action={rejectStagingRecordAction.bind(null, record.id)} label="Reject" confirmLabel="Reject?" />
             </div>
           </div>
+
+          {record.completeness ? (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+              <div className="flex flex-wrap items-center gap-3 text-[11px]">
+                <span className="font-mono text-foreground">
+                  {record.completeness.receivedCount} / {record.completeness.totalFields} fields received
+                </span>
+                <span className="text-positive">🟢 {record.completeness.receivedCount} Received</span>
+                <span className="text-negative">🔴 {record.completeness.missingCount} Missing</span>
+                {record.completeness.needsReviewCount > 0 ? (
+                  <span className="text-warning">🟠 {record.completeness.needsReviewCount} Needs Review</span>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetailsRecordId(record.id)}
+                className="rounded-sm border border-border px-2 py-1 text-[11px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+              >
+                View Data Details
+              </button>
+            </div>
+          ) : null}
         </div>
       ))}
+
+      {detailsRecord?.completeness ? (
+        <ReviewDataDetailsDialog
+          title={detailsRecord.proposedTitle}
+          sourceKey={detailsRecord.sourceKey}
+          completeness={detailsRecord.completeness}
+          onClose={() => setDetailsRecordId(null)}
+        />
+      ) : null}
     </div>
   );
 }

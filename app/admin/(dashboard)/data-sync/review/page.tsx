@@ -4,6 +4,13 @@ import { prisma } from "@/lib/prisma";
 import { formatDate, formatPaise, formatPriceBand } from "@/lib/format";
 import { STATUS_LABEL, CATEGORY_LABEL, TRANSACTION_TYPE_LABEL, type ProjectStatus, type PropertyCategory, type TransactionType } from "@/lib/project-meta";
 import type { BuilderImportPayload, LocalityImportPayload, ProjectImportPayload, TransactionImportPayload } from "@/lib/ingestion/connectors/fileImport/types";
+import {
+  buildBuilderReviewCompleteness,
+  buildInfraReviewCompleteness,
+  buildLocalityReviewCompleteness,
+  buildProjectReviewCompleteness,
+  buildTransactionReviewCompleteness,
+} from "@/lib/ingestion/reviewFieldRegistry";
 import ReviewQueueList, { type ReviewRecord } from "@/app/admin/components/ReviewQueueList";
 import EmptyState from "@/app/components/ui/EmptyState";
 
@@ -91,6 +98,7 @@ export default async function DataSyncReviewPage() {
     const transactionPayload = isTransaction ? (record.payload as unknown as TransactionImportPayload) : null;
 
     const matchedInfraAsset = infraPayload && record.matchedExistingId ? matchedInfraById.get(record.matchedExistingId) : null;
+    const matchedProjectForCompleteness = projectPayload && record.matchedExistingId ? matchedProjectById.get(record.matchedExistingId) ?? null : null;
     const matchedProject = projectPayload && record.matchedExistingId ? matchedProjectById.get(record.matchedExistingId) : null;
     const matchedBuilder = builderPayload && record.matchedExistingId ? matchedBuilderById.get(record.matchedExistingId) : null;
     const matchedLocality = localityPayload && record.matchedExistingId ? matchedLocalityById.get(record.matchedExistingId) : null;
@@ -176,6 +184,31 @@ export default async function DataSyncReviewPage() {
             ? "Will be created as a new transaction record."
             : "Staged for review by source policy.";
 
+    // Phase 14C: full field-completeness breakdown, dispatched purely on
+    // entityType (the same branching this page already does above) -- never
+    // on sourceKey/source, so a new portal added to the ingestion pipeline
+    // tomorrow needs no change here.
+    const completeness = projectPayload
+      ? buildProjectReviewCompleteness(projectPayload, {
+          localityName: localityNameById.get(projectPayload.localityId),
+          builderName: projectPayload.builderId ? builderNameById.get(projectPayload.builderId) : undefined,
+          matched: matchedProjectForCompleteness
+            ? { name: matchedProjectForCompleteness.name, status: matchedProjectForCompleteness.status, reraNumber: matchedProjectForCompleteness.reraNumber }
+            : null,
+        })
+      : builderPayload
+        ? buildBuilderReviewCompleteness(builderPayload)
+        : localityPayload
+          ? buildLocalityReviewCompleteness(localityPayload)
+          : transactionPayload
+            ? buildTransactionReviewCompleteness(transactionPayload, {
+                localityName: localityNameById.get(transactionPayload.localityId),
+                projectName: transactionPayload.projectId ? transactionProjectNameById.get(transactionPayload.projectId) : undefined,
+              })
+            : infraPayload
+              ? buildInfraReviewCompleteness(infraPayload)
+              : null;
+
     return {
       id: record.id,
       createdAt: record.createdAt.toISOString(),
@@ -187,6 +220,7 @@ export default async function DataSyncReviewPage() {
       matchTitle,
       matchLines,
       noMatchNote,
+      completeness,
     };
   });
 
