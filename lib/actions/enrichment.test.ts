@@ -22,15 +22,22 @@ vi.mock("@/lib/enrichment/adapters/godrejPropertiesAdapter", () => ({
   GODREJ_SKY_SHORE_PROJECT_URL: "https://www.godrejproperties.com/mumbai/residential/godrej-skyshore",
 }));
 
+vi.mock("@/lib/enrichment/adapters/adaniRealtyAdapter", () => ({
+  adaniRealtyAdapter: { tier: "OFFICIAL_DEVELOPER", resolveDomain: vi.fn(), fetchProjectFacts: vi.fn() },
+  ADANI_LINKBAY_RESIDENCES_PROJECT_URL: "https://www.adanirealty.com/residential-projects/mumbai/linkbay-residences",
+}));
+
 import { prisma } from "@/lib/prisma";
 import { requireMutateSession } from "@/lib/auth/guard";
 import { godrejPropertiesAdapter } from "@/lib/enrichment/adapters/godrejPropertiesAdapter";
+import { adaniRealtyAdapter } from "@/lib/enrichment/adapters/adaniRealtyAdapter";
 import { enrichProjectAction } from "./enrichment";
 
 const stagingFindUniqueMock = vi.mocked(prisma.ingestStagingRecord.findUnique);
 const localityFindUniqueMock = vi.mocked(prisma.locality.findUnique);
 const builderFindUniqueMock = vi.mocked(prisma.builder.findUnique);
 const fetchProjectFactsMock = vi.mocked(godrejPropertiesAdapter.fetchProjectFacts);
+const adaniFetchProjectFactsMock = vi.mocked(adaniRealtyAdapter.fetchProjectFacts);
 
 const GODREJ_PAYLOAD = {
   name: "Godrej Sky Shore",
@@ -152,5 +159,27 @@ describe("enrichProjectAction (Phase 29 Part J/K — no writes, no approval, pro
     await enrichProjectAction("stage-1");
     expect(stagingFindUniqueMock).toHaveBeenCalledTimes(1);
     expect(stagingFindUniqueMock).toHaveBeenCalledWith({ where: { id: "stage-1" } });
+  });
+
+  it("10. Phase 31 generalization: a second developer (Adani Realty) routes to its own adapter, not Godrej's", async () => {
+    const ADANI_PAYLOAD = { ...GODREJ_PAYLOAD, name: "Adani Linkbay Residences", developerGroup: "Adani Realty & RC Group" };
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord({ payload: ADANI_PAYLOAD }));
+    adaniFetchProjectFactsMock.mockResolvedValue({ reraCertificateUrl: { value: "https://example.com/rera.pdf", confidence: "High" } });
+
+    const result = await enrichProjectAction("stage-1");
+    expect(result.status).toBe("SUCCESS");
+    expect(adaniFetchProjectFactsMock).toHaveBeenCalledWith("https://www.adanirealty.com/residential-projects/mumbai/linkbay-residences");
+    expect(fetchProjectFactsMock).not.toHaveBeenCalled(); // Godrej's adapter must never run for a different developer
+    const field = result.fields!.find((f) => f.key === "reraCertificateUrl")!;
+    expect(field.sourceUrl).toBe("https://www.adanirealty.com/residential-projects/mumbai/linkbay-residences");
+  });
+
+  it("11. Adani adapter failure -> SOURCE_UNAVAILABLE, same contract as Godrej's failure path", async () => {
+    stagingFindUniqueMock.mockResolvedValue(
+      stagingRecord({ payload: { ...GODREJ_PAYLOAD, developerGroup: "Adani Realty & RC Group" } })
+    );
+    adaniFetchProjectFactsMock.mockRejectedValue(new Error("fetch failed"));
+    const result = await enrichProjectAction("stage-1");
+    expect(result.status).toBe("SOURCE_UNAVAILABLE");
   });
 });

@@ -5,7 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { classifyProjectEnrichment } from "@/lib/enrichment/classifyEnrichment";
 import { resolveDeveloperDomain } from "@/lib/enrichment/developerDomainRegistry";
 import { godrejPropertiesAdapter, GODREJ_SKY_SHORE_PROJECT_URL } from "@/lib/enrichment/adapters/godrejPropertiesAdapter";
-import type { EnrichmentField } from "@/lib/enrichment/types";
+import { adaniRealtyAdapter, ADANI_LINKBAY_RESIDENCES_PROJECT_URL } from "@/lib/enrichment/adapters/adaniRealtyAdapter";
+import type { EnrichmentField, OfficialSourceAdapter } from "@/lib/enrichment/types";
 import type { ProjectImportPayload } from "@/lib/ingestion/connectors/fileImport/types";
 
 export type EnrichProjectStatus = "SUCCESS" | "NO_SOURCE" | "SOURCE_UNAVAILABLE" | "NO_NEW_INFO" | "ERROR";
@@ -17,16 +18,19 @@ export interface EnrichProjectResult {
 }
 
 /**
- * The one curated developer-domain -> project-page mapping this MVP knows
- * (Phase 29 Part G). Resolving a developer's official DOMAIN (via the
- * curated registry) and knowing the specific PROJECT PAGE on that domain are
- * two different problems -- this MVP solves the second one, for exactly one
- * project, by hand, rather than guessing a URL pattern. Adding a second
+ * The curated developer-domain -> {project page, adapter} mapping this MVP
+ * knows (Phase 29 Part G, extended to a second developer in Phase 31).
+ * Resolving a developer's official DOMAIN (via the curated registry) and
+ * knowing the specific PROJECT PAGE + which adapter understands that site's
+ * markup are separate problems -- this MVP solves both by hand, for exactly
+ * the known staged projects, rather than guessing a URL pattern or assuming
+ * one adapter's shape works for every developer. Adding a third
  * project/developer means adding one verified row here, the same discipline
  * developerDomainRegistry.ts already uses for domains.
  */
-const CURATED_PROJECT_PAGES: Record<string, string> = {
-  "https://www.godrejproperties.com": GODREJ_SKY_SHORE_PROJECT_URL,
+const CURATED_SOURCES: Record<string, { projectUrl: string; adapter: OfficialSourceAdapter }> = {
+  "https://www.godrejproperties.com": { projectUrl: GODREJ_SKY_SHORE_PROJECT_URL, adapter: godrejPropertiesAdapter },
+  "https://www.adanirealty.com": { projectUrl: ADANI_LINKBAY_RESIDENCES_PROJECT_URL, adapter: adaniRealtyAdapter },
 };
 
 /**
@@ -55,8 +59,8 @@ export async function enrichProjectAction(stagingRecordId: string): Promise<Enri
   const payload = record.payload as unknown as ProjectImportPayload;
 
   const domain = resolveDeveloperDomain(payload.developerGroup);
-  const projectUrl = domain ? CURATED_PROJECT_PAGES[domain] : undefined;
-  if (!domain || !projectUrl) {
+  const source = domain ? CURATED_SOURCES[domain] : undefined;
+  if (!domain || !source) {
     return { status: "NO_SOURCE" };
   }
 
@@ -67,7 +71,7 @@ export async function enrichProjectAction(stagingRecordId: string): Promise<Enri
 
   let facts;
   try {
-    facts = await godrejPropertiesAdapter.fetchProjectFacts(projectUrl);
+    facts = await source.adapter.fetchProjectFacts(source.projectUrl);
   } catch {
     return { status: "SOURCE_UNAVAILABLE" };
   }
@@ -76,7 +80,7 @@ export async function enrichProjectAction(stagingRecordId: string): Promise<Enri
     payload,
     { localityName: locality?.name, builderName: builder?.name },
     facts,
-    { url: projectUrl, tier: godrejPropertiesAdapter.tier }
+    { url: source.projectUrl, tier: source.adapter.tier }
   );
 
   const hasNewInfo = fields.some((f) => f.classification === "GREEN_NEW" || f.classification === "YELLOW" || f.classification === "CONFLICT");

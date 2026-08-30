@@ -16,6 +16,13 @@ const CURATED_DEVELOPER_DOMAINS: Record<string, string> = {
   "godrej properties ltd.": "https://www.godrejproperties.com",
   "godrej properties limited": "https://www.godrejproperties.com",
   "godrej properties": "https://www.godrejproperties.com",
+  // Phase 31 -- second-developer generalization proof. The staged value
+  // carries a joint-venture partner suffix ("& RC Group") that the developer's
+  // own official site never mentions (see adaniRealtyAdapter.ts); both the
+  // exact staged string and the bare company name are curated here since
+  // Adani Realty is clearly the primary/official party for this project.
+  "adani realty & rc group": "https://www.adanirealty.com",
+  "adani realty": "https://www.adanirealty.com",
 };
 
 function normalize(name: string): string {
