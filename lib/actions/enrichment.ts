@@ -25,6 +25,7 @@ import { gurukrupaRealconAdapter, GURUKRUPA_EKAM_PROJECT_URL } from "@/lib/enric
 import { puravankaraAdapter, PURVA_ESTRELLA_PROJECT_URL } from "@/lib/enrichment/adapters/puravankaraAdapter";
 import { lodhaAdapter, LODHA_CULLINAN_PROJECT_URL } from "@/lib/enrichment/adapters/lodhaAdapter";
 import { resolveProjectSource, type DeveloperSource } from "@/lib/enrichment/projectSourceResolution";
+import { buildEnrichmentSummary, withFieldTouched, type ProjectEnrichmentStatus } from "@/lib/enrichment/enrichmentSummary";
 import type { EnrichmentField } from "@/lib/enrichment/types";
 import { buildProjectReviewCompleteness } from "@/lib/ingestion/reviewFieldRegistry";
 import type { ProjectImportPayload } from "@/lib/ingestion/connectors/fileImport/types";
@@ -109,14 +110,22 @@ const CURATED_SOURCES: Record<string, DeveloperSource> = {
  * against its official developer source (Phase 29 Part G/H/J).
  *
  * Explicitly does NOT:
- *  - write anything to Project, IngestStagingRecord, or any other table
+ *  - write anything to Project, Builder, or Locality
  *  - approve, reject, or otherwise change the staging record's status
- *  - cache or persist its result anywhere -- every call re-fetches live
+ *  - cache or persist the full proposal anywhere -- every call re-fetches live
+ *
+ * Phase 46 Part B: DOES persist one small thing -- a compact
+ * `enrichmentSummary` (status + outstanding field-key/classification pairs,
+ * never the full proposal, see lib/enrichment/enrichmentSummary.ts) onto this
+ * SAME staging record's payload, so the Review Queue can show "12 proposed,
+ * 2 conflicts" without re-running this fetch for every row. See
+ * `enrichProjectAction` below for where that persistence happens; this
+ * function's own classification/resolution logic is unchanged from Phase 29.
  *
  * One click = one attempt. The caller (ReviewQueueList.tsx) must only invoke
  * this from an explicit button click, never from a page-load effect.
  */
-export async function enrichProjectAction(stagingRecordId: string): Promise<EnrichProjectResult> {
+async function computeEnrichmentResult(stagingRecordId: string): Promise<EnrichProjectResult> {
   await requireMutateSession();
 
   const record = await prisma.ingestStagingRecord.findUnique({ where: { id: stagingRecordId } });
@@ -188,6 +197,57 @@ export async function enrichProjectAction(stagingRecordId: string): Promise<Enri
   }
 
   return { status: "SUCCESS", fields, builderMatch, localityMatch };
+}
+
+/** Maps enrichProjectAction's own result vocabulary onto the persisted summary's status vocabulary (Phase 46 Part D) -- kept as a 1:1 mapping, never collapsing two distinct meanings into one. */
+function toEnrichmentSummaryStatus(status: EnrichProjectStatus): ProjectEnrichmentStatus {
+  switch (status) {
+    case "SUCCESS":
+      return "READY";
+    case "NO_NEW_INFO":
+    case "NO_SOURCE":
+    case "SOURCE_UNAVAILABLE":
+    case "ERROR":
+      return status;
+  }
+}
+
+/**
+ * Phase 46 Part B -- persists a compact enrichment-status summary onto this
+ * staging record's payload after every run, regardless of outcome (Part D:
+ * NOT_RUN/READY/NO_NEW_INFO/NO_SOURCE/SOURCE_UNAVAILABLE/ERROR must all be
+ * distinguishable at a glance). Best-effort: mirrors logAudit's own
+ * swallow-errors convention (lib/audit.ts) -- a summary-persistence failure
+ * must never fail the enrichment result itself, since the result the founder
+ * sees in the dialog is already complete and correct without it.
+ */
+async function persistEnrichmentSummary(stagingRecordId: string, result: EnrichProjectResult): Promise<void> {
+  try {
+    const record = await prisma.ingestStagingRecord.findUnique({ where: { id: stagingRecordId } });
+    if (!record || record.entityType !== "Project") return;
+    const payload = record.payload as unknown as Record<string, unknown>;
+    const summary = buildEnrichmentSummary(toEnrichmentSummaryStatus(result.status), result.fields);
+    await prisma.ingestStagingRecord.update({
+      where: { id: stagingRecordId },
+      data: { payload: { ...payload, enrichmentSummary: summary } as unknown as Prisma.InputJsonValue },
+    });
+  } catch (error) {
+    console.error("[enrichmentSummary] failed to persist for", stagingRecordId, error);
+  }
+}
+
+/**
+ * Public entry point -- runs computeEnrichmentResult (Phase 29's unchanged
+ * classification/resolution pipeline) and then persists its compact summary
+ * (Phase 46 Part B) before returning the exact same result the founder has
+ * always seen. Splitting the wrapper from the computation keeps every
+ * existing early-return branch inside computeEnrichmentResult untouched --
+ * this function is the only new code path.
+ */
+export async function enrichProjectAction(stagingRecordId: string): Promise<EnrichProjectResult> {
+  const result = await computeEnrichmentResult(stagingRecordId);
+  await persistEnrichmentSummary(stagingRecordId, result);
+  return result;
 }
 
 /**
@@ -323,10 +383,15 @@ export async function acceptEnrichmentFieldAction(
     return { status: "INVALID_VALUE", error: applied.error };
   }
 
+  // Phase 46 Part I -- accepting this field resolves it, so it should stop
+  // showing up in the Review Queue's "N proposed" badge until the next
+  // explicit Enrich run. Merged into the SAME write, not a second update.
+  const payloadToWrite = withFieldTouched(applied.payload, fieldKey);
+
   try {
     await prisma.ingestStagingRecord.update({
       where: { id: stagingRecordId },
-      data: { payload: applied.payload as unknown as Prisma.InputJsonValue },
+      data: { payload: payloadToWrite as unknown as Prisma.InputJsonValue },
     });
   } catch (error) {
     return { status: "ERROR", error: friendlyPrismaError(error) };
@@ -503,11 +568,14 @@ export async function revertEnrichmentFieldAction(
   // place for exactly that case, which is the one Part "UNDO BEHAVIOR"
   // explicitly calls out as never acceptable.
   const restoredPayload = applyStorableChanges(payload, restoreChanges);
+  // Phase 46 Part I/J -- undoing also counts as "touched"; the badge should
+  // stop flagging this field until the founder explicitly re-runs Enrich.
+  const payloadToWrite = withFieldTouched(restoredPayload, fieldKey);
 
   try {
     await prisma.ingestStagingRecord.update({
       where: { id: stagingRecordId },
-      data: { payload: restoredPayload as unknown as Prisma.InputJsonValue },
+      data: { payload: payloadToWrite as unknown as Prisma.InputJsonValue },
     });
   } catch (error) {
     return { status: "ERROR", error: friendlyPrismaError(error) };

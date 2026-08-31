@@ -12,6 +12,7 @@ import {
   buildTransactionReviewCompleteness,
 } from "@/lib/ingestion/reviewFieldRegistry";
 import { computeApprovalReadiness } from "@/lib/ingestion/projectApprovalReadiness";
+import { deriveEnrichmentBadge } from "@/lib/enrichment/enrichmentSummary";
 import ReviewQueueList, { type ReviewRecord } from "@/app/admin/components/ReviewQueueList";
 import EmptyState from "@/app/components/ui/EmptyState";
 
@@ -215,6 +216,11 @@ export default async function DataSyncReviewPage() {
     // computed for Builder/Locality/Transaction/InfraAsset records.
     const readiness = isProject && completeness ? computeApprovalReadiness(completeness) : null;
 
+    // Phase 46 Part E/N: reads the LAST persisted enrichment run's summary
+    // straight off this same payload -- pure, synchronous, no live fetch.
+    // Never computed for a non-Project record.
+    const enrichmentBadge = isProject ? deriveEnrichmentBadge(record.payload) : null;
+
     return {
       id: record.id,
       createdAt: record.createdAt.toISOString(),
@@ -229,6 +235,7 @@ export default async function DataSyncReviewPage() {
       completeness,
       isProject,
       readiness,
+      enrichmentBadge,
     };
   });
 

@@ -181,21 +181,26 @@ describe("enrichProjectAction (Phase 29 Part J/K — no writes, no approval, pro
     expect(result.status).toBe("NO_NEW_INFO");
   });
 
-  it("8. never calls any database write method -- the mocked prisma client exposes only read methods, so a write attempt would throw", async () => {
+  it("8. never calls Project/Builder/Locality write methods (Phase 46: it DOES now write its own compact enrichmentSummary onto the SAME staging record -- see the dedicated enrichmentSummary describe block below)", async () => {
     stagingFindUniqueMock.mockResolvedValue(stagingRecord());
     fetchProjectFactsMock.mockResolvedValue({ name: { value: "Godrej Skyshore", confidence: "High" } });
     await expect(enrichProjectAction("stage-1")).resolves.toBeTruthy();
-    // No .update/.create mock exists on any mocked model above -- if the action
-    // ever attempted one, prisma.<model>.update would be `undefined` and calling
-    // it would throw a TypeError, which the test would surface as a failure.
+    // No .update/.create mock exists on prisma.project/builder/locality above --
+    // if the action ever attempted one, it would throw a TypeError, which the
+    // test would surface as a failure.
   });
 
-  it("9. never touches the staging record's own status (no approve/reject call) -- action reads it read-only via findUnique only", async () => {
+  it("9. never touches the staging record's own status (no approve/reject call), and the one write it does make (Phase 46's summary) never sets status either", async () => {
     stagingFindUniqueMock.mockResolvedValue(stagingRecord());
     fetchProjectFactsMock.mockResolvedValue({});
     await enrichProjectAction("stage-1");
-    expect(stagingFindUniqueMock).toHaveBeenCalledTimes(1);
+    // Phase 46: one findUnique from the enrichment pass itself, one more from
+    // persistEnrichmentSummary re-reading the record before merging its write.
+    expect(stagingFindUniqueMock).toHaveBeenCalledTimes(2);
     expect(stagingFindUniqueMock).toHaveBeenCalledWith({ where: { id: "stage-1" } });
+    expect(stagingUpdateMock).toHaveBeenCalledTimes(1);
+    // The update's `data` object only ever contains `payload` -- never a `status` key.
+    expect(Object.keys(stagingUpdateMock.mock.calls[0][0].data)).toEqual(["payload"]);
   });
 
   it("10. Phase 31 generalization: a second developer (Adani Realty) routes to its own adapter, not Godrej's", async () => {
@@ -279,6 +284,87 @@ describe("enrichProjectAction (Phase 29 Part J/K — no writes, no approval, pro
     const result = await enrichProjectAction("stage-1");
     expect(result.status).toBe("NO_SOURCE");
     expect(adaniFetchProjectFactsMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("enrichProjectAction persists a compact enrichmentSummary (Phase 46 Part B/D/L)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localityFindUniqueMock.mockResolvedValue({ name: "Andheri West" } as never);
+    builderFindUniqueMock.mockResolvedValue(null as never);
+    stagingUpdateMock.mockResolvedValue({} as never);
+    auditLogFindManyMock.mockResolvedValue([] as never);
+    auditLogCreateMock.mockResolvedValue({} as never);
+    builderFindManyMock.mockResolvedValue([] as never);
+    localityFindManyMock.mockResolvedValue([] as never);
+    cityFindUniqueMock.mockResolvedValue({ id: "city-mumbai" } as never);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404, text: async () => "" }));
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("2. successful enrichment (SUCCESS) persists status READY with the real outstanding GREEN_NEW/YELLOW/CONFLICT field keys", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    fetchProjectFactsMock.mockResolvedValue({
+      name: { value: "Godrej Skyshore", confidence: "High" }, // GREEN_NEW/CONFLICT depending on current value
+      priceMax: { value: "₹11.89 Cr", confidence: "High" }, // GREEN_NEW
+    });
+    await enrichProjectAction("stage-1");
+    const summary = updatedPayload(0).enrichmentSummary as { status: string; outstanding: Record<string, string> };
+    expect(summary.status).toBe("READY");
+    expect(Object.keys(summary.outstanding).length).toBeGreaterThan(0);
+  });
+
+  it("3. NO_NEW_INFO persists status NO_NEW_INFO with empty outstanding", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    fetchProjectFactsMock.mockResolvedValue({ developerGroup: { value: "Godrej Properties Ltd.", confidence: "High" } });
+    await enrichProjectAction("stage-1");
+    const summary = updatedPayload(0).enrichmentSummary as { status: string; outstanding: Record<string, string> };
+    expect(summary.status).toBe("NO_NEW_INFO");
+    expect(summary.outstanding).toEqual({});
+  });
+
+  it("4. SOURCE_UNAVAILABLE persists status SOURCE_UNAVAILABLE, distinct from NO_SOURCE/ERROR", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    fetchProjectFactsMock.mockRejectedValue(new Error("fetch failed"));
+    await enrichProjectAction("stage-1");
+    const summary = updatedPayload(0).enrichmentSummary as { status: string };
+    expect(summary.status).toBe("SOURCE_UNAVAILABLE");
+  });
+
+  it("no curated source persists status NO_SOURCE", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord({ payload: { ...GODREJ_PAYLOAD, developerGroup: "Some Random Builder Nobody Verified" } }));
+    await enrichProjectAction("stage-1");
+    const summary = updatedPayload(0).enrichmentSummary as { status: string };
+    expect(summary.status).toBe("NO_SOURCE");
+  });
+
+  it("5. ERROR (record not found) never reaches the summary-persistence step at all -- there's no Project staging record to attach a summary to", async () => {
+    stagingFindUniqueMock.mockResolvedValue(null);
+    await enrichProjectAction("missing-id");
+    expect(stagingUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("6. conflicts present -- a real CONFLICT field is reflected in outstanding with the CONFLICT tag, and the badge derivation would report conflictCount > 0", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    fetchProjectFactsMock.mockResolvedValue({ name: { value: "Some Completely Different Name", confidence: "High" } });
+    await enrichProjectAction("stage-1");
+    const summary = updatedPayload(0).enrichmentSummary as { outstanding: Record<string, string> };
+    expect(summary.outstanding.name).toBe("CONFLICT");
+  });
+
+  it("a summary-persistence failure never fails the enrichment result itself (best-effort, mirrors logAudit's own swallow-errors convention)", async () => {
+    stagingFindUniqueMock.mockResolvedValueOnce(stagingRecord()).mockRejectedValueOnce(new Error("db hiccup"));
+    fetchProjectFactsMock.mockResolvedValue({});
+    const result = await enrichProjectAction("stage-1");
+    expect(result.status).toBeTruthy(); // still returns a real result despite the second findUnique rejecting
+  });
+
+  it("12. never touches completeness/readiness -- the summary write only adds the `enrichmentSummary` key, every existing field stays byte-identical", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    fetchProjectFactsMock.mockResolvedValue({});
+    await enrichProjectAction("stage-1");
+    const { enrichmentSummary: _omit, ...rest } = updatedPayload(0);
+    expect(rest).toEqual(GODREJ_PAYLOAD);
   });
 });
 
@@ -530,6 +616,53 @@ describe("acceptEnrichmentFieldAction (Phase 32 — persists ONE accepted field 
     expect(updatedPayload().name).toBe("Godrej Skyshore");
   });
 
+  it("Phase 46 Part I/L 7/8 -- accepting a field removes it from enrichmentSummary.outstanding, leaving sibling fields untouched", async () => {
+    stagingFindUniqueMock.mockResolvedValue(
+      stagingRecord({
+        payload: {
+          ...GODREJ_PAYLOAD,
+          enrichmentSummary: { status: "READY", lastRunAt: "2026-01-01T00:00:00.000Z", outstanding: { name: "CONFLICT", tagline: "GREEN_NEW" } },
+        },
+      })
+    );
+    await acceptEnrichmentFieldAction("stage-1", "name", "Godrej Skyshore");
+    const summary = updatedPayload().enrichmentSummary as { outstanding: Record<string, string> };
+    expect(summary.outstanding).toEqual({ tagline: "GREEN_NEW" });
+  });
+
+  it("Phase 46 Part L 7 -- accepting every outstanding field leaves an empty outstanding map (all proposals accepted)", async () => {
+    stagingFindUniqueMock.mockResolvedValueOnce(
+      stagingRecord({
+        payload: { ...GODREJ_PAYLOAD, enrichmentSummary: { status: "READY", lastRunAt: "2026-01-01T00:00:00.000Z", outstanding: { name: "CONFLICT" } } },
+      })
+    );
+    await acceptEnrichmentFieldAction("stage-1", "name", "Godrej Skyshore");
+    const summary = updatedPayload(0).enrichmentSummary as { outstanding: Record<string, string> };
+    expect(summary.outstanding).toEqual({});
+  });
+
+  it("Phase 46 Part L 8 -- an Edit + Accept (a locally-edited proposedValue) still goes through the same acceptEnrichmentFieldAction path and still touches the summary", async () => {
+    stagingFindUniqueMock.mockResolvedValue(
+      stagingRecord({
+        payload: { ...GODREJ_PAYLOAD, enrichmentSummary: { status: "READY", lastRunAt: "2026-01-01T00:00:00.000Z", outstanding: { name: "CONFLICT" } } },
+      })
+    );
+    // The founder edited the proposed value before accepting -- still just a plain string through the same action.
+    const result = await acceptEnrichmentFieldAction("stage-1", "name", "Godrej Skyshore (Founder Edited)");
+    expect(result.status).toBe("SUCCESS");
+    expect(updatedPayload().name).toBe("Godrej Skyshore (Founder Edited)");
+    expect((updatedPayload().enrichmentSummary as { outstanding: Record<string, string> }).outstanding).toEqual({});
+  });
+
+  it("Phase 46 Part L 10 -- re-accepting an already-accepted field (no longer in outstanding) is a harmless no-op for the summary", async () => {
+    stagingFindUniqueMock.mockResolvedValue(
+      stagingRecord({ payload: { ...GODREJ_PAYLOAD, enrichmentSummary: { status: "READY", lastRunAt: "2026-01-01T00:00:00.000Z", outstanding: {} } } })
+    );
+    const result = await acceptEnrichmentFieldAction("stage-1", "name", "Godrej Skyshore Re-Accepted");
+    expect(result.status).toBe("SUCCESS");
+    expect((updatedPayload().enrichmentSummary as { outstanding: Record<string, string> }).outstanding).toEqual({});
+  });
+
   it("6. a field never explicitly accepted is not present in the update call -- only the one accepted key changes", async () => {
     stagingFindUniqueMock.mockResolvedValue(stagingRecord());
     await acceptEnrichmentFieldAction("stage-1", "reraStatus", "Registered");
@@ -774,6 +907,25 @@ describe("revertEnrichmentFieldAction (Phase 37 — exact restoration, never a b
     expect(result.status).toBe("SUCCESS");
     const restored = stagingUpdateMock.mock.calls[0][0].data.payload as Record<string, unknown>;
     expect(restored.landAreaAcres).toBeUndefined(); // the field genuinely had no value before this acceptance
+  });
+
+  it("Phase 46 Part I/L 9 -- undoing a field removes it from enrichmentSummary.outstanding too, leaving siblings untouched", async () => {
+    stagingFindUniqueMock.mockResolvedValue(
+      stagingRecord({
+        payload: {
+          ...GODREJ_PAYLOAD,
+          landAreaAcres: 2.5,
+          enrichmentSummary: { status: "READY", lastRunAt: "2026-01-01T00:00:00.000Z", outstanding: { landAreaAcres: "GREEN_NEW", tagline: "YELLOW" } },
+        },
+      })
+    );
+    auditLogFindManyMock.mockResolvedValue([auditRow()] as never);
+
+    const result = await revertEnrichmentFieldAction("stage-1", "landAreaAcres", "evt-1");
+    expect(result.status).toBe("SUCCESS");
+    const restored = stagingUpdateMock.mock.calls[0][0].data.payload as Record<string, unknown>;
+    const summary = restored.enrichmentSummary as { outstanding: Record<string, string> };
+    expect(summary.outstanding).toEqual({ tagline: "YELLOW" });
   });
 
   it("11. restores an exact array value", async () => {

@@ -21,6 +21,7 @@ import {
 } from "@/lib/actions/enrichment";
 import type { EnrichmentField } from "@/lib/enrichment/types";
 import type { EnrichmentHistoryEntry } from "@/lib/enrichment/enrichmentHistory";
+import type { EnrichmentBadgeInfo } from "@/lib/enrichment/enrichmentSummary";
 import ConfirmButton from "./ConfirmButton";
 import ReviewDataDetailsDialog from "./ReviewDataDetailsDialog";
 import EnrichmentDialog from "./EnrichmentDialog";
@@ -42,6 +43,36 @@ export interface ReviewRecord {
   isProject: boolean;
   /** Phase 34 Part F — Project-only approval-readiness verdict, derived from `completeness`; null for every non-Project record. */
   readiness: ApprovalReadinessResult | null;
+  /** Phase 46 Part E — the last persisted enrichment run's at-a-glance status, read straight off the staging payload (no live fetch). Null for every non-Project record. */
+  enrichmentBadge: EnrichmentBadgeInfo | null;
+}
+
+type EnrichmentFilter = "ALL" | "PENDING" | "CONFLICTS" | "NOT_ENRICHED";
+
+function matchesEnrichmentFilter(record: ReviewRecord, filter: EnrichmentFilter): boolean {
+  if (filter === "ALL") return true;
+  const badge = record.enrichmentBadge;
+  if (!badge) return false;
+  if (filter === "PENDING") return badge.status === "READY" && badge.proposedCount > 0;
+  if (filter === "CONFLICTS") return badge.conflictCount > 0;
+  return badge.status === "NOT_RUN"; // NOT_ENRICHED
+}
+
+/** Phase 46 Part E -- the compact per-row summary. Reuses this codebase's existing plain colored-text convention (see the 🟢/🔴/🟠 completeness line just below it) rather than introducing a new visual pattern. */
+function EnrichmentBadgeLine({ badge }: { badge: EnrichmentBadgeInfo }) {
+  if (badge.status === "NOT_RUN") return <span className="text-[11px] text-muted">— Not run</span>;
+  if (badge.status === "NO_SOURCE") return <span className="text-[11px] text-muted">— No official source found</span>;
+  if (badge.status === "SOURCE_UNAVAILABLE") return <span className="text-[11px] text-warning">⚠ Source unavailable</span>;
+  if (badge.status === "ERROR") return <span className="text-[11px] text-negative">⚠ Enrichment error</span>;
+  if (badge.status === "NO_NEW_INFO") return <span className="text-[11px] text-muted">✓ No new information</span>;
+  // READY
+  if (badge.proposedCount === 0) return <span className="text-[11px] text-positive">✓ Reviewed</span>;
+  return (
+    <span className="flex flex-wrap items-center gap-2 text-[11px]">
+      <span className="text-accent">● {badge.proposedCount} proposed</span>
+      {badge.conflictCount > 0 ? <span className="text-negative">● {badge.conflictCount} conflict{badge.conflictCount === 1 ? "" : "s"}</span> : null}
+    </span>
+  );
 }
 
 interface EnrichmentViewState {
@@ -62,12 +93,20 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
   const enrichmentRecord = records.find((r) => r.id === enrichmentRecordId) ?? null;
   const enrichmentState = enrichmentRecordId ? enrichmentByRecordId[enrichmentRecordId] : null;
 
+  // Phase 46 Part F -- a very small filter over the already-loaded records,
+  // client-side only (no new fetch/query, no data-grid infrastructure).
+  const [enrichmentFilter, setEnrichmentFilter] = useState<EnrichmentFilter>("ALL");
+  const visibleRecords = records.filter((r) => matchesEnrichmentFilter(r, enrichmentFilter));
+
   function runEnrichment(recordId: string) {
     setEnrichmentRecordId(recordId);
     setEnrichmentByRecordId((prev) => ({ ...prev, [recordId]: { loading: true, result: null } }));
     startTransition(async () => {
       const result = await enrichProjectAction(recordId);
       setEnrichmentByRecordId((prev) => ({ ...prev, [recordId]: { loading: false, result } }));
+      // Phase 46 Part E/J -- the run just persisted a fresh enrichmentSummary
+      // onto this record; refresh so the row's badge reflects it immediately.
+      router.refresh();
     });
   }
 
@@ -121,7 +160,9 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
   }
 
   function toggleAll() {
-    setSelected((prev) => (prev.size === records.length ? new Set() : new Set(records.map((r) => r.id))));
+    // Scoped to the currently VISIBLE (filtered) records -- selecting "all"
+    // while a filter narrows the list must never silently select a hidden row.
+    setSelected((prev) => (prev.size === visibleRecords.length ? new Set() : new Set(visibleRecords.map((r) => r.id))));
   }
 
   function runBulkApprove() {
@@ -156,7 +197,7 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-2 text-xs text-muted">
-          <input type="checkbox" checked={selected.size === records.length && records.length > 0} onChange={toggleAll} className="h-3.5 w-3.5 accent-accent" />
+          <input type="checkbox" checked={selected.size === visibleRecords.length && visibleRecords.length > 0} onChange={toggleAll} className="h-3.5 w-3.5 accent-accent" />
           Select all
         </label>
         {selected.size > 0 ? (
@@ -183,7 +224,38 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
         ) : null}
       </div>
 
-      {records.map((record) => (
+      <div className="flex flex-wrap items-center gap-1.5">
+        {(
+          [
+            ["ALL", "All"],
+            ["PENDING", "Enrichment pending"],
+            ["CONFLICTS", "Conflicts"],
+            ["NOT_ENRICHED", "Not enriched"],
+          ] as [EnrichmentFilter, string][]
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setEnrichmentFilter(value)}
+            className={`rounded-sm border px-2 py-1 text-[11px] font-mono uppercase tracking-wide ${
+              enrichmentFilter === value ? "border-accent bg-accent/10 text-accent" : "border-border text-muted hover:border-accent hover:text-accent"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+        {enrichmentFilter !== "ALL" ? (
+          <span className="text-[11px] text-muted">
+            {visibleRecords.length} of {records.length}
+          </span>
+        ) : null}
+      </div>
+
+      {visibleRecords.length === 0 ? (
+        <p className="rounded-sm border border-border p-4 text-xs text-muted">No records match this filter.</p>
+      ) : null}
+
+      {visibleRecords.map((record) => (
         <div key={record.id} className="rounded-sm border border-border p-4">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3">
@@ -204,6 +276,11 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
                       {line}
                     </p>
                   ))}
+                  {record.enrichmentBadge ? (
+                    <div className="mt-1">
+                      <EnrichmentBadgeLine badge={record.enrichmentBadge} />
+                    </div>
+                  ) : null}
                 </div>
 
                 {record.matchTitle ? (
