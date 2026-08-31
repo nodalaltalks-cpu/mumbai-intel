@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { PRIMARY_CITY_SLUG } from "@/lib/queries";
 import { distanceMeters } from "@/lib/geo";
 import { AnalyticsService } from "@/lib/analytics";
+import { DISCOVERY_ENTITY_TYPE } from "@/lib/ingestion/discovery/types";
 
 /**
  * Every admin read goes through this. A transient DB/network failure must
@@ -1278,6 +1279,24 @@ export async function getPendingStagingRecords() {
       where: { status: "PENDING" },
       orderBy: { createdAt: "asc" },
       include: { batch: { select: { sourceKey: true } } },
+    })
+  );
+}
+
+/**
+ * Phase 39 — every ProjectDiscoveryCandidate staging row, newest batch
+ * first. Deliberately its own query (not a filter added to
+ * getPendingStagingRecords, which is hardcoded to `status: "PENDING"` and
+ * would never see a discovery candidate anyway — see
+ * lib/ingestion/discovery/types.ts's doc comment on why that's true by
+ * construction, not by convention).
+ */
+export async function getDiscoveryCandidates(batchId?: string) {
+  return safeQuery("getDiscoveryCandidates", [], () =>
+    prisma.ingestStagingRecord.findMany({
+      where: { entityType: DISCOVERY_ENTITY_TYPE, ...(batchId ? { batchId } : {}) },
+      orderBy: { createdAt: "asc" },
+      include: { batch: { select: { sourceKey: true, startedAt: true } } },
     })
   );
 }
