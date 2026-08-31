@@ -166,3 +166,154 @@ describe("runBulkEnrichment (Phase 44 — multi-project batch orchestration)", (
     expect(enrichMock).not.toHaveBeenCalled();
   });
 });
+
+function projectRecordFor(id: string, developerGroup = "Some Developer") {
+  return { id, entityType: "Project", payload: { name: id, developerGroup } };
+}
+
+describe("runBulkEnrichment concurrency (Phase 45 Part B/C/L)", () => {
+  it("1. concurrency limit = 2 -- never runs more than 2 enrichments in flight at once, and does run more than 1 (genuinely concurrent, not silently serialized)", async () => {
+    stagingFindUniqueMock.mockImplementation((async ({ where }: { where: { id: string } }) => projectRecordFor(where.id)) as never);
+    let inFlight = 0;
+    let maxInFlight = 0;
+    enrichMock.mockImplementation(async () => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((r) => setTimeout(r, 15));
+      inFlight--;
+      return { status: "SUCCESS", fields: [] };
+    });
+
+    const targets = Array.from({ length: 5 }, (_, i) => ({ stagingRecordId: `stage-${i}` }));
+    const result = await runBulkEnrichment(targets, { concurrency: 2 });
+
+    expect(result.results).toHaveLength(5);
+    expect(maxInFlight).toBeLessThanOrEqual(2);
+    expect(maxInFlight).toBeGreaterThan(1);
+  });
+
+  it("2. concurrency limit = 3 -- never runs more than 3 enrichments in flight at once", async () => {
+    stagingFindUniqueMock.mockImplementation((async ({ where }: { where: { id: string } }) => projectRecordFor(where.id)) as never);
+    let inFlight = 0;
+    let maxInFlight = 0;
+    enrichMock.mockImplementation(async () => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((r) => setTimeout(r, 15));
+      inFlight--;
+      return { status: "SUCCESS", fields: [] };
+    });
+
+    const targets = Array.from({ length: 7 }, (_, i) => ({ stagingRecordId: `stage-${i}` }));
+    const result = await runBulkEnrichment(targets, { concurrency: 3 });
+
+    expect(result.results).toHaveLength(7);
+    expect(maxInFlight).toBeLessThanOrEqual(3);
+    expect(maxInFlight).toBeGreaterThan(2);
+  });
+
+  it("rejects a concurrency above the Phase 45 cap of 3, and never starts processing", async () => {
+    await expect(runBulkEnrichment([{ stagingRecordId: "stage-1" }], { concurrency: 4 })).rejects.toThrow(/between 1 and 3/);
+    expect(enrichMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects concurrency 0 the same way", async () => {
+    await expect(runBulkEnrichment([{ stagingRecordId: "stage-1" }], { concurrency: 0 })).rejects.toThrow(/between 1 and 3/);
+  });
+
+  it("3/4. mixed success/failure under concurrency -- one target's thrown error never affects sibling results (failure isolation holds under a concurrent pool, not just sequentially)", async () => {
+    stagingFindUniqueMock.mockImplementation((async ({ where }: { where: { id: string } }) => projectRecordFor(where.id)) as never);
+    enrichMock.mockImplementation((async (id: string) => {
+      if (id === "stage-bad") throw new Error("network exploded");
+      return { status: "SUCCESS", fields: [enrichmentField("name", "GREEN_NEW")] };
+    }) as never);
+
+    const result = await runBulkEnrichment(
+      [{ stagingRecordId: "stage-1" }, { stagingRecordId: "stage-bad" }, { stagingRecordId: "stage-3" }],
+      { concurrency: 2 }
+    );
+
+    expect(result.results[0].status).toBe("SUCCESS");
+    expect(result.results[1].status).toBe("ERROR");
+    expect(result.results[1].errorCode).toMatch(/network exploded/);
+    expect(result.results[2].status).toBe("SUCCESS");
+  });
+
+  it("5. idempotency under concurrency -- re-running the same Include-based batch a second time with concurrency:2 still finds the existing staged record rather than duplicating it", async () => {
+    includeMock.mockResolvedValue({ ok: false, error: "This candidate has already been staged as a Project." });
+    stagingFindFirstMock.mockResolvedValue({ id: "existing-staged-1" } as never);
+    stagingFindUniqueMock.mockResolvedValue(projectRecordFor("existing-staged-1") as never);
+    enrichMock.mockResolvedValue({ status: "SUCCESS", fields: [] });
+
+    const first = await runBulkEnrichment([{ discoveryCandidateId: "disc-1" }], { concurrency: 2 });
+    const second = await runBulkEnrichment([{ discoveryCandidateId: "disc-1" }], { concurrency: 2 });
+
+    expect(first.results[0].status).toBe("SUCCESS");
+    expect(second.results[0].status).toBe("SUCCESS");
+    expect(second.results[0].stagingRecordId).toBe("existing-staged-1");
+    // Never fabricates a second, different staging record for the same candidate.
+    expect(first.results[0].stagingRecordId).toBe(second.results[0].stagingRecordId);
+  });
+
+  it("6. result ordering/association -- the results array always matches input target order, even when a later target finishes first", async () => {
+    stagingFindUniqueMock.mockImplementation((async ({ where }: { where: { id: string } }) => projectRecordFor(where.id)) as never);
+    const delaysMs: Record<string, number> = { "stage-a": 30, "stage-b": 5, "stage-c": 15 };
+    enrichMock.mockImplementation((async (id: string) => {
+      await new Promise((r) => setTimeout(r, delaysMs[id] ?? 0));
+      return { status: "SUCCESS", fields: [] };
+    }) as never);
+
+    const result = await runBulkEnrichment(
+      [{ stagingRecordId: "stage-a" }, { stagingRecordId: "stage-b" }, { stagingRecordId: "stage-c" }],
+      { concurrency: 3 }
+    );
+
+    expect(result.results.map((r) => r.stagingRecordId)).toEqual(["stage-a", "stage-b", "stage-c"]);
+  });
+
+  it("7. no automatic acceptance under concurrency -- this module still never touches acceptEnrichmentFieldAction's write path", async () => {
+    stagingFindUniqueMock.mockImplementation((async ({ where }: { where: { id: string } }) => projectRecordFor(where.id)) as never);
+    enrichMock.mockResolvedValue({ status: "SUCCESS", fields: [enrichmentField("name", "GREEN_NEW")] });
+
+    await runBulkEnrichment(
+      Array.from({ length: 3 }, (_, i) => ({ stagingRecordId: `stage-${i}` })),
+      { concurrency: 2 }
+    );
+
+    expect((prisma.ingestStagingRecord as unknown as { update?: unknown }).update).toBeUndefined();
+    expect((prisma.ingestStagingRecord as unknown as { create?: unknown }).create).toBeUndefined();
+  });
+
+  it("8. no automatic approval under concurrency -- results stay PENDING-shaped proposals, no status field is ever set to APPROVED", async () => {
+    stagingFindUniqueMock.mockImplementation((async ({ where }: { where: { id: string } }) => projectRecordFor(where.id)) as never);
+    enrichMock.mockResolvedValue({ status: "SUCCESS", fields: [enrichmentField("name", "GREEN_NEW")] });
+
+    const result = await runBulkEnrichment(
+      Array.from({ length: 3 }, (_, i) => ({ stagingRecordId: `stage-${i}` })),
+      { concurrency: 3 }
+    );
+    for (const r of result.results) expect(r.status).not.toBe("APPROVED");
+  });
+
+  it("9. history unchanged under concurrency -- no prisma call beyond findUnique/findFirst happens no matter the concurrency level (bulkEnrichment.ts has no logAudit/acceptEnrichmentFieldAction import to begin with)", async () => {
+    stagingFindUniqueMock.mockImplementation((async ({ where }: { where: { id: string } }) => projectRecordFor(where.id)) as never);
+    enrichMock.mockResolvedValue({ status: "SUCCESS", fields: [enrichmentField("name", "CONFLICT")] });
+
+    await runBulkEnrichment(Array.from({ length: 4 }, (_, i) => ({ stagingRecordId: `stage-${i}` })), { concurrency: 3 });
+
+    const stagingModel = prisma.ingestStagingRecord as unknown as Record<string, unknown>;
+    expect(Object.keys(stagingModel).sort()).toEqual(["findFirst", "findUnique"]);
+  });
+
+  it("10. existing sequential behavior preserved -- omitting `options` and passing { concurrency: 1 } explicitly produce byte-identical results", async () => {
+    stagingFindUniqueMock.mockImplementation((async ({ where }: { where: { id: string } }) => projectRecordFor(where.id)) as never);
+    enrichMock.mockResolvedValue({ status: "SUCCESS", fields: [enrichmentField("name", "GREEN_NEW")] });
+
+    const targets = [{ stagingRecordId: "stage-1" }, { stagingRecordId: "stage-2" }];
+    const withoutOptions = await runBulkEnrichment(targets);
+    const withExplicitOne = await runBulkEnrichment(targets, { concurrency: 1 });
+
+    const strip = (r: typeof withoutOptions) => r.results.map(({ durationMs, ...rest }) => rest);
+    expect(strip(withoutOptions)).toEqual(strip(withExplicitOne));
+  });
+});

@@ -30,6 +30,11 @@ import type { ProjectImportPayload } from "@/lib/ingestion/connectors/fileImport
 // own thrown error message, not by importing a number.
 const BULK_ENRICHMENT_MAX_TARGETS = 10;
 
+// Phase 45 Part B/J/M -- concurrency is capped at 3 on purpose. This phase's
+// own instruction is "prove 2, then 3 are safe" before ever considering more;
+// raising this number is a deliberate, future decision, never an accident.
+const BULK_ENRICHMENT_MAX_CONCURRENCY = 3;
+
 export interface BulkEnrichmentTarget {
   /** A ProjectDiscoveryCandidate not yet staged -- Include runs first, then enrichment. */
   discoveryCandidateId?: string;
@@ -96,96 +101,136 @@ async function resolveStagingRecordId(target: BulkEnrichmentTarget): Promise<{ i
 }
 
 /**
- * Runs enrichment across MULTIPLE independent targets, sequentially (Part F),
- * with per-project failure isolation (Part E) and real per-project timing
- * (Part L). Capped at BULK_ENRICHMENT_MAX_TARGETS (Part O: max 10 per run).
+ * Processes ONE target end-to-end (resolve staging record, re-read live
+ * state, enrich) and NEVER throws -- every failure mode (Include refused,
+ * staging record vanished, enrichment error) is captured into its own
+ * result object instead. This is what makes Part C (failure isolation) hold
+ * under concurrency: a pool of N of these running in parallel can never have
+ * one target's rejection take down the others, because there is no
+ * rejection to propagate.
  */
-export async function runBulkEnrichment(targets: BulkEnrichmentTarget[]): Promise<BulkEnrichmentResult> {
+async function processTarget(target: BulkEnrichmentTarget): Promise<BulkEnrichmentProjectResult> {
+  const projectStart = Date.now();
+  let projectName = target.discoveryCandidateId ?? target.stagingRecordId ?? "unknown";
+
+  try {
+    const resolved = await resolveStagingRecordId(target);
+    if ("error" in resolved) {
+      return {
+        discoveryCandidateId: target.discoveryCandidateId,
+        stagingRecordId: target.stagingRecordId,
+        projectName,
+        status: "INCLUDE_FAILED",
+        durationMs: Date.now() - projectStart,
+        fieldsFound: 0,
+        ...emptyCounts(),
+        errorCode: resolved.error,
+      };
+    }
+    const stagingRecordId = resolved.id;
+
+    // Part G -- re-read the CURRENT staging state fresh right before
+    // enriching, never relying on whatever the caller believed it to be.
+    const record = await prisma.ingestStagingRecord.findUnique({ where: { id: stagingRecordId } });
+    if (!record || record.entityType !== "Project") {
+      return {
+        discoveryCandidateId: target.discoveryCandidateId,
+        stagingRecordId,
+        projectName,
+        status: "ERROR",
+        durationMs: Date.now() - projectStart,
+        fieldsFound: 0,
+        ...emptyCounts(),
+        errorCode: "Staging record not found or not a Project record at enrichment time.",
+      };
+    }
+    const payload = record.payload as unknown as ProjectImportPayload;
+    projectName = payload.name || projectName;
+
+    const enrichResult = await enrichProjectAction(stagingRecordId);
+    const counts = emptyCounts();
+    for (const f of enrichResult.fields ?? []) {
+      if (f.classification === "GREEN_NEW") counts.greenNew++;
+      else if (f.classification === "CONFIRMED") counts.confirmed++;
+      else if (f.classification === "YELLOW") counts.yellow++;
+      else if (f.classification === "CONFLICT") counts.conflict++;
+      else counts.missing++;
+    }
+
+    return {
+      discoveryCandidateId: target.discoveryCandidateId,
+      stagingRecordId,
+      projectName,
+      developerGroup: payload.developerGroup,
+      sourceUrl: enrichResult.fields?.find((f) => f.sourceUrl)?.sourceUrl ?? undefined,
+      status: enrichResult.status,
+      durationMs: Date.now() - projectStart,
+      fieldsFound: counts.greenNew + counts.confirmed + counts.yellow + counts.conflict,
+      ...counts,
+      errorCode: enrichResult.error,
+    };
+  } catch (error) {
+    return {
+      discoveryCandidateId: target.discoveryCandidateId,
+      stagingRecordId: target.stagingRecordId,
+      projectName,
+      status: "ERROR",
+      durationMs: Date.now() - projectStart,
+      fieldsFound: 0,
+      ...emptyCounts(),
+      errorCode: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * Phase 45 Part B -- the smallest possible concurrency-limited runner: a
+ * fixed-size pool of workers that each pull the next unclaimed index and
+ * write their result at that SAME index, so the returned array always
+ * matches the input order regardless of which target finishes first (Part L
+ * test 6). At `limit === 1` this is byte-for-byte equivalent to the old
+ * plain sequential for-loop (one worker, claims index 0, 1, 2... in order,
+ * never overlapping) -- so the existing default behavior is unchanged, not
+ * reimplemented differently for the concurrency=1 case.
+ */
+async function runWithConcurrencyLimit<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+  async function runNext(): Promise<void> {
+    for (;;) {
+      const i = nextIndex++;
+      if (i >= items.length) return;
+      results[i] = await worker(items[i]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => runNext()));
+  return results;
+}
+
+export interface RunBulkEnrichmentOptions {
+  /** Phase 45 Part B/M -- 1 (default, sequential) through 3. Never higher this phase -- see BULK_ENRICHMENT_MAX_CONCURRENCY. */
+  concurrency?: number;
+}
+
+/**
+ * Runs enrichment across MULTIPLE independent targets (Part F: sequential by
+ * default; Phase 45 adds optional controlled concurrency, still capped and
+ * still failure-isolated per target -- Part E). Capped at
+ * BULK_ENRICHMENT_MAX_TARGETS (Part O: max 10 per run).
+ */
+export async function runBulkEnrichment(targets: BulkEnrichmentTarget[], options?: RunBulkEnrichmentOptions): Promise<BulkEnrichmentResult> {
   await requireMutateSession();
 
   if (targets.length === 0) return { totalDurationMs: 0, results: [] };
   if (targets.length > BULK_ENRICHMENT_MAX_TARGETS) {
     throw new Error(`Bulk enrichment is capped at ${BULK_ENRICHMENT_MAX_TARGETS} projects per run (Phase 44 Part O) -- received ${targets.length}.`);
   }
-
-  const batchStart = Date.now();
-  const results: BulkEnrichmentProjectResult[] = [];
-
-  for (const target of targets) {
-    const projectStart = Date.now();
-    let projectName = target.discoveryCandidateId ?? target.stagingRecordId ?? "unknown";
-
-    try {
-      const resolved = await resolveStagingRecordId(target);
-      if ("error" in resolved) {
-        results.push({
-          discoveryCandidateId: target.discoveryCandidateId,
-          stagingRecordId: target.stagingRecordId,
-          projectName,
-          status: "INCLUDE_FAILED",
-          durationMs: Date.now() - projectStart,
-          fieldsFound: 0,
-          ...emptyCounts(),
-          errorCode: resolved.error,
-        });
-        continue;
-      }
-      const stagingRecordId = resolved.id;
-
-      // Part G -- re-read the CURRENT staging state fresh right before
-      // enriching, never relying on whatever the caller believed it to be.
-      const record = await prisma.ingestStagingRecord.findUnique({ where: { id: stagingRecordId } });
-      if (!record || record.entityType !== "Project") {
-        results.push({
-          discoveryCandidateId: target.discoveryCandidateId,
-          stagingRecordId,
-          projectName,
-          status: "ERROR",
-          durationMs: Date.now() - projectStart,
-          fieldsFound: 0,
-          ...emptyCounts(),
-          errorCode: "Staging record not found or not a Project record at enrichment time.",
-        });
-        continue;
-      }
-      const payload = record.payload as unknown as ProjectImportPayload;
-      projectName = payload.name || projectName;
-
-      const enrichResult = await enrichProjectAction(stagingRecordId);
-      const counts = emptyCounts();
-      for (const f of enrichResult.fields ?? []) {
-        if (f.classification === "GREEN_NEW") counts.greenNew++;
-        else if (f.classification === "CONFIRMED") counts.confirmed++;
-        else if (f.classification === "YELLOW") counts.yellow++;
-        else if (f.classification === "CONFLICT") counts.conflict++;
-        else counts.missing++;
-      }
-
-      results.push({
-        discoveryCandidateId: target.discoveryCandidateId,
-        stagingRecordId,
-        projectName,
-        developerGroup: payload.developerGroup,
-        sourceUrl: enrichResult.fields?.find((f) => f.sourceUrl)?.sourceUrl ?? undefined,
-        status: enrichResult.status,
-        durationMs: Date.now() - projectStart,
-        fieldsFound: counts.greenNew + counts.confirmed + counts.yellow + counts.conflict,
-        ...counts,
-        errorCode: enrichResult.error,
-      });
-    } catch (error) {
-      results.push({
-        discoveryCandidateId: target.discoveryCandidateId,
-        stagingRecordId: target.stagingRecordId,
-        projectName,
-        status: "ERROR",
-        durationMs: Date.now() - projectStart,
-        fieldsFound: 0,
-        ...emptyCounts(),
-        errorCode: error instanceof Error ? error.message : String(error),
-      });
-    }
+  const concurrency = options?.concurrency ?? 1;
+  if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > BULK_ENRICHMENT_MAX_CONCURRENCY) {
+    throw new Error(`Bulk enrichment concurrency must be an integer between 1 and ${BULK_ENRICHMENT_MAX_CONCURRENCY} (Phase 45 Part B/J/M) -- received ${concurrency}.`);
   }
 
+  const batchStart = Date.now();
+  const results = await runWithConcurrencyLimit(targets, concurrency, processTarget);
   return { totalDurationMs: Date.now() - batchStart, results };
 }
