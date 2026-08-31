@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { mapDiscoveryCandidateToProjectPayload, pendingProjectStagingAsExistingCandidates } from "./includeCandidate";
+import {
+  existingDiscoveryCandidatesAsExistingCandidates,
+  mapDiscoveryCandidateToProjectPayload,
+  pendingProjectStagingAsExistingCandidates,
+} from "./includeCandidate";
 import type { ProjectDiscoveryCandidatePayload } from "./types";
 
 const CANDIDATE: ProjectDiscoveryCandidatePayload = {
@@ -61,5 +65,15 @@ describe("pendingProjectStagingAsExistingCandidates (Phase 40 Part E — cross-s
   it("5. a payload with no reraNumber reshapes to null, not undefined -- matching ExistingProjectCandidate's own contract", () => {
     const result = pendingProjectStagingAsExistingCandidates([{ id: "stg-2", payload: { name: "X", localityId: "loc-1" } as never }]);
     expect(result[0].reraNumber).toBeNull();
+  });
+});
+
+describe("existingDiscoveryCandidatesAsExistingCandidates (Phase 41 Part I — a bulk discovery run never re-stages a candidate already in the Discovery Queue)", () => {
+  it("6. reshapes an existing ProjectDiscoveryCandidate row into the matcher's own candidate shape, always with a null reraNumber", () => {
+    const result = existingDiscoveryCandidatesAsExistingCandidates(
+      [{ id: "disc-1", payload: { ...CANDIDATE, projectName: "Godrej Skyshore" } }],
+      "loc-andheri-west"
+    );
+    expect(result).toEqual([{ id: "disc-1", name: "Godrej Skyshore", localityId: "loc-andheri-west", reraNumber: null }]);
   });
 });

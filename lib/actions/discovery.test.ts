@@ -40,8 +40,8 @@ function discoveryCandidateRecord(overrides: Partial<{ status: string; payload: 
   return {
     id: "cand-1",
     entityType: DISCOVERY_ENTITY_TYPE,
-    batchId: "batch-discovery-1",
-    status: "SOURCE_FOUND",
+    batchId: overrides.batchId ?? "batch-discovery-1",
+    status: overrides.status ?? "SOURCE_FOUND",
     payload: {
       projectName: "Gurukrupa Ekam",
       developerName: "Gurukrupa Realcon",
@@ -57,7 +57,6 @@ function discoveryCandidateRecord(overrides: Partial<{ status: string; payload: 
       duplicateMatch: null,
       ...overrides.payload,
     },
-    ...overrides,
   };
 }
 
@@ -96,6 +95,70 @@ describe("stageDiscoveryBatch (Phase 39)", () => {
     expect(stagingCreateMock).toHaveBeenCalledTimes(1);
     expect(stagingCreateMock.mock.calls[0][0].data.entityType).toBe(DISCOVERY_ENTITY_TYPE);
     expect((prisma as unknown as { project: { create?: unknown } }).project.create).toBeUndefined();
+  });
+
+  it("Phase 41 Part I — protects against a duplicate already sitting in the Discovery Queue from an earlier batch", async () => {
+    stagingFindManyMock.mockImplementation(((args: { where?: { entityType?: string } }) => {
+      if (args?.where?.entityType === DISCOVERY_ENTITY_TYPE) {
+        return Promise.resolve([{ id: "disc-existing-1", payload: { projectName: "Adani Western Heights" } }]);
+      }
+      return Promise.resolve([]);
+    }) as never);
+
+    const result = await stageDiscoveryBatch({
+      batchLabel: "Andheri West — Batch 001",
+      localityId: "loc-andheri-west",
+      sourceKey: "area-discovery:andheri-west",
+      candidates: [
+        {
+          projectName: "Adani Western Heights",
+          developerName: "Adani Realty",
+          areaName: "Andheri West",
+          sourceUrl: "https://www.adanirealty.com/residential-projects/mumbai/western-heights",
+          sourceType: "OFFICIAL_DEVELOPER",
+          discoverySource: "adanirealty.com sitemap.xml",
+          confidence: "High",
+        },
+      ],
+    });
+
+    expect(result.staged).toBe(1); // still staged as a row -- just correctly labeled, never silently dropped
+    const call = stagingCreateMock.mock.calls[0][0].data;
+    expect(call.status).toBe("REJECTED_DUPLICATE");
+    expect(call.matchedExistingId).toBe("disc-existing-1");
+  });
+
+  it("Phase 41 Part I — protects against two near-duplicate candidates submitted in the SAME batch", async () => {
+    projectFindManyMock.mockResolvedValue([] as never); // isolate same-batch duplicate detection from the default Godrej live-Project fixture
+    const result = await stageDiscoveryBatch({
+      batchLabel: "Andheri West — Batch 001",
+      localityId: "loc-andheri-west",
+      sourceKey: "area-discovery:andheri-west",
+      candidates: [
+        {
+          projectName: "Godrej Sky Shore",
+          developerName: "Godrej Properties Ltd.",
+          areaName: "Andheri West",
+          sourceUrl: "https://example-portal.test/a",
+          sourceType: "LISTING_PORTAL",
+          discoverySource: "portal A",
+          confidence: "Medium",
+        },
+        {
+          projectName: "Godrej Skyshore",
+          developerName: "Godrej Properties Ltd.",
+          areaName: "Andheri West",
+          sourceUrl: "https://example-portal.test/b",
+          sourceType: "LISTING_PORTAL",
+          discoverySource: "portal B",
+          confidence: "Medium",
+        },
+      ],
+    });
+
+    expect(result.staged).toBe(2);
+    expect(stagingCreateMock.mock.calls[0][0].data.status).not.toBe("REJECTED_DUPLICATE"); // the first one is genuinely new
+    expect(stagingCreateMock.mock.calls[1][0].data.status).toBe("REJECTED_DUPLICATE"); // the second recognizes the first, staged moments earlier
   });
 });
 
@@ -170,9 +233,12 @@ describe("applyDiscoveryFounderAction — Include (Phase 40 Part B/E)", () => {
   });
 
   it("4. CLEAR_ALIAS against an already-PENDING 'Project' staging record (the real Gurukrupa Ekam case) refuses to stage a duplicate", async () => {
-    stagingFindManyMock.mockResolvedValue([
-      { id: "existing-staging-1", payload: { name: "Gurukrupa Ekam", localityId: "loc-andheri-west", reraNumber: "PM1180002501525" } },
-    ] as never);
+    stagingFindManyMock.mockImplementation(((args: { where?: { entityType?: string } }) => {
+      if (args?.where?.entityType === "Project") {
+        return Promise.resolve([{ id: "existing-staging-1", payload: { name: "Gurukrupa Ekam", localityId: "loc-andheri-west", reraNumber: "PM1180002501525" } }]);
+      }
+      return Promise.resolve([]);
+    }) as never);
     stagingFindUniqueMock.mockResolvedValue(discoveryCandidateRecord() as never);
 
     const result = await applyDiscoveryFounderAction("cand-1", "INCLUDE");
@@ -208,6 +274,27 @@ describe("applyDiscoveryFounderAction — Include (Phase 40 Part B/E)", () => {
     const result = await applyDiscoveryFounderAction("cand-1", "INCLUDE");
     expect(result.ok).toBe(false);
     expect(result.error).toContain("locality");
+    expect(stagingCreateMock).not.toHaveBeenCalled();
+  });
+
+  it("Phase 42 — accepts a fuzzy (non-exact) SINGLE_MATCH locality, e.g. a real candidate whose areaName is a micro-market-level refinement of the Locality name ('Lokhandwala, Andheri West' for Locality 'Andheri West')", async () => {
+    stagingFindUniqueMock.mockResolvedValue(discoveryCandidateRecord({ payload: { areaName: "Lokhandwala, Andheri West" } }) as never);
+    const result = await applyDiscoveryFounderAction("cand-1", "INCLUDE");
+    expect(result.ok).toBe(true);
+    expect(stagingCreateMock).toHaveBeenCalledTimes(1);
+    const payload = stagingCreateMock.mock.calls[0][0].data.payload as Record<string, unknown>;
+    expect(payload.localityId).toBe("loc-andheri-west");
+  });
+
+  it("Phase 42 — still refuses when the area fuzzy-matches TWO different Locality rows equally well (genuine ambiguity, never guessed)", async () => {
+    localityFindManyMock.mockResolvedValue([
+      ANDHERI_WEST_LOCALITY,
+      { id: "loc-west-andheri-alt", name: "West Andheri", aliases: [] }, // same word set, different order -- neither is an exact match for the candidate below
+    ] as never);
+    stagingFindUniqueMock.mockResolvedValue(discoveryCandidateRecord({ payload: { areaName: "Andheri West Complex" } }) as never);
+    const result = await applyDiscoveryFounderAction("cand-1", "INCLUDE");
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("MULTIPLE_MATCHES");
     expect(stagingCreateMock).not.toHaveBeenCalled();
   });
 

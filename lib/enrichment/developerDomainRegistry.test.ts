@@ -18,4 +18,10 @@ describe("resolveDeveloperDomain (Phase 28 Part E — curated, never guessed)", 
     expect(resolveDeveloperDomain(undefined)).toBeNull();
     expect(resolveDeveloperDomain("")).toBeNull();
   });
+
+  it("Phase 41 — resolves the three developers newly curated from bulk Andheri West discovery", () => {
+    expect(resolveDeveloperDomain("Puravankara Limited")).toBe("https://www.puravankara.com");
+    expect(resolveDeveloperDomain("Platinum Corp")).toBe("https://www.platinumcorp.in");
+    expect(resolveDeveloperDomain("Lodha")).toBe("https://www.lodhagroup.com");
+  });
 });

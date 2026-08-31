@@ -22,6 +22,8 @@ import { godrejPropertiesAdapter, GODREJ_SKY_SHORE_PROJECT_URL } from "@/lib/enr
 import { adaniRealtyAdapter, ADANI_LINKBAY_RESIDENCES_PROJECT_URL } from "@/lib/enrichment/adapters/adaniRealtyAdapter";
 import { kalpataruAdapter, KALPATARU_VIAN_PROJECT_URL } from "@/lib/enrichment/adapters/kalpataruAdapter";
 import { gurukrupaRealconAdapter, GURUKRUPA_EKAM_PROJECT_URL } from "@/lib/enrichment/adapters/gurukrupaRealconAdapter";
+import { puravankaraAdapter, PURVA_ESTRELLA_PROJECT_URL } from "@/lib/enrichment/adapters/puravankaraAdapter";
+import { lodhaAdapter, LODHA_CULLINAN_PROJECT_URL } from "@/lib/enrichment/adapters/lodhaAdapter";
 import type { EnrichmentField, OfficialSourceAdapter } from "@/lib/enrichment/types";
 import { buildProjectReviewCompleteness } from "@/lib/ingestion/reviewFieldRegistry";
 import type { ProjectImportPayload } from "@/lib/ingestion/connectors/fileImport/types";
@@ -57,6 +59,8 @@ const CURATED_SOURCES: Record<string, { projectUrl: string; adapter: OfficialSou
   "https://www.adanirealty.com": { projectUrl: ADANI_LINKBAY_RESIDENCES_PROJECT_URL, adapter: adaniRealtyAdapter },
   "https://www.kalpataru.com": { projectUrl: KALPATARU_VIAN_PROJECT_URL, adapter: kalpataruAdapter },
   "https://gurukruparealcon.com": { projectUrl: GURUKRUPA_EKAM_PROJECT_URL, adapter: gurukrupaRealconAdapter },
+  "https://www.puravankara.com": { projectUrl: PURVA_ESTRELLA_PROJECT_URL, adapter: puravankaraAdapter },
+  "https://www.lodhagroup.com": { projectUrl: LODHA_CULLINAN_PROJECT_URL, adapter: lodhaAdapter },
 };
 
 /**

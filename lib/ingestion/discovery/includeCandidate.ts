@@ -10,6 +10,26 @@ export function pendingProjectStagingAsExistingCandidates(
 }
 
 /**
+ * Phase 41 Part I — an existing "ProjectDiscoveryCandidate" staging row
+ * (from THIS or an earlier discovery batch), reshaped into the same
+ * ExistingProjectCandidate shape so a bulk discovery run never stages a
+ * second candidate for a project already sitting in the Discovery Queue.
+ * Same reuse discipline as pendingProjectStagingAsExistingCandidates above —
+ * no new matching algorithm, just one more data source fed into the EXISTING
+ * findPossibleDuplicateProject/classifyDiscoveryDuplicate machinery. A
+ * discovery candidate payload never carries a RERA number (an already-
+ * documented Phase 40 limitation), so `reraNumber` is always null here —
+ * matching still resolves on name+locality, exactly as it does for the
+ * "Godrej Sky Shore" vs "Godrej Skyshore" worked example.
+ */
+export function existingDiscoveryCandidatesAsExistingCandidates(
+  records: { id: string; payload: ProjectDiscoveryCandidatePayload }[],
+  localityId: string
+): ExistingProjectCandidate[] {
+  return records.map((r) => ({ id: r.id, name: r.payload.projectName, localityId, reraNumber: null }));
+}
+
+/**
  * Phase 40 Part D — maps a discovery candidate's payload into the EXISTING
  * ProjectImportPayload shape, populating ONLY what is genuinely known.
  * `status`/`category` are the two required enum fields a fresh discovery

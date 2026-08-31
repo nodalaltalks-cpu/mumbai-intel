@@ -37,6 +37,17 @@ const CURATED_DEVELOPER_DOMAINS: Record<string, string> = {
   // project), and NOT thegurukruparealcon.com (a thinner lookalike with no
   // JSON-LD, no matching phone number, and a 404 robots.txt).
   "gurukrupa realcon": "https://gurukruparealcon.com",
+  // Phase 41 -- bulk Andheri West discovery. Each confirmed the same way:
+  // real Organization JSON-LD matching the developer's own social profiles,
+  // a clean robots.txt, and a real sitemap listing the actual discovered
+  // project -- never a project-name-based microsite (e.g. Puravankara's own
+  // domain was distinguished from puravankaraestrella.in/estrellapurva.com,
+  // both real but unofficial lead-gen sites for the same project).
+  "puravankara limited": "https://www.puravankara.com",
+  "puravankara": "https://www.puravankara.com",
+  "platinum corp": "https://www.platinumcorp.in",
+  "lodha": "https://www.lodhagroup.com",
+  "macrotech developers": "https://www.lodhagroup.com",
 };
 
 function normalize(name: string): string {

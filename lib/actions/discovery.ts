@@ -10,7 +10,11 @@ import type { ExistingProjectCandidate } from "@/lib/ingestion/duplicateMatch";
 import type { ProjectImportPayload } from "@/lib/ingestion/connectors/fileImport/types";
 import { buildDiscoveryCandidate, type DiscoveryCandidateInput } from "@/lib/ingestion/discovery/buildCandidate";
 import { classifyDiscoveryDuplicate } from "@/lib/ingestion/discovery/classifyDuplicate";
-import { mapDiscoveryCandidateToProjectPayload, pendingProjectStagingAsExistingCandidates } from "@/lib/ingestion/discovery/includeCandidate";
+import {
+  existingDiscoveryCandidatesAsExistingCandidates,
+  mapDiscoveryCandidateToProjectPayload,
+  pendingProjectStagingAsExistingCandidates,
+} from "@/lib/ingestion/discovery/includeCandidate";
 import { applyFounderDiscoveryAction, type DiscoveryFounderAction } from "@/lib/ingestion/discovery/statusTransitions";
 import { DISCOVERY_ENTITY_TYPE, type DiscoveryStatus, type ProjectDiscoveryCandidatePayload } from "@/lib/ingestion/discovery/types";
 import type { ConnectorRunSummary } from "@/lib/ingestion/types";
@@ -24,6 +28,17 @@ import type { ConnectorRunSummary } from "@/lib/ingestion/types";
  * IngestBatch + IngestStagingRecord write pattern every existing file-import
  * runner already uses (see lib/ingestion/fileImportRunner.ts), including its
  * "recordsWritten always 0 for a staging-only runner" convention.
+ *
+ * Phase 41 Part I — at BULK scale, duplicate protection now checks THREE
+ * sources, not just the live Project table: (1) live Projects, (2) every
+ * still-PENDING "Project"-entityType staging record (Phase 40's own
+ * addition), and (3) every OTHER discovery candidate already sitting in the
+ * Discovery Queue — including ones staged earlier in THIS SAME run, so two
+ * near-duplicate rows in one research batch (e.g. "Godrej Sky Shore" and
+ * "Godrej Skyshore, Versova" both submitted together) can't silently create
+ * two separate candidates either. Still the exact same reused
+ * classifyDiscoveryDuplicate/findPossibleDuplicateProject authority — only
+ * the input list feeding it has grown.
  */
 export type StageDiscoveryCandidateInput = Omit<DiscoveryCandidateInput, "localityId" | "batchLabel">;
 
@@ -44,10 +59,22 @@ export async function stageDiscoveryBatch(params: StageDiscoveryBatchParams): Pr
   const city = await prisma.city.findUnique({ where: { slug: PRIMARY_CITY_SLUG }, select: { id: true } });
   if (!city) throw new Error(`Primary city "${PRIMARY_CITY_SLUG}" is not seeded`);
 
-  const existingProjects: ExistingProjectCandidate[] = await prisma.project.findMany({
-    where: { cityId: city.id },
-    select: { id: true, name: true, localityId: true, reraNumber: true },
-  });
+  const [liveProjects, pendingProjectStagingRaw, existingDiscoveryCandidatesRaw] = await Promise.all([
+    prisma.project.findMany({ where: { cityId: city.id }, select: { id: true, name: true, localityId: true, reraNumber: true } }),
+    prisma.ingestStagingRecord.findMany({ where: { entityType: "Project" }, select: { id: true, payload: true } }),
+    prisma.ingestStagingRecord.findMany({ where: { entityType: DISCOVERY_ENTITY_TYPE }, select: { id: true, payload: true } }),
+  ]);
+
+  // Grows as this loop stages new rows, so a duplicate WITHIN the same batch
+  // is caught too, not just against rows that existed before this run started.
+  const existingCandidates: ExistingProjectCandidate[] = [
+    ...liveProjects,
+    ...pendingProjectStagingAsExistingCandidates(pendingProjectStagingRaw.map((r) => ({ id: r.id, payload: r.payload as unknown as ProjectImportPayload }))),
+    ...existingDiscoveryCandidatesAsExistingCandidates(
+      existingDiscoveryCandidatesRaw.map((r) => ({ id: r.id, payload: r.payload as unknown as ProjectDiscoveryCandidatePayload })),
+      params.localityId
+    ),
+  ];
 
   const batch = await prisma.ingestBatch.create({
     data: { sourceKey: params.sourceKey, trigger: "manual", triggeredByUserId: session.userId, status: "running" },
@@ -57,8 +84,8 @@ export async function stageDiscoveryBatch(params: StageDiscoveryBatchParams): Pr
 
   for (const candidateInput of params.candidates) {
     try {
-      const built = buildDiscoveryCandidate({ ...candidateInput, localityId: params.localityId, batchLabel: params.batchLabel }, existingProjects);
-      await prisma.ingestStagingRecord.create({
+      const built = buildDiscoveryCandidate({ ...candidateInput, localityId: params.localityId, batchLabel: params.batchLabel }, existingCandidates);
+      const created = await prisma.ingestStagingRecord.create({
         data: {
           batchId: batch.id,
           entityType: DISCOVERY_ENTITY_TYPE,
@@ -68,6 +95,7 @@ export async function stageDiscoveryBatch(params: StageDiscoveryBatchParams): Pr
           matchConfidence: built.matchConfidence,
         },
       });
+      existingCandidates.push({ id: created.id, name: built.payload.projectName, localityId: params.localityId, reraNumber: null });
       summary.staged += 1;
     } catch {
       summary.failed += 1;
@@ -111,16 +139,25 @@ export interface DiscoveryFounderActionResult {
  *  1. applyFounderDiscoveryAction's pre-guard passes (not already
  *     REJECTED_DUPLICATE or PROJECT_STAGED);
  *  2. the candidate's `areaName` resolves to EXACTLY ONE existing Locality
- *     (Phase 33's resolveLocalityMatch, reused verbatim — never a guessed id);
+ *     (Phase 33's resolveLocalityMatch, reused verbatim — never a guessed
+ *     id; Phase 42 relaxed this from "confidence === 1 only" to "any
+ *     SINGLE_MATCH", since resolveLocalityMatch's own fuzzy tier is already
+ *     this codebase's established "unambiguous enough" bar elsewhere, and
+ *     the stricter rule was refusing perfectly legitimate real candidates
+ *     whose areaName is a micro-market-level refinement of the Locality
+ *     name -- discovered by actually running a real batch, not a guess);
  *  3. the EXISTING Project duplicate matcher (classifyDiscoveryDuplicate,
  *     itself a thin reuse of findPossibleDuplicateProject) finds NO_MATCH
- *     against BOTH the live Project table AND every still-PENDING
- *     "Project"-entityType staging record (Part E's own worked example: a
- *     discovery candidate can easily name a project that's already sitting
- *     in the Review Queue from an earlier import — findPossibleDuplicateProject
- *     alone only ever checked the live table, so this second list is Phase
- *     40's one small, precedented addition, mirroring
- *     transactionFileImportRunner.ts's identical dual-check for Transactions).
+ *     against THREE sources (Part B/I): the live Project table, every
+ *     still-PENDING "Project"-entityType staging record, and every OTHER
+ *     discovery candidate already sitting in the Discovery Queue (Part E's
+ *     own worked example: a discovery candidate can easily name a project
+ *     that's already sitting in the Review Queue from an earlier import, or
+ *     be a re-discovery of another candidate already parked in the same
+ *     queue -- findPossibleDuplicateProject alone only ever checked the live
+ *     table, so these extra lists are Phase 40/41's own small, precedented
+ *     additions, mirroring transactionFileImportRunner.ts's identical
+ *     dual-check for Transactions).
  * EXACT/CLEAR_ALIAS refuse and relabel the candidate REJECTED_DUPLICATE;
  * AMBIGUOUS refuses and relabels it NEEDS_REVIEW; only NO_MATCH proceeds.
  *
@@ -162,7 +199,16 @@ export async function applyDiscoveryFounderAction(id: string, action: DiscoveryF
     localities.map((l) => ({ id: l.id, name: l.name, aliases: l.aliases.map((a) => a.alias) })),
     candidatePayload.areaName
   );
-  if (localityMatch.status !== "SINGLE_MATCH" || localityMatch.candidates[0].confidence !== 1) {
+  // SINGLE_MATCH alone (not just an exact confidence-1 match) is accepted --
+  // resolveLocalityMatch's own fuzzy tier (Phase 33) is the SAME 0.6-Jaccard
+  // bar this codebase already trusts elsewhere for "unambiguous enough";
+  // requiring literal confidence===1 on top of it (Phase 40's original,
+  // untested-against-real-data rule) turned out to refuse perfectly legitimate
+  // real candidates whose areaName is a micro-market-level refinement of the
+  // Locality name (e.g. "Lokhandwala, Andheri West" for the Locality
+  // "Andheri West") -- discovered by actually running Phase 42's real batch,
+  // not a guess. MULTIPLE_MATCHES/NO_MATCH still refuse exactly as before.
+  if (localityMatch.status !== "SINGLE_MATCH") {
     return {
       ok: false,
       error: `Could not confidently resolve area "${candidatePayload.areaName}" to exactly one existing locality (${localityMatch.status}). Resolve the locality manually before including this candidate.`,
@@ -170,14 +216,19 @@ export async function applyDiscoveryFounderAction(id: string, action: DiscoveryF
   }
   const resolvedLocalityId = localityMatch.candidates[0].id;
 
-  const [liveProjects, pendingProjectStagingRaw] = await Promise.all([
+  const [liveProjects, pendingProjectStagingRaw, otherDiscoveryCandidatesRaw] = await Promise.all([
     prisma.project.findMany({ where: { cityId: city.id }, select: { id: true, name: true, localityId: true, reraNumber: true } }),
     prisma.ingestStagingRecord.findMany({ where: { entityType: "Project" }, select: { id: true, payload: true } }),
+    prisma.ingestStagingRecord.findMany({ where: { entityType: DISCOVERY_ENTITY_TYPE, id: { not: id } }, select: { id: true, payload: true } }),
   ]);
   const combinedExisting: ExistingProjectCandidate[] = [
     ...liveProjects,
     ...pendingProjectStagingAsExistingCandidates(
       pendingProjectStagingRaw.map((r) => ({ id: r.id, payload: r.payload as unknown as ProjectImportPayload }))
+    ),
+    ...existingDiscoveryCandidatesAsExistingCandidates(
+      otherDiscoveryCandidatesRaw.map((r) => ({ id: r.id, payload: r.payload as unknown as ProjectDiscoveryCandidatePayload })),
+      resolvedLocalityId
     ),
   ];
 
