@@ -12,10 +12,13 @@ vi.mock("@/lib/auth/guard", () => ({
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     ingestStagingRecord: { findUnique: vi.fn(), update: vi.fn() },
-    locality: { findUnique: vi.fn() },
-    builder: { findUnique: vi.fn() },
+    locality: { findUnique: vi.fn(), findMany: vi.fn() },
+    builder: { findUnique: vi.fn(), findMany: vi.fn() },
+    city: { findUnique: vi.fn() },
   },
 }));
+
+vi.mock("@/lib/queries", () => ({ PRIMARY_CITY_SLUG: "mumbai" }));
 
 vi.mock("@/lib/enrichment/adapters/godrejPropertiesAdapter", () => ({
   godrejPropertiesAdapter: { tier: "OFFICIAL_DEVELOPER", resolveDomain: vi.fn(), fetchProjectFacts: vi.fn() },
@@ -31,12 +34,15 @@ import { prisma } from "@/lib/prisma";
 import { requireMutateSession } from "@/lib/auth/guard";
 import { godrejPropertiesAdapter } from "@/lib/enrichment/adapters/godrejPropertiesAdapter";
 import { adaniRealtyAdapter } from "@/lib/enrichment/adapters/adaniRealtyAdapter";
-import { acceptEnrichmentFieldAction, enrichProjectAction } from "./enrichment";
+import { acceptEnrichmentFieldAction, acceptEntityMatchAction, enrichProjectAction } from "./enrichment";
 
 const stagingFindUniqueMock = vi.mocked(prisma.ingestStagingRecord.findUnique);
 const stagingUpdateMock = vi.mocked(prisma.ingestStagingRecord.update);
 const localityFindUniqueMock = vi.mocked(prisma.locality.findUnique);
+const localityFindManyMock = vi.mocked(prisma.locality.findMany);
 const builderFindUniqueMock = vi.mocked(prisma.builder.findUnique);
+const builderFindManyMock = vi.mocked(prisma.builder.findMany);
+const cityFindUniqueMock = vi.mocked(prisma.city.findUnique);
 const fetchProjectFactsMock = vi.mocked(godrejPropertiesAdapter.fetchProjectFacts);
 const adaniFetchProjectFactsMock = vi.mocked(adaniRealtyAdapter.fetchProjectFacts);
 
@@ -86,6 +92,9 @@ describe("enrichProjectAction (Phase 29 Part J/K — no writes, no approval, pro
     localityFindUniqueMock.mockResolvedValue({ name: "Andheri West" } as never);
     builderFindUniqueMock.mockResolvedValue(null as never);
     stagingUpdateMock.mockResolvedValue({} as never);
+    builderFindManyMock.mockResolvedValue([] as never);
+    localityFindManyMock.mockResolvedValue([] as never);
+    cityFindUniqueMock.mockResolvedValue({ id: "city-mumbai" } as never);
   });
 
   it("1. is gated behind requireMutateSession (the same auth bar as every other mutate action)", async () => {
@@ -191,10 +200,208 @@ describe("enrichProjectAction (Phase 29 Part J/K — no writes, no approval, pro
   });
 });
 
+describe("enrichProjectAction — Builder/Locality resolution (Phase 33)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localityFindUniqueMock.mockResolvedValue({ name: "Andheri West" } as never);
+    builderFindUniqueMock.mockResolvedValue(null as never);
+    stagingUpdateMock.mockResolvedValue({} as never);
+    cityFindUniqueMock.mockResolvedValue({ id: "city-mumbai" } as never);
+  });
+
+  it("1. exact Builder match is attached as a SINGLE_MATCH proposal when developerGroup resolves to exactly one existing Builder", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    builderFindManyMock.mockResolvedValue([{ id: "bldr-1", name: "Godrej Properties", legalNames: [], reraNumber: null }] as never);
+    localityFindManyMock.mockResolvedValue([] as never);
+    fetchProjectFactsMock.mockResolvedValue({ developerGroup: { value: "Godrej Properties", confidence: "High" } });
+
+    const result = await enrichProjectAction("stage-1");
+    expect(result.builderMatch?.match.status).toBe("SINGLE_MATCH");
+    expect(result.builderMatch?.match.candidates[0].id).toBe("bldr-1");
+    expect(result.builderMatch?.classification).toBe("GREEN_NEW"); // payload.builderId was blank
+  });
+
+  it("5. exact Locality match proposal is attached when the source's locality resolves to exactly one existing Locality", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    builderFindManyMock.mockResolvedValue([] as never);
+    localityFindManyMock.mockResolvedValue([{ id: "loc-andheri-real", name: "Andheri West", aliases: [] }] as never);
+    fetchProjectFactsMock.mockResolvedValue({ locality: { value: "Andheri West", confidence: "High" } });
+
+    const result = await enrichProjectAction("stage-1");
+    expect(result.localityMatch?.match.status).toBe("SINGLE_MATCH");
+    expect(result.localityMatch?.match.candidates[0].id).toBe("loc-andheri-real");
+    // The staged record already has a DIFFERENT localityId ("loc-andheri") -- a real match against a different existing row is a genuine CONFLICT.
+    expect(result.localityMatch?.classification).toBe("CONFLICT");
+  });
+
+  it("4. multiple plausible Builder matches surface as MULTIPLE_MATCHES, never auto-picked", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    builderFindManyMock.mockResolvedValue([
+      { id: "bldr-1", name: "Adani Realty Mumbai", legalNames: [], reraNumber: null },
+      { id: "bldr-2", name: "Adani Realty Pune", legalNames: [], reraNumber: null },
+    ] as never);
+    fetchProjectFactsMock.mockResolvedValue({ developerGroup: { value: "Adani Realty", confidence: "High" } });
+
+    const result = await enrichProjectAction("stage-1");
+    expect(result.builderMatch?.match.status).toBe("MULTIPLE_MATCHES");
+    expect(result.builderMatch?.classification).toBe("YELLOW");
+  });
+
+  it("3. no Builder match at all -> classification MISSING, never fabricated", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    builderFindManyMock.mockResolvedValue([{ id: "bldr-1", name: "Lodha Group", legalNames: [], reraNumber: null }] as never);
+    fetchProjectFactsMock.mockResolvedValue({ developerGroup: { value: "Totally Unrelated Developer XYZ", confidence: "High" } });
+
+    const result = await enrichProjectAction("stage-1");
+    expect(result.builderMatch?.match.status).toBe("NO_MATCH");
+    expect(result.builderMatch?.classification).toBe("MISSING");
+  });
+
+  it("11/12. existing accepted Builder/Locality is protected -- a SINGLE_MATCH pointing at the SAME already-set id is CONFIRMED, not re-flagged", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord({ payload: { ...GODREJ_PAYLOAD, builderId: "bldr-1" } }));
+    builderFindManyMock.mockResolvedValue([{ id: "bldr-1", name: "Godrej Properties", legalNames: [], reraNumber: null }] as never);
+    builderFindUniqueMock.mockResolvedValue({ name: "Godrej Properties" } as never);
+    fetchProjectFactsMock.mockResolvedValue({ developerGroup: { value: "Godrej Properties", confidence: "High" } });
+
+    const result = await enrichProjectAction("stage-1");
+    expect(result.builderMatch?.classification).toBe("CONFIRMED");
+  });
+
+  it("13. Builder conflict: existing builderId set, real match points elsewhere -> CONFLICT, never silently overwritten", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord({ payload: { ...GODREJ_PAYLOAD, builderId: "bldr-old" } }));
+    builderFindManyMock.mockResolvedValue([{ id: "bldr-new", name: "Adani Realty", legalNames: [], reraNumber: null }] as never);
+    builderFindUniqueMock.mockResolvedValue({ name: "Some Other Builder" } as never);
+    fetchProjectFactsMock.mockResolvedValue({ developerGroup: { value: "Adani Realty", confidence: "High" } });
+
+    const result = await enrichProjectAction("stage-1");
+    expect(result.builderMatch?.classification).toBe("CONFLICT");
+    expect(result.builderMatch?.match.candidates[0].id).toBe("bldr-new");
+  });
+
+  it("locality queries scope to the primary city (existing convention, same as transactionFileImportRunner.ts)", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    localityFindManyMock.mockResolvedValue([] as never);
+    fetchProjectFactsMock.mockResolvedValue({ locality: { value: "Andheri West", confidence: "High" } });
+
+    await enrichProjectAction("stage-1");
+    expect(cityFindUniqueMock).toHaveBeenCalledWith({ where: { slug: "mumbai" }, select: { id: true } });
+    expect(localityFindManyMock).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { cityId: "city-mumbai" } })
+    );
+  });
+
+  it("no developerGroup/locality fact at all -> no DB query for Builder/Locality candidates, no match proposal attached", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    fetchProjectFactsMock.mockResolvedValue({ metaTitle: { value: "Something", confidence: "High" } });
+
+    const result = await enrichProjectAction("stage-1");
+    expect(result.builderMatch).toBeUndefined();
+    expect(result.localityMatch).toBeUndefined();
+    expect(builderFindManyMock).not.toHaveBeenCalled();
+    expect(localityFindManyMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("acceptEntityMatchAction (Phase 33 Part F/G — persists a founder-selected EXISTING Builder/Locality id, never creates one)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stagingUpdateMock.mockResolvedValue({} as never);
+  });
+
+  it("9. accepts a Builder match and persists builderId (not the name) into the payload", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    builderFindUniqueMock.mockResolvedValue({ id: "bldr-1", name: "Adani Realty" } as never);
+
+    const result = await acceptEntityMatchAction("stage-1", "builder", "bldr-1");
+    expect(result.status).toBe("SUCCESS");
+    expect(stagingUpdateMock).toHaveBeenCalledWith({
+      where: { id: "stage-1" },
+      data: { payload: { ...GODREJ_PAYLOAD, builderId: "bldr-1" } },
+    });
+  });
+
+  it("10. accepts a Locality match and persists localityId into the payload", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    localityFindUniqueMock.mockResolvedValue({ id: "loc-real", name: "Andheri West" } as never);
+
+    const result = await acceptEntityMatchAction("stage-1", "locality", "loc-real");
+    expect(result.status).toBe("SUCCESS");
+    expect(stagingUpdateMock).toHaveBeenCalledWith({
+      where: { id: "stage-1" },
+      data: { payload: { ...GODREJ_PAYLOAD, localityId: "loc-real" } },
+    });
+  });
+
+  it("16. only PENDING staging records can be modified -- rejects APPROVED", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord({ status: "APPROVED" } as never));
+    const result = await acceptEntityMatchAction("stage-1", "builder", "bldr-1");
+    expect(result.status).toBe("NOT_PENDING");
+    expect(stagingUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("16b. only PENDING staging records can be modified -- rejects REJECTED", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord({ status: "REJECTED" } as never));
+    const result = await acceptEntityMatchAction("stage-1", "builder", "bldr-1");
+    expect(result.status).toBe("NOT_PENDING");
+    expect(stagingUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("17. is gated behind requireMutateSession", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    builderFindUniqueMock.mockResolvedValue({ id: "bldr-1", name: "Adani Realty" } as never);
+    await acceptEntityMatchAction("stage-1", "builder", "bldr-1");
+    expect(requireMutateSession).toHaveBeenCalled();
+  });
+
+  it("18. rejects an invalid/nonexistent Builder id rather than trusting the client", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    builderFindUniqueMock.mockResolvedValue(null as never);
+    const result = await acceptEntityMatchAction("stage-1", "builder", "bldr-does-not-exist");
+    expect(result.status).toBe("INVALID_ENTITY");
+    expect(stagingUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("18b. rejects an invalid/nonexistent Locality id rather than trusting the client", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    localityFindUniqueMock.mockResolvedValue(null as never);
+    const result = await acceptEntityMatchAction("stage-1", "locality", "loc-does-not-exist");
+    expect(result.status).toBe("INVALID_ENTITY");
+    expect(stagingUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("record not found -> NOT_FOUND", async () => {
+    stagingFindUniqueMock.mockResolvedValue(null);
+    const result = await acceptEntityMatchAction("missing-id", "builder", "bldr-1");
+    expect(result.status).toBe("NOT_FOUND");
+  });
+
+  it("23. accepted id survives a fresh read (same mechanism as Phase 32's accepted fields)", async () => {
+    stagingFindUniqueMock.mockResolvedValueOnce(stagingRecord());
+    builderFindUniqueMock.mockResolvedValue({ id: "bldr-1", name: "Adani Realty" } as never);
+    await acceptEntityMatchAction("stage-1", "builder", "bldr-1");
+    const saved = stagingUpdateMock.mock.calls[0][0].data.payload as Record<string, unknown>;
+
+    stagingFindUniqueMock.mockResolvedValueOnce(stagingRecord({ payload: saved }));
+    const fresh = await prisma.ingestStagingRecord.findUnique({ where: { id: "stage-1" } });
+    expect((fresh as unknown as { payload: Record<string, unknown> }).payload.builderId).toBe("bldr-1");
+  });
+
+  it("14. never calls prisma.project.* -- only the staging record's own payload is ever touched", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    builderFindUniqueMock.mockResolvedValue({ id: "bldr-1", name: "Adani Realty" } as never);
+    await acceptEntityMatchAction("stage-1", "builder", "bldr-1");
+    expect(stagingUpdateMock).toHaveBeenCalledTimes(1);
+    // No prisma.project mock exists in this test file's mocked client -- if the action ever attempted prisma.project.update, it would throw.
+  });
+});
+
 describe("acceptEnrichmentFieldAction (Phase 32 — persists ONE accepted field into the PENDING staging payload only)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     stagingUpdateMock.mockResolvedValue({} as never);
+    builderFindManyMock.mockResolvedValue([] as never);
+    localityFindManyMock.mockResolvedValue([] as never);
+    cityFindUniqueMock.mockResolvedValue({ id: "city-mumbai" } as never);
   });
 
   it("1. accepts one GREEN_NEW field and persists it, preserving every other existing field", async () => {

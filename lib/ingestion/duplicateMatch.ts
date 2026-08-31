@@ -137,6 +137,29 @@ export function findPossibleDuplicateBuilder(
   return best;
 }
 
+export interface NamedDuplicateMatch extends DuplicateMatch {
+  name: string;
+}
+
+/**
+ * Same fuzzy matcher as findPossibleDuplicateBuilder, but returns EVERY
+ * candidate above the threshold instead of collapsing to the single best one
+ * -- used by Phase 33's Builder-resolution UI to detect genuine ambiguity
+ * (e.g. an enrichment-discovered "Adani Realty" fuzzy-matching both an
+ * "Adani Realty" row and an "Adani Realty & RC Group" row) so a human picks,
+ * rather than silently taking the top score.
+ */
+export function findAllPossibleBuilderMatches(
+  existingBuilders: ExistingBuilderCandidate[],
+  candidateName: string,
+  threshold = 0.6
+): NamedDuplicateMatch[] {
+  return existingBuilders
+    .map((b) => ({ existingId: b.id, name: b.name, confidence: nameSimilarity(candidateName, b.name) }))
+    .filter((m) => m.confidence >= threshold)
+    .sort((a, b) => b.confidence - a.confidence);
+}
+
 export interface ExistingTransactionStagingCandidate {
   id: string;
   sourceRef: string | null;
@@ -185,4 +208,16 @@ export function findPossibleDuplicateLocality(
     if (!best || similarity > best.confidence) best = { existingId: existing.id, confidence: similarity };
   }
   return best;
+}
+
+/** Same fuzzy matcher as findPossibleDuplicateLocality, but returns EVERY candidate above the threshold instead of collapsing to the single best one -- see findAllPossibleBuilderMatches's doc comment for why. */
+export function findAllPossibleLocalityMatches(
+  existingLocalities: ExistingLocalityCandidate[],
+  candidateName: string,
+  threshold = 0.6
+): NamedDuplicateMatch[] {
+  return existingLocalities
+    .map((l) => ({ existingId: l.id, name: l.name, confidence: nameSimilarity(candidateName, l.name) }))
+    .filter((m) => m.confidence >= threshold)
+    .sort((a, b) => b.confidence - a.confidence);
 }

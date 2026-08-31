@@ -10,7 +10,7 @@ import {
 } from "@/lib/actions/ingestion";
 import { formatDate } from "@/lib/format";
 import type { ReviewCompleteness } from "@/lib/ingestion/reviewFieldRegistry";
-import { acceptEnrichmentFieldAction, enrichProjectAction, type EnrichProjectResult } from "@/lib/actions/enrichment";
+import { acceptEnrichmentFieldAction, acceptEntityMatchAction, enrichProjectAction, type EnrichProjectResult } from "@/lib/actions/enrichment";
 import type { EnrichmentField } from "@/lib/enrichment/types";
 import ConfirmButton from "./ConfirmButton";
 import ReviewDataDetailsDialog from "./ReviewDataDetailsDialog";
@@ -68,6 +68,16 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
       return { ok: true };
     }
     return { ok: false, error: result.error ?? "Could not save this field." };
+  }
+
+  async function handleAcceptEntityMatch(kind: "builder" | "locality", existingId: string): Promise<{ ok: boolean; error?: string }> {
+    if (!enrichmentRecordId) return { ok: false, error: "No record open." };
+    const result = await acceptEntityMatchAction(enrichmentRecordId, kind, existingId);
+    if (result.status === "SUCCESS") {
+      router.refresh();
+      return { ok: true };
+    }
+    return { ok: false, error: result.error ?? `Could not save this ${kind}.` };
   }
 
   function toggleOne(id: string) {
@@ -242,10 +252,13 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
           loading={enrichmentState.loading}
           status={enrichmentState.result?.status ?? null}
           fields={enrichmentState.result?.fields ?? null}
+          builderMatch={enrichmentState.result?.builderMatch}
+          localityMatch={enrichmentState.result?.localityMatch}
           error={enrichmentState.result?.error ?? null}
           onClose={() => setEnrichmentRecordId(null)}
           onRetry={() => runEnrichment(enrichmentRecord.id)}
           onAcceptField={handleAcceptField}
+          onAcceptEntityMatch={handleAcceptEntityMatch}
         />
       ) : null}
     </div>

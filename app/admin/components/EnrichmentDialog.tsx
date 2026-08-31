@@ -2,8 +2,10 @@
 
 import Dialog from "@/app/components/ui/Dialog";
 import type { EnrichmentField } from "@/lib/enrichment/types";
+import type { EntityMatchProposal } from "@/lib/enrichment/resolveNamedEntity";
 import type { EnrichProjectStatus } from "@/lib/actions/enrichment";
 import EnrichmentProposalPanel from "./EnrichmentProposalPanel";
+import EntityMatchCard from "./EntityMatchCard";
 
 const STATUS_COPY: Record<Exclude<EnrichProjectStatus, "SUCCESS">, string> = {
   NO_SOURCE: "Official source not found. This project's developer isn't in the curated official-source list yet, so nothing was fetched.",
@@ -17,19 +19,25 @@ export default function EnrichmentDialog({
   loading,
   status,
   fields,
+  builderMatch,
+  localityMatch,
   error,
   onClose,
   onRetry,
   onAcceptField,
+  onAcceptEntityMatch,
 }: {
   title: string;
   loading: boolean;
   status: EnrichProjectStatus | null;
   fields: EnrichmentField[] | null;
+  builderMatch?: EntityMatchProposal;
+  localityMatch?: EntityMatchProposal;
   error: string | null;
   onClose: () => void;
   onRetry: () => void;
   onAcceptField: (field: EnrichmentField) => Promise<{ ok: boolean; error?: string }>;
+  onAcceptEntityMatch: (kind: "builder" | "locality", existingId: string) => Promise<{ ok: boolean; error?: string }>;
 }) {
   return (
     <Dialog title={`Enrich: ${title}`} onClose={onClose} maxWidth="max-w-2xl">
@@ -39,6 +47,12 @@ export default function EnrichmentDialog({
         ) : status === "SUCCESS" && fields ? (
           <>
             <p className="text-xs text-positive">Enrichment results ready.</p>
+            {builderMatch || localityMatch ? (
+              <div className="flex flex-col divide-y divide-border rounded-sm border border-border">
+                {builderMatch ? <EntityMatchCard proposal={builderMatch} onAccept={(id) => onAcceptEntityMatch("builder", id)} /> : null}
+                {localityMatch ? <EntityMatchCard proposal={localityMatch} onAccept={(id) => onAcceptEntityMatch("locality", id)} /> : null}
+              </div>
+            ) : null}
             <EnrichmentProposalPanel fields={fields} onAcceptField={onAcceptField} />
           </>
         ) : status === "NO_SOURCE" || status === "SOURCE_UNAVAILABLE" || status === "NO_NEW_INFO" ? (

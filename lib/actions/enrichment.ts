@@ -5,11 +5,13 @@ import { prisma } from "@/lib/prisma";
 import { classifyProjectEnrichment } from "@/lib/enrichment/classifyEnrichment";
 import { resolveDeveloperDomain } from "@/lib/enrichment/developerDomainRegistry";
 import { applyAcceptedField } from "@/lib/enrichment/applyAcceptedField";
+import { buildEntityMatchProposal, resolveBuilderMatch, resolveLocalityMatch, type EntityMatchProposal } from "@/lib/enrichment/resolveNamedEntity";
 import { godrejPropertiesAdapter, GODREJ_SKY_SHORE_PROJECT_URL } from "@/lib/enrichment/adapters/godrejPropertiesAdapter";
 import { adaniRealtyAdapter, ADANI_LINKBAY_RESIDENCES_PROJECT_URL } from "@/lib/enrichment/adapters/adaniRealtyAdapter";
 import type { EnrichmentField, OfficialSourceAdapter } from "@/lib/enrichment/types";
 import { buildProjectReviewCompleteness } from "@/lib/ingestion/reviewFieldRegistry";
 import type { ProjectImportPayload } from "@/lib/ingestion/connectors/fileImport/types";
+import { PRIMARY_CITY_SLUG } from "@/lib/queries";
 import { friendlyPrismaError } from "./errors";
 import type { Prisma } from "@prisma/client";
 
@@ -18,6 +20,9 @@ export type EnrichProjectStatus = "SUCCESS" | "NO_SOURCE" | "SOURCE_UNAVAILABLE"
 export interface EnrichProjectResult {
   status: EnrichProjectStatus;
   fields?: EnrichmentField[];
+  /** Phase 33 -- only present when the source produced a developerGroup/locality name to try resolving against the existing Builder/Locality tables. Never creates a row; see resolveNamedEntity.ts. */
+  builderMatch?: EntityMatchProposal;
+  localityMatch?: EntityMatchProposal;
   error?: string;
 }
 
@@ -87,12 +92,75 @@ export async function enrichProjectAction(stagingRecordId: string): Promise<Enri
     { url: source.projectUrl, tier: source.adapter.tier }
   );
 
-  const hasNewInfo = fields.some((f) => f.classification === "GREEN_NEW" || f.classification === "YELLOW" || f.classification === "CONFLICT");
+  const { builderMatch, localityMatch } = await resolveBuilderAndLocalityMatches(fields, payload);
+
+  const hasNewInfo =
+    fields.some((f) => f.classification === "GREEN_NEW" || f.classification === "YELLOW" || f.classification === "CONFLICT") ||
+    (builderMatch && builderMatch.classification !== "MISSING" && builderMatch.classification !== "CONFIRMED") ||
+    (localityMatch && localityMatch.classification !== "MISSING" && localityMatch.classification !== "CONFIRMED");
   if (!hasNewInfo) {
-    return { status: "NO_NEW_INFO", fields };
+    return { status: "NO_NEW_INFO", fields, builderMatch, localityMatch };
   }
 
-  return { status: "SUCCESS", fields };
+  return { status: "SUCCESS", fields, builderMatch, localityMatch };
+}
+
+/**
+ * Phase 33 -- when the source produced a `developerGroup` and/or `locality`
+ * fact, tries to resolve that NAME against the existing Builder/Locality
+ * tables (never creates a row). Only queries the DB when there's actually a
+ * proposed name to resolve, so a source that never mentions either (e.g.
+ * Adani's page has no discrete locality field, per Phase 31) costs nothing
+ * extra.
+ */
+async function resolveBuilderAndLocalityMatches(
+  fields: EnrichmentField[],
+  payload: ProjectImportPayload
+): Promise<{ builderMatch?: EntityMatchProposal; localityMatch?: EntityMatchProposal }> {
+  const developerGroupField = fields.find((f) => f.key === "developerGroup");
+  const localityField = fields.find((f) => f.key === "locality");
+
+  const [builderMatch, localityMatch] = await Promise.all([
+    developerGroupField?.proposedValue
+      ? (async () => {
+          const builders = await prisma.builder.findMany({ select: { id: true, name: true, legalNames: true, reraNumber: true } });
+          const currentBuilder = payload.builderId ? (builders.find((b) => b.id === payload.builderId) ?? null) : null;
+          const match = resolveBuilderMatch(builders, developerGroupField.proposedValue!);
+          return buildEntityMatchProposal(
+            "builder",
+            "Builder",
+            developerGroupField.proposedValue!,
+            payload.builderId ?? null,
+            currentBuilder?.name ?? null,
+            match
+          );
+        })()
+      : Promise.resolve(undefined),
+    localityField?.proposedValue
+      ? (async () => {
+          const city = await prisma.city.findUnique({ where: { slug: PRIMARY_CITY_SLUG }, select: { id: true } });
+          const localities = city
+            ? await prisma.locality.findMany({
+                where: { cityId: city.id },
+                select: { id: true, name: true, aliases: { select: { alias: true } } },
+              })
+            : [];
+          const flattened = localities.map((l) => ({ id: l.id, name: l.name, aliases: l.aliases.map((a) => a.alias) }));
+          const currentLocality = payload.localityId ? (localities.find((l) => l.id === payload.localityId) ?? null) : null;
+          const match = resolveLocalityMatch(flattened, localityField.proposedValue!);
+          return buildEntityMatchProposal(
+            "locality",
+            "Locality",
+            localityField.proposedValue!,
+            payload.localityId ?? null,
+            currentLocality?.name ?? null,
+            match
+          );
+        })()
+      : Promise.resolve(undefined),
+  ]);
+
+  return { builderMatch, localityMatch };
 }
 
 export type AcceptEnrichmentFieldStatus = "SUCCESS" | "NOT_FOUND" | "NOT_PENDING" | "INVALID_FIELD" | "INVALID_VALUE" | "ERROR";
@@ -156,6 +224,67 @@ export async function acceptEnrichmentFieldAction(
     await prisma.ingestStagingRecord.update({
       where: { id: stagingRecordId },
       data: { payload: applied.payload as unknown as Prisma.InputJsonValue },
+    });
+  } catch (error) {
+    return { status: "ERROR", error: friendlyPrismaError(error) };
+  }
+
+  return { status: "SUCCESS" };
+}
+
+export type AcceptEntityMatchStatus = "SUCCESS" | "NOT_FOUND" | "NOT_PENDING" | "INVALID_ENTITY" | "ERROR";
+
+export interface AcceptEntityMatchResult {
+  status: AcceptEntityMatchStatus;
+  error?: string;
+}
+
+/**
+ * Persists a founder-selected EXISTING Builder/Locality id into the existing
+ * PENDING staging record's payload (Phase 33 Part F/G) -- never creates a
+ * Builder or Locality row, never writes to Project, and never touches the
+ * staging record's own status. `existingId` is re-verified against the real
+ * table on every call (Part L "invalid entity ID rejected") rather than
+ * trusted from the client, since a stale/tampered id must never silently
+ * land in the staging payload.
+ *
+ * Same auth bar as acceptEnrichmentFieldAction (Part L) -- this is a
+ * staging-only write, not the higher-stakes catalog write approval requires.
+ */
+export async function acceptEntityMatchAction(
+  stagingRecordId: string,
+  entityKind: "builder" | "locality",
+  existingId: string
+): Promise<AcceptEntityMatchResult> {
+  await requireMutateSession();
+
+  const record = await prisma.ingestStagingRecord.findUnique({ where: { id: stagingRecordId } });
+  if (!record) {
+    return { status: "NOT_FOUND", error: "Staging record not found." };
+  }
+  if (record.entityType !== "Project") {
+    return { status: "ERROR", error: "Builder/Locality resolution is only available for Project staging records." };
+  }
+  if (record.status !== "PENDING") {
+    return { status: "NOT_PENDING", error: "This record is no longer pending review -- it has already been approved or rejected." };
+  }
+
+  const exists =
+    entityKind === "builder"
+      ? await prisma.builder.findUnique({ where: { id: existingId }, select: { id: true } })
+      : await prisma.locality.findUnique({ where: { id: existingId }, select: { id: true } });
+  if (!exists) {
+    return { status: "INVALID_ENTITY", error: `This ${entityKind} no longer exists.` };
+  }
+
+  const payload = record.payload as unknown as Record<string, unknown>;
+  const payloadKey = entityKind === "builder" ? "builderId" : "localityId";
+  const updatedPayload = { ...payload, [payloadKey]: existingId };
+
+  try {
+    await prisma.ingestStagingRecord.update({
+      where: { id: stagingRecordId },
+      data: { payload: updatedPayload as unknown as Prisma.InputJsonValue },
     });
   } catch (error) {
     return { status: "ERROR", error: friendlyPrismaError(error) };
