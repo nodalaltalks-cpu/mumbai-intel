@@ -18,6 +18,7 @@ describe("discovery entityType/status isolation from the existing staging pipeli
     "DISCOVERED",
     "SOURCE_FOUND",
     "READY_FOR_ENRICHMENT",
+    "PROJECT_STAGED",
     "ENRICHED",
     "NEEDS_REVIEW",
     "REJECTED_DUPLICATE",

@@ -25,11 +25,19 @@ export type DiscoveryDuplicateStatus = "EXACT" | "CLEAR_ALIAS" | "AMBIGUOUS" | "
 /** Part G: a project's official developer source is either confidently identified via the curated registry, or honestly unknown — never guessed. */
 export type OfficialSourceStatus = "IDENTIFIED" | "OFFICIAL_SOURCE_UNKNOWN";
 
-/** Part H's candidate lifecycle. ENRICHED is reserved for a future phase (once a candidate becomes a real Project staging record and is actually enriched) — nothing in this phase ever sets it. */
+/**
+ * Part H's candidate lifecycle. PROJECT_STAGED (Phase 40) is the real
+ * outcome of a successful Include: the candidate now has a genuine
+ * `entityType: "Project"` IngestStagingRecord sitting in the EXISTING
+ * Project Review Queue. ENRICHED is reserved for a later phase (once that
+ * staged Project is actually enriched AND approved) — nothing in this phase
+ * ever sets it.
+ */
 export type DiscoveryStatus =
   | "DISCOVERED"
   | "SOURCE_FOUND"
   | "READY_FOR_ENRICHMENT"
+  | "PROJECT_STAGED"
   | "ENRICHED"
   | "NEEDS_REVIEW"
   | "REJECTED_DUPLICATE"

@@ -18,6 +18,7 @@ const STATUS_TONE: Record<DiscoveryStatus, BadgeTone> = {
   DISCOVERED: "muted",
   SOURCE_FOUND: "info",
   READY_FOR_ENRICHMENT: "positive",
+  PROJECT_STAGED: "positive",
   ENRICHED: "positive",
   NEEDS_REVIEW: "warning",
   REJECTED_DUPLICATE: "negative",
@@ -45,11 +46,12 @@ export default function DiscoveryCandidateList({
   onAction,
 }: {
   rows: DiscoveryCandidateRow[];
-  onAction: (id: string, action: DiscoveryFounderAction) => Promise<{ ok: boolean; error?: string }>;
+  onAction: (id: string, action: DiscoveryFounderAction) => Promise<{ ok: boolean; error?: string; projectStagingRecordId?: string }>;
 }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [localStatus, setLocalStatus] = useState<Record<string, DiscoveryStatus>>({});
+  const [stagedProjectId, setStagedProjectId] = useState<Record<string, string>>({});
 
   async function handleAction(id: string, action: DiscoveryFounderAction) {
     setBusyId(id);
@@ -57,7 +59,9 @@ export default function DiscoveryCandidateList({
     setBusyId(null);
     if (result.ok) {
       setErrors((prev) => ({ ...prev, [id]: "" }));
-      setLocalStatus((prev) => ({ ...prev, [id]: action === "EXCLUDE" ? "EXCLUDED" : action === "REVIEW" ? "NEEDS_REVIEW" : "READY_FOR_ENRICHMENT" }));
+      const next: DiscoveryStatus = action === "EXCLUDE" ? "EXCLUDED" : action === "REVIEW" ? "NEEDS_REVIEW" : "PROJECT_STAGED";
+      setLocalStatus((prev) => ({ ...prev, [id]: next }));
+      if (result.projectStagingRecordId) setStagedProjectId((prev) => ({ ...prev, [id]: result.projectStagingRecordId! }));
     } else {
       setErrors((prev) => ({ ...prev, [id]: result.error ?? "Could not update this candidate." }));
     }
@@ -110,13 +114,20 @@ export default function DiscoveryCandidateList({
                 </td>
                 <td className="px-3 py-2 align-top">
                   <Badge tone={STATUS_TONE[status]}>{status.replace(/_/g, " ")}</Badge>
+                  {stagedProjectId[row.id] ? (
+                    <p className="mt-1">
+                      <a href={`/admin/data-sync/review`} className="text-[10px] text-accent hover:underline">
+                        View in Project Review Queue →
+                      </a>
+                    </p>
+                  ) : null}
                 </td>
                 <td className="px-3 py-2 align-top">
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-1.5">
                       <button
                         type="button"
-                        disabled={busy}
+                        disabled={busy || status === "PROJECT_STAGED" || status === "REJECTED_DUPLICATE"}
                         onClick={() => handleAction(row.id, "INCLUDE")}
                         className="rounded-sm border border-positive/40 px-2 py-0.5 text-[10px] font-mono uppercase text-positive hover:bg-positive/10 disabled:opacity-50"
                       >

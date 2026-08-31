@@ -27,6 +27,16 @@ const CURATED_DEVELOPER_DOMAINS: Record<string, string> = {
   // www.kalpataru.com's own JSON-LD Organization.name: "Kalpataru Limited").
   "kalpataru limited": "https://www.kalpataru.com",
   "kalpataru": "https://www.kalpataru.com",
+  // Phase 40 -- fourth developer, the first discovered via Phase 39's
+  // area-discovery pipeline rather than picked by hand. Confirmed via
+  // gurukruparealcon.com's own homepage JSON-LD (Organization.name
+  // "Gurukrupa Realcon", matching LinkedIn/Instagram/YouTube/Facebook), a
+  // clean robots.txt, and a real sitemap listing 25 real projects including
+  // gurukrupa-ekam -- NOT gurukrupagroup.com (Phase 38's guess, which turned
+  // out to be a real but unrelated Gurukrupa-branded site with no matching
+  // project), and NOT thegurukruparealcon.com (a thinner lookalike with no
+  // JSON-LD, no matching phone number, and a 404 robots.txt).
+  "gurukrupa realcon": "https://gurukruparealcon.com",
 };
 
 function normalize(name: string): string {

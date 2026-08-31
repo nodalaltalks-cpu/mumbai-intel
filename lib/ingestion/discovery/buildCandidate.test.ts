@@ -72,12 +72,12 @@ describe("buildDiscoveryCandidate (Phase 39 — end-to-end pure assembly)", () =
   it("a developer not in the curated registry with no duplicate becomes DISCOVERED (not SOURCE_FOUND)", () => {
     const built = buildDiscoveryCandidate(
       {
-        projectName: "Gurukrupa Ekam",
-        developerName: "Gurukrupa Realcon",
+        projectName: "Labharti Labh Sapphire",
+        developerName: "Labharti Realties",
         areaName: "Andheri West",
         localityId: ANDHERI_WEST,
         batchLabel: "Andheri West — Batch 001",
-        sourceUrl: "https://example-portal.test/gurukrupa-ekam",
+        sourceUrl: "https://example-portal.test/labharti-labh-sapphire",
         sourceType: "LISTING_PORTAL",
         discoverySource: "existing Project data",
         confidence: "Low",

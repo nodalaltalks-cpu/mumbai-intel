@@ -6,6 +6,7 @@ const ALL_STATUSES: DiscoveryStatus[] = [
   "DISCOVERED",
   "SOURCE_FOUND",
   "READY_FOR_ENRICHMENT",
+  "PROJECT_STAGED",
   "ENRICHED",
   "NEEDS_REVIEW",
   "REJECTED_DUPLICATE",
@@ -35,5 +36,11 @@ describe("applyFounderDiscoveryAction (Phase 39 Part I)", () => {
     const result = applyFounderDiscoveryAction("REJECTED_DUPLICATE", "INCLUDE");
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toContain("existing project");
+  });
+
+  it("15. INCLUDE is refused for an already-PROJECT_STAGED candidate — never stage the same candidate twice (Phase 40)", () => {
+    const result = applyFounderDiscoveryAction("PROJECT_STAGED", "INCLUDE");
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("already been staged");
   });
 });
