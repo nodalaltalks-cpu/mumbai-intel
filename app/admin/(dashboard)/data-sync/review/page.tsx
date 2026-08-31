@@ -11,6 +11,7 @@ import {
   buildProjectReviewCompleteness,
   buildTransactionReviewCompleteness,
 } from "@/lib/ingestion/reviewFieldRegistry";
+import { computeApprovalReadiness } from "@/lib/ingestion/projectApprovalReadiness";
 import ReviewQueueList, { type ReviewRecord } from "@/app/admin/components/ReviewQueueList";
 import EmptyState from "@/app/components/ui/EmptyState";
 
@@ -209,6 +210,11 @@ export default async function DataSyncReviewPage() {
               ? buildInfraReviewCompleteness(infraPayload)
               : null;
 
+    // Phase 34 Part F: readiness is a Project-only concept, derived from the
+    // SAME completeness object above -- never a second calculation, never
+    // computed for Builder/Locality/Transaction/InfraAsset records.
+    const readiness = isProject && completeness ? computeApprovalReadiness(completeness) : null;
+
     return {
       id: record.id,
       createdAt: record.createdAt.toISOString(),
@@ -222,6 +228,7 @@ export default async function DataSyncReviewPage() {
       noMatchNote,
       completeness,
       isProject,
+      readiness,
     };
   });
 

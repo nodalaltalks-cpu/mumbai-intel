@@ -15,7 +15,7 @@ import type {
   ProjectImportPayload,
   TransactionImportPayload,
 } from "@/lib/ingestion/connectors/fileImport/types";
-import { buildProjectData, type ProjectSchemaInput } from "@/lib/project-data";
+import { buildProjectData, toProjectSchemaInput } from "@/lib/project-data";
 import { ensureUniqueSlug } from "@/lib/slug";
 import { logAudit } from "@/lib/audit";
 import { revalidateInfra } from "@/lib/cache";
@@ -194,52 +194,6 @@ async function applyInfraAssetApproval(record: { targetId: string | null; payloa
     select: { id: true },
   });
   return created.id;
-}
-
-/** Builds the exact shape buildProjectData() (lib/actions/projects.ts) expects, from a stored ProjectImportPayload. */
-function toProjectSchemaInput(payload: ProjectImportPayload): ProjectSchemaInput {
-  return {
-    name: payload.name,
-    slug: undefined,
-    tagline: undefined,
-    description: payload.description,
-    builderId: payload.builderId,
-    developerGroup: payload.developerGroup,
-    localityId: payload.localityId,
-    microMarketId: undefined,
-    highlights: undefined,
-    status: payload.status,
-    category: payload.category,
-    address: payload.address,
-    latitude: payload.latitude,
-    longitude: payload.longitude,
-    launchDate: payload.launchDateIso ? new Date(payload.launchDateIso) : undefined,
-    promisedPossession: payload.possessionDateIso ? new Date(payload.possessionDateIso) : undefined,
-    actualPossession: undefined,
-    constructionPercent: undefined,
-    reraNumber: payload.reraNumber,
-    reraStatus: payload.reraStatus,
-    totalUnits: payload.totalUnits,
-    totalTowers: payload.totalTowers,
-    landAreaAcres: undefined,
-    priceMinRupees: payload.priceMinRupees,
-    priceMaxRupees: payload.priceMaxRupees,
-    dataSource: payload.dataSource,
-    confidence: "MEDIUM",
-    sourceRef: payload.sourceRef,
-    videoUrl: undefined,
-    tour360Url: undefined,
-    // Always false, even on approval — publishing an imported record is a separate,
-    // deliberate admin action, not something "approve" implies on its own.
-    isPublished: false,
-    isFeatured: false,
-    isTrending: false,
-    isLuxury: false,
-    isAffordable: false,
-    metaTitle: undefined,
-    metaDescription: undefined,
-    ogImageUrl: undefined,
-  };
 }
 
 async function applyProjectApproval(record: { targetId: string | null; payload: unknown }): Promise<string> {

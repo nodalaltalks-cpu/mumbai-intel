@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { CONFIDENCE_LEVELS, DATA_SOURCES, PAYMENT_PLAN_TYPES, PROJECT_STATUSES, PROPERTY_CATEGORIES } from "@/lib/project-meta";
+import type { ProjectImportPayload } from "@/lib/ingestion/connectors/fileImport/types";
 
 /**
  * Plain (non-"use server") module — Next.js requires every export of a
@@ -243,5 +244,124 @@ export function buildProjectData(data: ProjectSchemaInput) {
     metaTitle: data.metaTitle ?? null,
     metaDescription: data.metaDescription ?? null,
     ogImageUrl: data.ogImageUrl ?? null,
+  };
+}
+
+/**
+ * Reads a field that exists in the Review Queue's 44-field registry and is a
+ * real scalar column on Project, but is NOT part of the strict
+ * ProjectImportPayload TS interface -- Phase 32's acceptEnrichmentFieldAction
+ * writes these as extra untyped keys on the same staging payload object
+ * (reviewFieldRegistry.ts's own established "raw untyped cast" convention;
+ * see its doc comment). Returns undefined for anything that isn't a
+ * non-blank string, same tolerance as every other optional field here.
+ */
+function readRawString(payload: unknown, key: string): string | undefined {
+  const value = (payload as Record<string, unknown>)[key];
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function readRawNumber(payload: unknown, key: string): number | undefined {
+  const value = (payload as Record<string, unknown>)[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+/**
+ * Builds the exact shape buildProjectData() (above, same file) expects, from
+ * a stored ProjectImportPayload. Lives here (not lib/actions/ingestion.ts,
+ * where it used to be defined and stay private) because that file has a
+ * `"use server"` directive, and Next.js requires every export of a
+ * `"use server"` file to itself be an async Server Action -- this is a plain
+ * synchronous mapper, so it belongs in this shared, non-action module
+ * instead (the same reason buildProjectData/ProjectSchemaInput already live
+ * here rather than in lib/actions/projects.ts).
+ *
+ * Phase 35 fix: 13 registry-tracked, Project-scalar fields that
+ * acceptEnrichmentFieldAction can persist into the staging payload were
+ * previously hardcoded to `undefined` here (or omitted outright) --
+ * `applyProjectApproval` would silently discard them on approval even
+ * though the founder had explicitly accepted them. Fixed below: tagline,
+ * highlights, googleMapsUrl, reraCertificateUrl, paymentPlanType,
+ * paymentPlanDescription, constructionPercent, landAreaAcres, videoUrl,
+ * tour360Url, metaTitle, metaDescription, ogImageUrl.
+ *
+ * Deliberately still NOT mapped here -- not a mapping gap, a genuinely
+ * separate limitation each (see Phase 35's final report):
+ *  - microMarketId: the staging payload only ever holds a raw NAME string
+ *    (no Phase 33-style name -> MicroMarket-id resolution exists yet) --
+ *    writing it straight into the microMarketId foreign key would risk a
+ *    constraint violation, the same hazard Phase 33 solved for
+ *    builderId/localityId specifically, not (yet) for microMarket.
+ *  - actualPossession: the Project column is a real DateTime, but the
+ *    registry/Phase 32 treat this field as free text -- no adapter has ever
+ *    populated it, and coercing arbitrary prose into a Date risks silent
+ *    corruption rather than a fix.
+ *  - amenities/specifications/documents/faqs/images: these registry fields
+ *    are Prisma RELATIONS (ProjectAmenity[]/ProjectSpecification[]/
+ *    ProjectDocument[]/ProjectFaq[]/ProjectImage[]), not scalar Project
+ *    columns -- buildProjectData() has no mechanism to create relation
+ *    rows, and building one is a real feature, not a mapping fix.
+ *  - coverImage: Project has no coverImageUrl column at all (only
+ *    Locality/Builder do) -- nothing exists to map it to.
+ *  - brochure: Project.brochureUrl exists but is deliberately excluded from
+ *    ProjectSchemaInput -- the live brochure system requires coordinated
+ *    fields (version, filename, mime type, uploaded-by) a bare accepted URL
+ *    can't safely populate alone.
+ */
+export function toProjectSchemaInput(payload: ProjectImportPayload): ProjectSchemaInput {
+  const rawHighlights = (payload as unknown as Record<string, unknown>).highlights;
+  const highlights = Array.isArray(rawHighlights) && rawHighlights.every((h) => typeof h === "string") ? rawHighlights.join("\n") : undefined;
+
+  const rawPaymentPlanType = readRawString(payload, "paymentPlanType");
+  const paymentPlanType = rawPaymentPlanType && (PAYMENT_PLAN_TYPES as readonly string[]).includes(rawPaymentPlanType)
+    ? (rawPaymentPlanType as ProjectSchemaInput["paymentPlanType"])
+    : undefined;
+
+  return {
+    name: payload.name,
+    slug: undefined,
+    tagline: readRawString(payload, "tagline"),
+    description: payload.description,
+    builderId: payload.builderId,
+    developerGroup: payload.developerGroup,
+    localityId: payload.localityId,
+    microMarketId: undefined,
+    highlights,
+    status: payload.status,
+    category: payload.category,
+    address: payload.address,
+    famousLandmark: undefined,
+    latitude: payload.latitude,
+    longitude: payload.longitude,
+    googleMapsUrl: readRawString(payload, "googleMapsUrl"),
+    launchDate: payload.launchDateIso ? new Date(payload.launchDateIso) : undefined,
+    promisedPossession: payload.possessionDateIso ? new Date(payload.possessionDateIso) : undefined,
+    actualPossession: undefined,
+    constructionPercent: readRawNumber(payload, "constructionPercent"),
+    reraNumber: payload.reraNumber,
+    reraStatus: payload.reraStatus,
+    reraCertificateUrl: readRawString(payload, "reraCertificateUrl"),
+    totalUnits: payload.totalUnits,
+    totalTowers: payload.totalTowers,
+    landAreaAcres: readRawNumber(payload, "landAreaAcres"),
+    priceMinRupees: payload.priceMinRupees,
+    priceMaxRupees: payload.priceMaxRupees,
+    paymentPlanType,
+    paymentPlanDescription: readRawString(payload, "paymentPlanDescription"),
+    dataSource: payload.dataSource,
+    confidence: "MEDIUM",
+    sourceRef: payload.sourceRef,
+    videoUrl: readRawString(payload, "videoUrl"),
+    tour360Url: readRawString(payload, "tour360Url"),
+    // Always false, even on approval — publishing an imported record is a separate,
+    // deliberate admin action, not something "approve" implies on its own.
+    isPublished: false,
+    isFeatured: false,
+    isTrending: false,
+    isLuxury: false,
+    isAffordable: false,
+    metaTitle: readRawString(payload, "metaTitle"),
+    metaDescription: readRawString(payload, "metaDescription"),
+    ogImageUrl: readRawString(payload, "ogImageUrl"),
   };
 }

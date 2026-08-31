@@ -10,6 +10,7 @@ import {
 } from "@/lib/actions/ingestion";
 import { formatDate } from "@/lib/format";
 import type { ReviewCompleteness } from "@/lib/ingestion/reviewFieldRegistry";
+import type { ApprovalReadinessResult } from "@/lib/ingestion/projectApprovalReadiness";
 import { acceptEnrichmentFieldAction, acceptEntityMatchAction, enrichProjectAction, type EnrichProjectResult } from "@/lib/actions/enrichment";
 import type { EnrichmentField } from "@/lib/enrichment/types";
 import ConfirmButton from "./ConfirmButton";
@@ -31,6 +32,8 @@ export interface ReviewRecord {
   completeness: ReviewCompleteness | null;
   /** Phase 29 Part A — gates the "Enrich Project" button to Project records only. */
   isProject: boolean;
+  /** Phase 34 Part F — Project-only approval-readiness verdict, derived from `completeness`; null for every non-Project record. */
+  readiness: ApprovalReadinessResult | null;
 }
 
 interface EnrichmentViewState {
@@ -214,24 +217,46 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
           </div>
 
           {record.completeness ? (
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
-              <div className="flex flex-wrap items-center gap-3 text-[11px]">
-                <span className="font-mono text-foreground">
-                  {record.completeness.receivedCount} / {record.completeness.totalFields} fields received
-                </span>
-                <span className="text-positive">🟢 {record.completeness.receivedCount} Received</span>
-                <span className="text-negative">🔴 {record.completeness.missingCount} Missing</span>
-                {record.completeness.needsReviewCount > 0 ? (
-                  <span className="text-warning">🟠 {record.completeness.needsReviewCount} Needs Review</span>
-                ) : null}
+            <div className="mt-3 border-t border-border pt-3">
+              {record.isProject && record.readiness ? (
+                <button
+                  type="button"
+                  onClick={() => setDetailsRecordId(record.id)}
+                  className="mb-2 flex w-full flex-col items-start gap-1 rounded-sm border border-border p-2 text-left hover:border-accent"
+                >
+                  {record.readiness.status === "READY" ? (
+                    <span className="text-[11px] text-positive">✓ Approval Ready</span>
+                  ) : (
+                    <span className="text-[11px] text-warning">⚠ {record.readiness.neededFieldLabels.length} field(s) need attention</span>
+                  )}
+                  {record.readiness.missingFieldLabels.length > 0 ? (
+                    <span className="text-[10px] text-muted">
+                      Missing: {record.readiness.missingFieldLabels.slice(0, 3).join(", ")}
+                      {record.readiness.missingFieldLabels.length > 3 ? `, +${record.readiness.missingFieldLabels.length - 3} more` : ""}
+                    </span>
+                  ) : null}
+                </button>
+              ) : null}
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-3 text-[11px]">
+                  <span className="font-mono text-foreground">
+                    {record.completeness.receivedCount} / {record.completeness.totalFields} fields received
+                  </span>
+                  <span className="text-positive">🟢 {record.completeness.receivedCount} Received</span>
+                  <span className="text-negative">🔴 {record.completeness.missingCount} Missing</span>
+                  {record.completeness.needsReviewCount > 0 ? (
+                    <span className="text-warning">🟠 {record.completeness.needsReviewCount} Needs Review</span>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDetailsRecordId(record.id)}
+                  className="rounded-sm border border-border px-2 py-1 text-[11px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+                >
+                  View Data Details
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setDetailsRecordId(record.id)}
-                className="rounded-sm border border-border px-2 py-1 text-[11px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
-              >
-                View Data Details
-              </button>
             </div>
           ) : null}
         </div>
