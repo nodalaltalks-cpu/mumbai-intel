@@ -24,6 +24,8 @@ import { kalpataruAdapter, KALPATARU_VIAN_PROJECT_URL } from "@/lib/enrichment/a
 import { gurukrupaRealconAdapter, GURUKRUPA_EKAM_PROJECT_URL } from "@/lib/enrichment/adapters/gurukrupaRealconAdapter";
 import { puravankaraAdapter, PURVA_ESTRELLA_PROJECT_URL } from "@/lib/enrichment/adapters/puravankaraAdapter";
 import { lodhaAdapter, LODHA_CULLINAN_PROJECT_URL } from "@/lib/enrichment/adapters/lodhaAdapter";
+import { oberoiRealtyAdapter, OBEROI_SKY_HEIGHTS_PROJECT_URL, OBEROI_SPRINGS_PROJECT_URL } from "@/lib/enrichment/adapters/oberoiRealtyAdapter";
+import { koltePatilAdapter, KOLTE_PATIL_SERENOVA_PROJECT_URL } from "@/lib/enrichment/adapters/koltePatilAdapter";
 import { resolveProjectSource, type DeveloperSource } from "@/lib/enrichment/projectSourceResolution";
 import { buildEnrichmentSummary, withFieldTouched, type ProjectEnrichmentStatus } from "@/lib/enrichment/enrichmentSummary";
 import type { EnrichmentField } from "@/lib/enrichment/types";
@@ -102,6 +104,21 @@ const CURATED_SOURCES: Record<string, DeveloperSource> = {
     adapter: lodhaAdapter,
     projects: { "lodha cullinan": LODHA_CULLINAN_PROJECT_URL },
     sitemapUrl: "https://www.lodhagroup.com/sitemap.xml",
+  },
+  // Phase 47 -- seventh developer, both hand-verified against oberoirealty.com's
+  // own sitemap as real Andheri West residential projects.
+  "https://www.oberoirealty.com": {
+    adapter: oberoiRealtyAdapter,
+    projects: {
+      "oberoi sky heights": OBEROI_SKY_HEIGHTS_PROJECT_URL,
+      "oberoi springs": OBEROI_SPRINGS_PROJECT_URL,
+    },
+    sitemapUrl: "https://www.oberoirealty.com/sitemap.xml",
+  },
+  "https://www.koltepatil.com": {
+    adapter: koltePatilAdapter,
+    projects: { "serenova": KOLTE_PATIL_SERENOVA_PROJECT_URL },
+    sitemapUrl: "https://www.koltepatil.com/sitemap.xml",
   },
 };
 

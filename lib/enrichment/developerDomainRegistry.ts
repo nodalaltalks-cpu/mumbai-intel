@@ -48,6 +48,17 @@ const CURATED_DEVELOPER_DOMAINS: Record<string, string> = {
   "platinum corp": "https://www.platinumcorp.in",
   "lodha": "https://www.lodhagroup.com",
   "macrotech developers": "https://www.lodhagroup.com",
+  // Phase 47 -- 25-Andheri-West-project bulk test, seventh developer.
+  // Confirmed via oberoirealty.com's own Organization JSON-LD (name "Oberoi
+  // Realty", matching real facebook/instagram/youtube/linkedin profiles), a
+  // clean robots.txt, and a real Screaming-Frog-generated sitemap listing
+  // genuine Andheri West project pages -- NOT a lead-gen microsite.
+  "oberoi realty": "https://www.oberoirealty.com",
+  // Phase 47 -- eighth developer. Confirmed via koltepatil.com's own robots.txt
+  // (explicitly Allow: / for GPTBot/ClaudeBot/anthropic-ai), a real sitemap,
+  // and structured JSON-LD on the actual Serenova project page.
+  "kolte patil developers ltd.": "https://www.koltepatil.com",
+  "kolte patil": "https://www.koltepatil.com",
 };
 
 function normalize(name: string): string {

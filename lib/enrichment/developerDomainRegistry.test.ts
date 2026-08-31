@@ -24,4 +24,12 @@ describe("resolveDeveloperDomain (Phase 28 Part E — curated, never guessed)", 
     expect(resolveDeveloperDomain("Platinum Corp")).toBe("https://www.platinumcorp.in");
     expect(resolveDeveloperDomain("Lodha")).toBe("https://www.lodhagroup.com");
   });
+
+  it("Phase 47 — resolves Oberoi Realty, the seventh curated developer", () => {
+    expect(resolveDeveloperDomain("Oberoi Realty")).toBe("https://www.oberoirealty.com");
+  });
+
+  it("Phase 47 — resolves Kolte Patil, the eighth curated developer", () => {
+    expect(resolveDeveloperDomain("Kolte Patil Developers Ltd.")).toBe("https://www.koltepatil.com");
+  });
 });
