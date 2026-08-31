@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mocked BEFORE importing the module under test, matching the existing
 // transactionFileImportRunner.test.ts / apifyBridge.test.ts convention.
@@ -107,6 +107,15 @@ describe("enrichProjectAction (Phase 29 Part J/K — no writes, no approval, pro
     builderFindManyMock.mockResolvedValue([] as never);
     localityFindManyMock.mockResolvedValue([] as never);
     cityFindUniqueMock.mockResolvedValue({ id: "city-mumbai" } as never);
+    // Phase 43 -- an uncurated project name falls through to
+    // resolveProjectSource's LIVE sitemap-discovery tier; stubbing `fetch`
+    // to a clean 404 keeps every test in this file offline/deterministic
+    // (never a real network call) while still correctly reaching NO_SOURCE.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404, text: async () => "" }));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("1. is gated behind requireMutateSession (the same auth bar as every other mutate action)", async () => {
@@ -204,11 +213,72 @@ describe("enrichProjectAction (Phase 29 Part J/K — no writes, no approval, pro
 
   it("11. Adani adapter failure -> SOURCE_UNAVAILABLE, same contract as Godrej's failure path", async () => {
     stagingFindUniqueMock.mockResolvedValue(
-      stagingRecord({ payload: { ...GODREJ_PAYLOAD, developerGroup: "Adani Realty & RC Group" } })
+      stagingRecord({ payload: { ...GODREJ_PAYLOAD, name: "Linkbay Residences", developerGroup: "Adani Realty & RC Group" } })
     );
     adaniFetchProjectFactsMock.mockRejectedValue(new Error("fetch failed"));
     const result = await enrichProjectAction("stage-1");
     expect(result.status).toBe("SOURCE_UNAVAILABLE");
+  });
+
+  it("12. Phase 43 — one developer, MULTIPLE projects: 'Western Heights' fetches Western Heights' own URL, never Linkbay's", async () => {
+    stagingFindUniqueMock.mockResolvedValue(
+      stagingRecord({ payload: { ...GODREJ_PAYLOAD, name: "Western Heights", developerGroup: "Adani Realty & RC Group" } })
+    );
+    adaniFetchProjectFactsMock.mockResolvedValue({});
+    const result = await enrichProjectAction("stage-1");
+    expect(result.status).not.toBe("NO_SOURCE");
+    expect(adaniFetchProjectFactsMock).toHaveBeenCalledWith("https://www.adanirealty.com/residential-projects/mumbai/western-heights");
+  });
+
+  it("13. Phase 43 — a project name not curated for this developer and with no discovery sourceRef reports NO_SOURCE, never the wrong project's URL", async () => {
+    stagingFindUniqueMock.mockResolvedValue(
+      stagingRecord({ payload: { ...GODREJ_PAYLOAD, name: "Some Brand New Adani Project", developerGroup: "Adani Realty & RC Group", sourceRef: "PM1180000000000" } })
+    );
+    const result = await enrichProjectAction("stage-1");
+    expect(result.status).toBe("NO_SOURCE");
+    expect(adaniFetchProjectFactsMock).not.toHaveBeenCalled();
+  });
+
+  it("14. Phase 43 Part C tier 2 — a project Included straight from discovery resolves via its own already-verified discovery sourceUrl, on the correct domain", async () => {
+    stagingFindUniqueMock.mockImplementation((async (args: { where: { id: string } }) => {
+      if (args.where.id === "stage-1") {
+        return stagingRecord({
+          payload: {
+            ...GODREJ_PAYLOAD,
+            name: "Some Freshly Included Adani Project",
+            developerGroup: "Adani Realty & RC Group",
+            sourceRef: "discovery:disc-1",
+          },
+        });
+      }
+      if (args.where.id === "disc-1") {
+        return { payload: { sourceUrl: "https://www.adanirealty.com/residential-projects/mumbai/some-freshly-included-project" } };
+      }
+      return null;
+    }) as never);
+    adaniFetchProjectFactsMock.mockResolvedValue({});
+
+    const result = await enrichProjectAction("stage-1");
+    expect(result.status).not.toBe("NO_SOURCE");
+    expect(adaniFetchProjectFactsMock).toHaveBeenCalledWith("https://www.adanirealty.com/residential-projects/mumbai/some-freshly-included-project");
+  });
+
+  it("15. Phase 43 Part D — a discovery sourceUrl on a DIFFERENT domain is never trusted, even if a candidate row exists", async () => {
+    stagingFindUniqueMock.mockImplementation((async (args: { where: { id: string } }) => {
+      if (args.where.id === "stage-1") {
+        return stagingRecord({
+          payload: { ...GODREJ_PAYLOAD, name: "Some Brand New Adani Project", developerGroup: "Adani Realty & RC Group", sourceRef: "discovery:disc-1" },
+        });
+      }
+      if (args.where.id === "disc-1") {
+        return { payload: { sourceUrl: "https://example-lead-gen-portal.test/some-brand-new-adani-project" } };
+      }
+      return null;
+    }) as never);
+
+    const result = await enrichProjectAction("stage-1");
+    expect(result.status).toBe("NO_SOURCE");
+    expect(adaniFetchProjectFactsMock).not.toHaveBeenCalled();
   });
 });
 

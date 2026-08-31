@@ -24,7 +24,8 @@ import { kalpataruAdapter, KALPATARU_VIAN_PROJECT_URL } from "@/lib/enrichment/a
 import { gurukrupaRealconAdapter, GURUKRUPA_EKAM_PROJECT_URL } from "@/lib/enrichment/adapters/gurukrupaRealconAdapter";
 import { puravankaraAdapter, PURVA_ESTRELLA_PROJECT_URL } from "@/lib/enrichment/adapters/puravankaraAdapter";
 import { lodhaAdapter, LODHA_CULLINAN_PROJECT_URL } from "@/lib/enrichment/adapters/lodhaAdapter";
-import type { EnrichmentField, OfficialSourceAdapter } from "@/lib/enrichment/types";
+import { resolveProjectSource, type DeveloperSource } from "@/lib/enrichment/projectSourceResolution";
+import type { EnrichmentField } from "@/lib/enrichment/types";
 import { buildProjectReviewCompleteness } from "@/lib/ingestion/reviewFieldRegistry";
 import type { ProjectImportPayload } from "@/lib/ingestion/connectors/fileImport/types";
 import { PRIMARY_CITY_SLUG } from "@/lib/queries";
@@ -44,23 +45,63 @@ export interface EnrichProjectResult {
 }
 
 /**
- * The curated developer-domain -> {project page, adapter} mapping this MVP
- * knows (Phase 29 Part G, extended to a second developer in Phase 31).
- * Resolving a developer's official DOMAIN (via the curated registry) and
- * knowing the specific PROJECT PAGE + which adapter understands that site's
- * markup are separate problems -- this MVP solves both by hand, for exactly
- * the known staged projects, rather than guessing a URL pattern or assuming
- * one adapter's shape works for every developer. Adding a third
- * project/developer means adding one verified row here, the same discipline
- * developerDomainRegistry.ts already uses for domains.
+ * The curated developer-domain -> {adapter, known projects} mapping this MVP
+ * knows (Phase 29 Part G, extended developer-by-developer through Phase 42).
+ *
+ * Phase 43: replaces the earlier one-project-per-domain assumption. Proven
+ * wrong by actually re-running the EXISTING Adani and Gurukrupa Realcon
+ * adapters against a SECOND real project page each (Western Heights;
+ * Gurukrupa Maurya/Dhyanam) -- every adapter's extraction logic already
+ * generalizes across a developer's own projects (it reads whatever URL it's
+ * given, never hardcodes one project's name), so the bottleneck was purely
+ * this map's shape. One adapter is still shared per developer (same CMS
+ * across that developer's own site); `projects` now holds every
+ * hand-verified project this MVP knows for that developer, and
+ * `sitemapUrl` (also hand-confirmed reachable) lets resolveProjectSource
+ * fall back to live, exact-slug-match discovery for a project not yet
+ * curated here -- see lib/enrichment/projectSourceResolution.ts for the
+ * full resolution pipeline and its Part D wrong-project safety guarantee.
  */
-const CURATED_SOURCES: Record<string, { projectUrl: string; adapter: OfficialSourceAdapter }> = {
-  "https://www.godrejproperties.com": { projectUrl: GODREJ_SKY_SHORE_PROJECT_URL, adapter: godrejPropertiesAdapter },
-  "https://www.adanirealty.com": { projectUrl: ADANI_LINKBAY_RESIDENCES_PROJECT_URL, adapter: adaniRealtyAdapter },
-  "https://www.kalpataru.com": { projectUrl: KALPATARU_VIAN_PROJECT_URL, adapter: kalpataruAdapter },
-  "https://gurukruparealcon.com": { projectUrl: GURUKRUPA_EKAM_PROJECT_URL, adapter: gurukrupaRealconAdapter },
-  "https://www.puravankara.com": { projectUrl: PURVA_ESTRELLA_PROJECT_URL, adapter: puravankaraAdapter },
-  "https://www.lodhagroup.com": { projectUrl: LODHA_CULLINAN_PROJECT_URL, adapter: lodhaAdapter },
+const CURATED_SOURCES: Record<string, DeveloperSource> = {
+  "https://www.godrejproperties.com": {
+    adapter: godrejPropertiesAdapter,
+    projects: { "godrej sky shore": GODREJ_SKY_SHORE_PROJECT_URL, "godrej skyshore": GODREJ_SKY_SHORE_PROJECT_URL },
+    sitemapUrl: "https://www.godrejproperties.com/property-sitemap.xml",
+  },
+  "https://www.adanirealty.com": {
+    adapter: adaniRealtyAdapter,
+    projects: {
+      "linkbay residences": ADANI_LINKBAY_RESIDENCES_PROJECT_URL,
+      "adani linkbay residences": ADANI_LINKBAY_RESIDENCES_PROJECT_URL,
+      "western heights": "https://www.adanirealty.com/residential-projects/mumbai/western-heights",
+      "adani western heights": "https://www.adanirealty.com/residential-projects/mumbai/western-heights",
+    },
+    sitemapUrl: "https://www.adanirealty.com/sitemap.xml",
+  },
+  "https://www.kalpataru.com": {
+    adapter: kalpataruAdapter,
+    projects: { "kalpataru vian": KALPATARU_VIAN_PROJECT_URL },
+    sitemapUrl: "https://www.kalpataru.com/sitemap.xml",
+  },
+  "https://gurukruparealcon.com": {
+    adapter: gurukrupaRealconAdapter,
+    projects: {
+      "gurukrupa ekam": GURUKRUPA_EKAM_PROJECT_URL,
+      "gurukrupa maurya": "https://gurukruparealcon.com/projects/gurukrupa-maurya",
+      "gurukrupa dhyanam": "https://gurukruparealcon.com/projects/gurukrupa-dhyanam",
+    },
+    sitemapUrl: "https://gurukruparealcon.com/sitemap.xml",
+  },
+  "https://www.puravankara.com": {
+    adapter: puravankaraAdapter,
+    projects: { "purva estrella": PURVA_ESTRELLA_PROJECT_URL },
+    sitemapUrl: "https://www.puravankara.com/sitemap.xml",
+  },
+  "https://www.lodhagroup.com": {
+    adapter: lodhaAdapter,
+    projects: { "lodha cullinan": LODHA_CULLINAN_PROJECT_URL },
+    sitemapUrl: "https://www.lodhagroup.com/sitemap.xml",
+  },
 };
 
 /**
@@ -94,6 +135,29 @@ export async function enrichProjectAction(stagingRecordId: string): Promise<Enri
     return { status: "NO_SOURCE" };
   }
 
+  // Phase 43 Part C tier 2 -- a project Included straight from discovery
+  // (Phase 40) but not yet hand-curated here can still resolve immediately
+  // via the REAL official URL that discovery already verified for it,
+  // traced back through its own `sourceRef` ("discovery:<candidateId>").
+  // Never trusted blindly: resolveCuratedProjectSource still checks it's on
+  // this SAME resolved developer domain before using it (Part D).
+  let knownSourceUrl: string | null = null;
+  if (payload.sourceRef?.startsWith("discovery:")) {
+    const discoveryCandidateId = payload.sourceRef.slice("discovery:".length);
+    const candidateRecord = await prisma.ingestStagingRecord.findUnique({ where: { id: discoveryCandidateId }, select: { payload: true } });
+    const candidatePayload = candidateRecord?.payload as { sourceUrl?: unknown } | undefined;
+    if (typeof candidatePayload?.sourceUrl === "string") knownSourceUrl = candidatePayload.sourceUrl;
+  }
+
+  const projectSource = await resolveProjectSource(source, domain, payload.name, knownSourceUrl);
+  if (projectSource.status === "NO_SOURCE") {
+    return { status: "NO_SOURCE" };
+  }
+  if (projectSource.status === "AMBIGUOUS") {
+    return { status: "ERROR", error: `Multiple possible official pages found for "${payload.name}" -- needs founder review before enrichment can proceed.` };
+  }
+  const projectUrl = projectSource.projectUrl!;
+
   const [locality, builder] = await Promise.all([
     payload.localityId ? prisma.locality.findUnique({ where: { id: payload.localityId }, select: { name: true } }) : Promise.resolve(null),
     payload.builderId ? prisma.builder.findUnique({ where: { id: payload.builderId }, select: { name: true } }) : Promise.resolve(null),
@@ -101,7 +165,7 @@ export async function enrichProjectAction(stagingRecordId: string): Promise<Enri
 
   let facts;
   try {
-    facts = await source.adapter.fetchProjectFacts(source.projectUrl);
+    facts = await source.adapter.fetchProjectFacts(projectUrl);
   } catch {
     return { status: "SOURCE_UNAVAILABLE" };
   }
@@ -110,7 +174,7 @@ export async function enrichProjectAction(stagingRecordId: string): Promise<Enri
     payload,
     { localityName: locality?.name, builderName: builder?.name },
     facts,
-    { url: source.projectUrl, tier: source.adapter.tier }
+    { url: projectUrl, tier: source.adapter.tier }
   );
 
   const { builderMatch, localityMatch } = await resolveBuilderAndLocalityMatches(fields, payload);

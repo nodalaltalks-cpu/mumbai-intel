@@ -241,7 +241,16 @@ export function extractGurukrupaEkamFacts(html: string): SourceFactsMap {
       facts.longitude = { value: coords.lng, confidence: "High", note: "Parsed from the page's own embedded Google Maps URL (locationAdvantage.map)." };
     }
     if (typeof locationAdvantage?.map === "string") {
-      facts.googleMapsUrl = { value: locationAdvantage.map as string, confidence: "High" };
+      // Phase 43: confirmed against the real gurukrupa-maurya page -- that
+      // project's own CMS `map` field has a real data-entry mistake, the
+      // whole <iframe ...> embed tag's attributes pasted in after the URL
+      // (`...!5m2!1sen!2sin" width="600" height="450" ...`), not just Ekam's
+      // clean bare-URL convention. Truncating at the first literal `"`
+      // recovers the real URL on every project without needing per-project
+      // special-casing.
+      const rawMapValue = locationAdvantage.map as string;
+      const cleanMapUrl = rawMapValue.split('"')[0].trim();
+      facts.googleMapsUrl = { value: cleanMapUrl, confidence: "High" };
     }
   } catch {
     /* ignore */

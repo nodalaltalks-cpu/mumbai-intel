@@ -5,9 +5,10 @@ import { prisma } from "@/lib/prisma";
 import { requireMutateSession } from "@/lib/auth/guard";
 import { logAudit } from "@/lib/audit";
 import { PRIMARY_CITY_SLUG } from "@/lib/queries";
-import { resolveBuilderMatch, resolveLocalityMatch } from "@/lib/enrichment/resolveNamedEntity";
+import { resolveBuilderMatch } from "@/lib/enrichment/resolveNamedEntity";
 import type { ExistingProjectCandidate } from "@/lib/ingestion/duplicateMatch";
 import type { ProjectImportPayload } from "@/lib/ingestion/connectors/fileImport/types";
+import { resolveAreaToLocality } from "@/lib/ingestion/discovery/areaLocalityResolution";
 import { buildDiscoveryCandidate, type DiscoveryCandidateInput } from "@/lib/ingestion/discovery/buildCandidate";
 import { classifyDiscoveryDuplicate } from "@/lib/ingestion/discovery/classifyDuplicate";
 import {
@@ -195,26 +196,24 @@ export async function applyDiscoveryFounderAction(id: string, action: DiscoveryF
     where: { cityId: city.id },
     select: { id: true, name: true, aliases: { select: { alias: true } } },
   });
-  const localityMatch = resolveLocalityMatch(
-    localities.map((l) => ({ id: l.id, name: l.name, aliases: l.aliases.map((a) => a.alias) })),
-    candidatePayload.areaName
+  // Phase 43 Part E -- resolveAreaToLocality layers one additional tier
+  // (comma-segment exact matching + a small curated micro-market registry)
+  // between resolveLocalityMatch's own exact and fuzzy tiers, so a real
+  // address-style areaName ("Hrushikesh, Lokhandwala, Andheri (W)") resolves
+  // confidently without weakening the fuzzy tier's own threshold (Phase 42's
+  // fix stays in place as tier 4, last resort). See
+  // lib/ingestion/discovery/areaLocalityResolution.ts for the full tier list.
+  const localityMatch = resolveAreaToLocality(
+    candidatePayload.areaName,
+    localities.map((l) => ({ id: l.id, name: l.name, aliases: l.aliases.map((a) => a.alias) }))
   );
-  // SINGLE_MATCH alone (not just an exact confidence-1 match) is accepted --
-  // resolveLocalityMatch's own fuzzy tier (Phase 33) is the SAME 0.6-Jaccard
-  // bar this codebase already trusts elsewhere for "unambiguous enough";
-  // requiring literal confidence===1 on top of it (Phase 40's original,
-  // untested-against-real-data rule) turned out to refuse perfectly legitimate
-  // real candidates whose areaName is a micro-market-level refinement of the
-  // Locality name (e.g. "Lokhandwala, Andheri West" for the Locality
-  // "Andheri West") -- discovered by actually running Phase 42's real batch,
-  // not a guess. MULTIPLE_MATCHES/NO_MATCH still refuse exactly as before.
   if (localityMatch.status !== "SINGLE_MATCH") {
     return {
       ok: false,
       error: `Could not confidently resolve area "${candidatePayload.areaName}" to exactly one existing locality (${localityMatch.status}). Resolve the locality manually before including this candidate.`,
     };
   }
-  const resolvedLocalityId = localityMatch.candidates[0].id;
+  const resolvedLocalityId = localityMatch.localityId!;
 
   const [liveProjects, pendingProjectStagingRaw, otherDiscoveryCandidatesRaw] = await Promise.all([
     prisma.project.findMany({ where: { cityId: city.id }, select: { id: true, name: true, localityId: true, reraNumber: true } }),

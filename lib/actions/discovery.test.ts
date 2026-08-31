@@ -298,6 +298,17 @@ describe("applyDiscoveryFounderAction — Include (Phase 40 Part B/E)", () => {
     expect(stagingCreateMock).not.toHaveBeenCalled();
   });
 
+  it("13. Phase 43 — THE REAL Kalpataru Vian case: 'Hrushikesh, Lokhandwala, Andheri (W)' now resolves via the real 'Andheri (W)' LocalityAlias, previously blocked in Phase 42", async () => {
+    localityFindManyMock.mockResolvedValue([{ id: "loc-andheri-west", name: "Andheri West", aliases: [{ alias: "Andheri (W)" }] }] as never);
+    stagingFindUniqueMock.mockResolvedValue(
+      discoveryCandidateRecord({ payload: { projectName: "Kalpataru Vian", areaName: "Hrushikesh, Lokhandwala, Andheri (W)" } }) as never
+    );
+    const result = await applyDiscoveryFounderAction("cand-1", "INCLUDE");
+    expect(result.ok).toBe(true);
+    const payload = stagingCreateMock.mock.calls[0][0].data.payload as Record<string, unknown>;
+    expect(payload.localityId).toBe("loc-andheri-west");
+  });
+
   it("Include is refused for an already REJECTED_DUPLICATE candidate before any DB read happens", async () => {
     stagingFindUniqueMock.mockResolvedValue(discoveryCandidateRecord({ status: "REJECTED_DUPLICATE" }) as never);
     const result = await applyDiscoveryFounderAction("cand-1", "INCLUDE");
