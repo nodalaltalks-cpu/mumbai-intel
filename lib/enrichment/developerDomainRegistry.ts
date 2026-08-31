@@ -23,6 +23,10 @@ const CURATED_DEVELOPER_DOMAINS: Record<string, string> = {
   // Adani Realty is clearly the primary/official party for this project.
   "adani realty & rc group": "https://www.adanirealty.com",
   "adani realty": "https://www.adanirealty.com",
+  // Phase 38 -- third-developer generalization proof (confirmed via
+  // www.kalpataru.com's own JSON-LD Organization.name: "Kalpataru Limited").
+  "kalpataru limited": "https://www.kalpataru.com",
+  "kalpataru": "https://www.kalpataru.com",
 };
 
 function normalize(name: string): string {

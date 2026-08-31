@@ -20,6 +20,7 @@ import {
 } from "@/lib/enrichment/enrichmentHistory";
 import { godrejPropertiesAdapter, GODREJ_SKY_SHORE_PROJECT_URL } from "@/lib/enrichment/adapters/godrejPropertiesAdapter";
 import { adaniRealtyAdapter, ADANI_LINKBAY_RESIDENCES_PROJECT_URL } from "@/lib/enrichment/adapters/adaniRealtyAdapter";
+import { kalpataruAdapter, KALPATARU_VIAN_PROJECT_URL } from "@/lib/enrichment/adapters/kalpataruAdapter";
 import type { EnrichmentField, OfficialSourceAdapter } from "@/lib/enrichment/types";
 import { buildProjectReviewCompleteness } from "@/lib/ingestion/reviewFieldRegistry";
 import type { ProjectImportPayload } from "@/lib/ingestion/connectors/fileImport/types";
@@ -53,6 +54,7 @@ export interface EnrichProjectResult {
 const CURATED_SOURCES: Record<string, { projectUrl: string; adapter: OfficialSourceAdapter }> = {
   "https://www.godrejproperties.com": { projectUrl: GODREJ_SKY_SHORE_PROJECT_URL, adapter: godrejPropertiesAdapter },
   "https://www.adanirealty.com": { projectUrl: ADANI_LINKBAY_RESIDENCES_PROJECT_URL, adapter: adaniRealtyAdapter },
+  "https://www.kalpataru.com": { projectUrl: KALPATARU_VIAN_PROJECT_URL, adapter: kalpataruAdapter },
 };
 
 /**
