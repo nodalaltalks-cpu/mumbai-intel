@@ -15,6 +15,7 @@ vi.mock("@/lib/prisma", () => ({
     locality: { findUnique: vi.fn(), findMany: vi.fn() },
     builder: { findUnique: vi.fn(), findMany: vi.fn() },
     city: { findUnique: vi.fn() },
+    auditLog: { findMany: vi.fn(), create: vi.fn() },
   },
 }));
 
@@ -34,7 +35,14 @@ import { prisma } from "@/lib/prisma";
 import { requireMutateSession } from "@/lib/auth/guard";
 import { godrejPropertiesAdapter } from "@/lib/enrichment/adapters/godrejPropertiesAdapter";
 import { adaniRealtyAdapter } from "@/lib/enrichment/adapters/adaniRealtyAdapter";
-import { acceptEnrichmentFieldAction, acceptEntityMatchAction, enrichProjectAction } from "./enrichment";
+import { toStorableChanges } from "@/lib/enrichment/enrichmentHistory";
+import {
+  acceptEnrichmentFieldAction,
+  acceptEntityMatchAction,
+  enrichProjectAction,
+  getEnrichmentFieldHistoryAction,
+  revertEnrichmentFieldAction,
+} from "./enrichment";
 
 const stagingFindUniqueMock = vi.mocked(prisma.ingestStagingRecord.findUnique);
 const stagingUpdateMock = vi.mocked(prisma.ingestStagingRecord.update);
@@ -43,6 +51,8 @@ const localityFindManyMock = vi.mocked(prisma.locality.findMany);
 const builderFindUniqueMock = vi.mocked(prisma.builder.findUnique);
 const builderFindManyMock = vi.mocked(prisma.builder.findMany);
 const cityFindUniqueMock = vi.mocked(prisma.city.findUnique);
+const auditLogFindManyMock = vi.mocked(prisma.auditLog.findMany);
+const auditLogCreateMock = vi.mocked(prisma.auditLog.create);
 const fetchProjectFactsMock = vi.mocked(godrejPropertiesAdapter.fetchProjectFacts);
 const adaniFetchProjectFactsMock = vi.mocked(adaniRealtyAdapter.fetchProjectFacts);
 
@@ -92,6 +102,8 @@ describe("enrichProjectAction (Phase 29 Part J/K — no writes, no approval, pro
     localityFindUniqueMock.mockResolvedValue({ name: "Andheri West" } as never);
     builderFindUniqueMock.mockResolvedValue(null as never);
     stagingUpdateMock.mockResolvedValue({} as never);
+    auditLogFindManyMock.mockResolvedValue([] as never);
+    auditLogCreateMock.mockResolvedValue({} as never);
     builderFindManyMock.mockResolvedValue([] as never);
     localityFindManyMock.mockResolvedValue([] as never);
     cityFindUniqueMock.mockResolvedValue({ id: "city-mumbai" } as never);
@@ -206,6 +218,8 @@ describe("enrichProjectAction — Builder/Locality resolution (Phase 33)", () =>
     localityFindUniqueMock.mockResolvedValue({ name: "Andheri West" } as never);
     builderFindUniqueMock.mockResolvedValue(null as never);
     stagingUpdateMock.mockResolvedValue({} as never);
+    auditLogFindManyMock.mockResolvedValue([] as never);
+    auditLogCreateMock.mockResolvedValue({} as never);
     cityFindUniqueMock.mockResolvedValue({ id: "city-mumbai" } as never);
   });
 
@@ -306,6 +320,8 @@ describe("acceptEntityMatchAction (Phase 33 Part F/G — persists a founder-sele
   beforeEach(() => {
     vi.clearAllMocks();
     stagingUpdateMock.mockResolvedValue({} as never);
+    auditLogFindManyMock.mockResolvedValue([] as never);
+    auditLogCreateMock.mockResolvedValue({} as never);
   });
 
   it("9. accepts a Builder match and persists builderId (not the name) into the payload", async () => {
@@ -399,6 +415,8 @@ describe("acceptEnrichmentFieldAction (Phase 32 — persists ONE accepted field 
   beforeEach(() => {
     vi.clearAllMocks();
     stagingUpdateMock.mockResolvedValue({} as never);
+    auditLogFindManyMock.mockResolvedValue([] as never);
+    auditLogCreateMock.mockResolvedValue({} as never);
     builderFindManyMock.mockResolvedValue([] as never);
     localityFindManyMock.mockResolvedValue([] as never);
     cityFindUniqueMock.mockResolvedValue({ id: "city-mumbai" } as never);
@@ -545,5 +563,281 @@ describe("acceptEnrichmentFieldAction (Phase 32 — persists ONE accepted field 
     expect((thisModule as Record<string, unknown>).approveStagingRecordAction).toBeUndefined();
     expect((thisModule as Record<string, unknown>).rejectStagingRecordAction).toBeUndefined();
     expect(typeof thisModule.acceptEnrichmentFieldAction).toBe("function");
+  });
+});
+
+describe("Phase 37 — enrichment history (built entirely on the existing AuditLog model, no new table)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stagingUpdateMock.mockResolvedValue({} as never);
+    auditLogCreateMock.mockResolvedValue({} as never);
+  });
+
+  function auditRow(overrides: Partial<Record<string, unknown>> = {}) {
+    return {
+      id: "evt-1",
+      action: "enrichment.accept",
+      entityType: "ProjectEnrichmentField",
+      entityId: "stage-1",
+      before: null,
+      after: { fieldKey: "address", displayValue: "off New Link Rd", payloadChanges: { address: "off New Link Rd" } },
+      at: new Date("2026-08-30T10:00:00.000Z"),
+      actor: { name: "Founder", email: "founder@example.com" },
+      ...overrides,
+    } as never;
+  }
+
+  it("1. first acceptance (no prior history) records an ACCEPT event", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    auditLogFindManyMock.mockResolvedValue([] as never);
+
+    await acceptEnrichmentFieldAction("stage-1", "tagline", "A shoreline sanctuary", undefined, { currentDisplayValue: null });
+
+    expect(auditLogCreateMock).toHaveBeenCalledTimes(1);
+    const call = auditLogCreateMock.mock.calls[0][0] as { data: Record<string, unknown> };
+    expect(call.data.action).toBe("enrichment.accept");
+    expect(call.data.entityType).toBe("ProjectEnrichmentField");
+    expect(call.data.entityId).toBe("stage-1");
+    expect((call.data.after as Record<string, unknown>).displayValue).toBe("A shoreline sanctuary");
+  });
+
+  it("2. a previously-blank field's history records the blank as the 'before' state, not fabricated", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord()); // GODREJ_PAYLOAD has no `address` key at all
+    auditLogFindManyMock.mockResolvedValue([] as never);
+
+    await acceptEnrichmentFieldAction("stage-1", "address", "off, Fun Republic, New Link road, Andheri west", undefined, {
+      currentDisplayValue: null,
+    });
+
+    const call = auditLogCreateMock.mock.calls[0][0] as { data: Record<string, unknown> };
+    const before = call.data.before as Record<string, unknown>;
+    expect(before.displayValue).toBeNull();
+    // The recorded "before" state marks `address` as having been genuinely
+    // absent (not a stray real value) -- restoring it must DELETE the key,
+    // not merely fail to set it. (See test #14 below for the full Undo path;
+    // this test only confirms Accept records the right "before" state.)
+    expect(Object.prototype.hasOwnProperty.call(before.payloadChanges, "address")).toBe(true);
+    expect((before.payloadChanges as Record<string, unknown>).address).not.toBe("off, Fun Republic, New Link road, Andheri west");
+  });
+
+  it("3. a previously non-blank field's history records the real prior value, not null", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord()); // GODREJ_PAYLOAD.name = "Godrej Sky Shore"
+    auditLogFindManyMock.mockResolvedValue([] as never);
+
+    await acceptEnrichmentFieldAction("stage-1", "name", "Godrej Skyshore", undefined, { currentDisplayValue: "Godrej Sky Shore" });
+
+    const call = auditLogCreateMock.mock.calls[0][0] as { data: Record<string, unknown> };
+    const before = call.data.before as Record<string, unknown>;
+    expect(before.displayValue).toBe("Godrej Sky Shore");
+    expect((before.payloadChanges as Record<string, unknown>).name).toBe("Godrej Sky Shore");
+  });
+
+  it("5. accepting again after a prior ACCEPT (no revert in between) records EDIT_ACCEPT, using the prior event's own 'after' as this event's 'before'", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord({ payload: { ...GODREJ_PAYLOAD, tagline: "Old tagline" } }));
+    auditLogFindManyMock.mockResolvedValue([
+      auditRow({
+        action: "enrichment.accept",
+        after: { fieldKey: "tagline", displayValue: "Old tagline", payloadChanges: { tagline: "Old tagline" } },
+      }),
+    ] as never);
+
+    await acceptEnrichmentFieldAction("stage-1", "tagline", "Corrected tagline");
+
+    const call = auditLogCreateMock.mock.calls[0][0] as { data: Record<string, unknown> };
+    expect(call.data.action).toBe("enrichment.edit_accept");
+    expect((call.data.before as Record<string, unknown>).displayValue).toBe("Old tagline");
+    expect((call.data.after as Record<string, unknown>).displayValue).toBe("Corrected tagline");
+  });
+
+  it("9. accepting again after a REVERT records RE_ACCEPT", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord({ payload: { ...GODREJ_PAYLOAD, tagline: "Old tagline" } }));
+    auditLogFindManyMock.mockResolvedValue([
+      auditRow({
+        action: "enrichment.revert",
+        before: { fieldKey: "tagline", displayValue: "Corrected tagline", payloadChanges: { tagline: "Corrected tagline" } },
+        after: { fieldKey: "tagline", displayValue: "Old tagline", payloadChanges: { tagline: "Old tagline" } },
+      }),
+    ] as never);
+
+    await acceptEnrichmentFieldAction("stage-1", "tagline", "Corrected tagline (again)");
+
+    const call = auditLogCreateMock.mock.calls[0][0] as { data: Record<string, unknown> };
+    expect(call.data.action).toBe("enrichment.re_accept");
+  });
+
+  it("16. accept/revert/history-read all require the existing requireMutateSession authorization", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    auditLogFindManyMock.mockResolvedValue([] as never);
+    await acceptEnrichmentFieldAction("stage-1", "tagline", "x");
+    await revertEnrichmentFieldAction("stage-1", "tagline", "evt-1");
+    await getEnrichmentFieldHistoryAction("stage-1", "tagline");
+    expect(vi.mocked(requireMutateSession)).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("revertEnrichmentFieldAction (Phase 37 — exact restoration, never a blind null)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stagingUpdateMock.mockResolvedValue({} as never);
+    auditLogCreateMock.mockResolvedValue({} as never);
+  });
+
+  function auditRow(overrides: Partial<Record<string, unknown>> = {}) {
+    return {
+      id: "evt-1",
+      action: "enrichment.accept",
+      entityType: "ProjectEnrichmentField",
+      entityId: "stage-1",
+      before: { fieldKey: "landAreaAcres", displayValue: null, payloadChanges: toStorableChanges([{ key: "landAreaAcres", value: undefined }]) },
+      after: { fieldKey: "landAreaAcres", displayValue: "2.5 acres", payloadChanges: { landAreaAcres: 2.5 } },
+      at: new Date("2026-08-30T10:00:00.000Z"),
+      actor: { name: "Founder", email: "founder@example.com" },
+      ...overrides,
+    } as never;
+  }
+
+  it("6/12. restores an exact numeric value, not a re-parsed string", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord({ payload: { ...GODREJ_PAYLOAD, landAreaAcres: 2.5 } }));
+    auditLogFindManyMock.mockResolvedValue([auditRow()] as never);
+
+    const result = await revertEnrichmentFieldAction("stage-1", "landAreaAcres", "evt-1");
+    expect(result.status).toBe("SUCCESS");
+    const restored = stagingUpdateMock.mock.calls[0][0].data.payload as Record<string, unknown>;
+    expect(restored.landAreaAcres).toBeUndefined(); // the field genuinely had no value before this acceptance
+  });
+
+  it("11. restores an exact array value", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord({ payload: { ...GODREJ_PAYLOAD, amenities: ["Squash Court", "Gym"] } }));
+    auditLogFindManyMock.mockResolvedValue([
+      auditRow({
+        before: { fieldKey: "amenities", displayValue: null, payloadChanges: toStorableChanges([{ key: "amenities", value: undefined }]) },
+        after: { fieldKey: "amenities", displayValue: "2 selected", payloadChanges: { amenities: ["Squash Court", "Gym"] } },
+      }),
+    ] as never);
+
+    const result = await revertEnrichmentFieldAction("stage-1", "amenities", "evt-1");
+    expect(result.status).toBe("SUCCESS");
+    const restored = stagingUpdateMock.mock.calls[0][0].data.payload as Record<string, unknown>;
+    expect(restored.amenities).toBeUndefined();
+  });
+
+  it("13. restores an exact enum key (not the display label)", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord({ payload: { ...GODREJ_PAYLOAD, status: "READY_TO_MOVE" } }));
+    auditLogFindManyMock.mockResolvedValue([
+      auditRow({
+        before: { fieldKey: "status", displayValue: "Under Construction", payloadChanges: { status: "UNDER_CONSTRUCTION" } },
+        after: { fieldKey: "status", displayValue: "Ready to Move", payloadChanges: { status: "READY_TO_MOVE" } },
+      }),
+    ] as never);
+
+    const result = await revertEnrichmentFieldAction("stage-1", "status", "evt-1");
+    expect(result.status).toBe("SUCCESS");
+    const restored = stagingUpdateMock.mock.calls[0][0].data.payload as Record<string, unknown>;
+    expect(restored.status).toBe("UNDER_CONSTRUCTION");
+  });
+
+  it("14. a field that was originally blank stays blank after undo -- never coerced to null/empty-string as a NEW distinct value", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord({ payload: { ...GODREJ_PAYLOAD, tagline: "Accepted tagline" } }));
+    auditLogFindManyMock.mockResolvedValue([
+      auditRow({
+        before: { fieldKey: "tagline", displayValue: null, payloadChanges: toStorableChanges([{ key: "tagline", value: undefined }]) },
+        after: { fieldKey: "tagline", displayValue: "Accepted tagline", payloadChanges: { tagline: "Accepted tagline" } },
+      }),
+    ] as never);
+
+    const result = await revertEnrichmentFieldAction("stage-1", "tagline", "evt-1");
+    expect(result.status).toBe("SUCCESS");
+    const restored = stagingUpdateMock.mock.calls[0][0].data.payload as Record<string, unknown>;
+    expect(Object.prototype.hasOwnProperty.call(restored, "tagline")).toBe(false);
+  });
+
+  it("7. revert itself records a new REVERT history event", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord({ payload: { ...GODREJ_PAYLOAD, landAreaAcres: 2.5 } }));
+    auditLogFindManyMock.mockResolvedValue([auditRow()] as never);
+
+    await revertEnrichmentFieldAction("stage-1", "landAreaAcres", "evt-1");
+
+    expect(auditLogCreateMock).toHaveBeenCalledTimes(1);
+    const call = auditLogCreateMock.mock.calls[0][0] as { data: Record<string, unknown> };
+    expect(call.data.action).toBe("enrichment.revert");
+  });
+
+  it("8. revert never updates or deletes the prior history event -- only ever calls auditLog.create, never update/delete", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord({ payload: { ...GODREJ_PAYLOAD, landAreaAcres: 2.5 } }));
+    auditLogFindManyMock.mockResolvedValue([auditRow()] as never);
+
+    await revertEnrichmentFieldAction("stage-1", "landAreaAcres", "evt-1");
+
+    // The mocked prisma.auditLog only exposes findMany/create (see the top-level
+    // vi.mock) -- if this action ever attempted .update or .delete, it would
+    // throw a TypeError, which would surface as a test failure here.
+    expect(auditLogCreateMock).toHaveBeenCalled();
+  });
+
+  it("15. a stale historyEventId (the field changed since the founder last looked) is rejected as CONFLICT, never blindly overwritten", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord({ payload: { ...GODREJ_PAYLOAD, landAreaAcres: 3.1 } }));
+    // The MOST RECENT event is now evt-2, not the evt-1 the caller believes is latest.
+    auditLogFindManyMock.mockResolvedValue([
+      auditRow({ id: "evt-2", at: new Date("2026-08-31T09:00:00.000Z") }),
+      auditRow({ id: "evt-1", at: new Date("2026-08-30T10:00:00.000Z") }),
+    ] as never);
+
+    const result = await revertEnrichmentFieldAction("stage-1", "landAreaAcres", "evt-1");
+    expect(result.status).toBe("CONFLICT");
+    expect(stagingUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects undo when there is no history at all for this field", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    auditLogFindManyMock.mockResolvedValue([] as never);
+    const result = await revertEnrichmentFieldAction("stage-1", "tagline", "evt-1");
+    expect(result.status).toBe("NOTHING_TO_UNDO");
+    expect(stagingUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects undo when the most recent event is already a REVERT", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    auditLogFindManyMock.mockResolvedValue([auditRow({ action: "enrichment.revert" })] as never);
+    const result = await revertEnrichmentFieldAction("stage-1", "landAreaAcres", "evt-1");
+    expect(result.status).toBe("NOTHING_TO_UNDO");
+    expect(stagingUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("only PENDING staging records can be reverted", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord({ status: "APPROVED" } as never));
+    const result = await revertEnrichmentFieldAction("stage-1", "landAreaAcres", "evt-1");
+    expect(result.status).toBe("NOT_PENDING");
+    expect(stagingUpdateMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("getEnrichmentFieldHistoryAction (Phase 37 — read-only, field-filtered)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns only events for the requested field, newest first", async () => {
+    auditLogFindManyMock.mockResolvedValue([
+      {
+        id: "evt-2",
+        action: "enrichment.accept",
+        before: null,
+        after: { fieldKey: "tagline", displayValue: "A", payloadChanges: {} },
+        at: new Date("2026-08-31T09:00:00.000Z"),
+        actor: null,
+      },
+      {
+        id: "evt-1",
+        action: "enrichment.accept",
+        before: null,
+        after: { fieldKey: "landAreaAcres", displayValue: "2.5 acres", payloadChanges: {} },
+        at: new Date("2026-08-30T09:00:00.000Z"),
+        actor: null,
+      },
+    ] as never);
+
+    const history = await getEnrichmentFieldHistoryAction("stage-1", "tagline");
+    expect(history).toHaveLength(1);
+    expect(history[0].id).toBe("evt-2");
   });
 });

@@ -3,6 +3,7 @@
 import Dialog from "@/app/components/ui/Dialog";
 import type { EnrichmentField } from "@/lib/enrichment/types";
 import type { EntityMatchProposal } from "@/lib/enrichment/resolveNamedEntity";
+import type { EnrichmentHistoryEntry } from "@/lib/enrichment/enrichmentHistory";
 import type { EnrichProjectStatus } from "@/lib/actions/enrichment";
 import EnrichmentProposalPanel from "./EnrichmentProposalPanel";
 import EntityMatchCard from "./EntityMatchCard";
@@ -26,6 +27,8 @@ export default function EnrichmentDialog({
   onRetry,
   onAcceptField,
   onAcceptEntityMatch,
+  onViewHistory,
+  onUndo,
 }: {
   title: string;
   loading: boolean;
@@ -38,6 +41,8 @@ export default function EnrichmentDialog({
   onRetry: () => void;
   onAcceptField: (field: EnrichmentField) => Promise<{ ok: boolean; error?: string }>;
   onAcceptEntityMatch: (kind: "builder" | "locality", existingId: string) => Promise<{ ok: boolean; error?: string }>;
+  onViewHistory: (fieldKey: string) => Promise<EnrichmentHistoryEntry[]>;
+  onUndo: (fieldKey: string, historyEventId: string) => Promise<{ ok: boolean; error?: string }>;
 }) {
   return (
     <Dialog title={`Enrich: ${title}`} onClose={onClose} maxWidth="max-w-2xl">
@@ -53,7 +58,7 @@ export default function EnrichmentDialog({
                 {localityMatch ? <EntityMatchCard proposal={localityMatch} onAccept={(id) => onAcceptEntityMatch("locality", id)} /> : null}
               </div>
             ) : null}
-            <EnrichmentProposalPanel fields={fields} onAcceptField={onAcceptField} />
+            <EnrichmentProposalPanel fields={fields} onAcceptField={onAcceptField} onViewHistory={onViewHistory} onUndo={onUndo} />
           </>
         ) : status === "NO_SOURCE" || status === "SOURCE_UNAVAILABLE" || status === "NO_NEW_INFO" ? (
           <div className="flex flex-col gap-3">

@@ -5,7 +5,9 @@ import Badge, { type BadgeTone } from "@/app/components/ui/Badge";
 import type { EnrichmentClassification, EnrichmentField } from "@/lib/enrichment/types";
 import { SOURCE_TIER_LABEL } from "@/lib/enrichment/types";
 import { getFieldEditorKind, validateProposedEdit, type FieldEditorKind } from "@/lib/enrichment/applyAcceptedField";
+import type { EnrichmentHistoryEntry } from "@/lib/enrichment/enrichmentHistory";
 import { CATEGORY_LABEL, POSSESSION_MONTH_LABEL, STATUS_LABEL } from "@/lib/project-meta";
+import EnrichmentFieldHistoryDialog from "./EnrichmentFieldHistoryDialog";
 
 const CLASSIFICATION_BADGE: Record<EnrichmentClassification, { tone: BadgeTone; label: string; icon: string }> = {
   CONFIRMED: { tone: "positive", label: "Confirmed", icon: "🟢" },
@@ -49,9 +51,13 @@ const MONTH_OPTIONS = POSSESSION_MONTH_LABEL.filter(Boolean);
 export default function EnrichmentProposalPanel({
   fields,
   onAcceptField,
+  onViewHistory,
+  onUndo,
 }: {
   fields: EnrichmentField[];
   onAcceptField: (field: EnrichmentField) => Promise<{ ok: boolean; error?: string }>;
+  onViewHistory: (fieldKey: string) => Promise<EnrichmentHistoryEntry[]>;
+  onUndo: (fieldKey: string, historyEventId: string) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const [saveState, setSaveState] = useState<Record<string, FieldSaveState>>({});
   const [saveError, setSaveError] = useState<Record<string, string>>({});
@@ -68,6 +74,36 @@ export default function EnrichmentProposalPanel({
   const [editDraft, setEditDraft] = useState("");
   const [editDraftItems, setEditDraftItems] = useState<string[]>([]);
   const [editDraftError, setEditDraftError] = useState<string | null>(null);
+
+  // Phase 37 -- which field's history dialog is open (null when closed),
+  // and its fetched entries. Fetched fresh every time the dialog opens (and
+  // again after a successful Undo) -- never cached across opens.
+  const [historyFieldKey, setHistoryFieldKey] = useState<string | null>(null);
+  const [historyEntries, setHistoryEntries] = useState<EnrichmentHistoryEntry[] | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  async function handleViewHistory(fieldKey: string) {
+    setHistoryFieldKey(fieldKey);
+    setHistoryLoading(true);
+    setHistoryEntries(null);
+    const entries = await onViewHistory(fieldKey);
+    setHistoryEntries(entries);
+    setHistoryLoading(false);
+  }
+
+  async function handleUndo(historyEventId: string): Promise<{ ok: boolean; error?: string }> {
+    if (!historyFieldKey) return { ok: false, error: "No field open." };
+    const result = await onUndo(historyFieldKey, historyEventId);
+    if (result.ok) {
+      // Re-fetch so the dialog immediately shows the fresh REVERT event at
+      // the top instead of leaving the just-undone state on screen.
+      setHistoryLoading(true);
+      const entries = await onViewHistory(historyFieldKey);
+      setHistoryEntries(entries);
+      setHistoryLoading(false);
+    }
+    return result;
+  }
 
   const byGroup = new Map<string, EnrichmentField[]>();
   for (const field of fields) {
@@ -359,6 +395,13 @@ export default function EnrichmentProposalPanel({
                         Accept
                       </button>
                       {statusLine(field.key)}
+                      <button
+                        type="button"
+                        onClick={() => handleViewHistory(field.key)}
+                        className="ml-auto rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-accent hover:text-accent"
+                      >
+                        View History
+                      </button>
                     </div>
                   ) : null}
 
@@ -384,6 +427,13 @@ export default function EnrichmentProposalPanel({
                         Accept (lower confidence)
                       </button>
                       {statusLine(field.key)}
+                      <button
+                        type="button"
+                        onClick={() => handleViewHistory(field.key)}
+                        className="ml-auto rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-accent hover:text-accent"
+                      >
+                        View History
+                      </button>
                     </div>
                   ) : null}
 
@@ -416,6 +466,46 @@ export default function EnrichmentProposalPanel({
                         Accept Proposed
                       </button>
                       {statusLine(field.key)}
+                      <button
+                        type="button"
+                        onClick={() => handleViewHistory(field.key)}
+                        className="ml-auto rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-accent hover:text-accent"
+                      >
+                        View History
+                      </button>
+                    </div>
+                  ) : null}
+
+                  {!isEditing && field.classification === "CONFIRMED" ? (
+                    <div className="mt-1 flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => startEdit(field)}
+                        className="rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-accent hover:text-accent disabled:opacity-50"
+                      >
+                        Edit
+                      </button>
+                      {statusLine(field.key)}
+                      <button
+                        type="button"
+                        onClick={() => handleViewHistory(field.key)}
+                        className="ml-auto rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-accent hover:text-accent"
+                      >
+                        View History
+                      </button>
+                    </div>
+                  ) : null}
+
+                  {field.classification === "MISSING" ? (
+                    <div className="mt-1 flex items-center justify-end">
+                      <button
+                        type="button"
+                        onClick={() => handleViewHistory(field.key)}
+                        className="rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-accent hover:text-accent"
+                      >
+                        View History
+                      </button>
                     </div>
                   ) : null}
                 </div>
@@ -424,6 +514,19 @@ export default function EnrichmentProposalPanel({
           </div>
         </div>
       ))}
+
+      {historyFieldKey ? (
+        <EnrichmentFieldHistoryDialog
+          fieldLabel={fields.find((f) => f.key === historyFieldKey)?.label ?? historyFieldKey}
+          entries={historyEntries}
+          loading={historyLoading}
+          onClose={() => {
+            setHistoryFieldKey(null);
+            setHistoryEntries(null);
+          }}
+          onUndo={handleUndo}
+        />
+      ) : null}
     </div>
   );
 }
