@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyAcceptedField } from "./applyAcceptedField";
+import { applyAcceptedField, getFieldEditorKind, validateProposedEdit } from "./applyAcceptedField";
 
 const BASE_PAYLOAD = {
   name: "Godrej Sky Shore",
@@ -175,5 +175,80 @@ describe("applyAcceptedField — possession month/year (derived from a single po
 
   it("rejects an out-of-range year", () => {
     expect(applyAcceptedField(BASE_PAYLOAD, "possessionYear", "1500").ok).toBe(false);
+  });
+});
+
+describe("validateProposedEdit (Phase 36 — client-safe pre-check before Save Edit, reuses applyAcceptedField's own parsers)", () => {
+  it("9. rejects an invalid numeric value", () => {
+    expect(validateProposedEdit("latitude", "somewhere near the coast").ok).toBe(false);
+    expect(validateProposedEdit("landAreaAcres", "a few acres").ok).toBe(false);
+    expect(validateProposedEdit("constructionPercent", "almost done").ok).toBe(false);
+  });
+
+  it("accepts a valid numeric value in the same format applyAcceptedField itself expects", () => {
+    expect(validateProposedEdit("latitude", "19.133261").ok).toBe(true);
+    expect(validateProposedEdit("landAreaAcres", "2.5 acres").ok).toBe(true);
+    expect(validateProposedEdit("constructionPercent", "45%").ok).toBe(true);
+    expect(validateProposedEdit("priceMax", "₹11.89 Cr").ok).toBe(true);
+  });
+
+  it("10. rejects an invalid enum value for status/category", () => {
+    expect(validateProposedEdit("status", "Sold Out Forever").ok).toBe(false);
+    expect(validateProposedEdit("category", "Industrial").ok).toBe(false);
+  });
+
+  it("accepts a genuinely valid enum label", () => {
+    expect(validateProposedEdit("status", "Ready to Move").ok).toBe(true);
+    expect(validateProposedEdit("category", "Residential").ok).toBe(true);
+  });
+
+  it("11. URL-ish fields follow the existing convention (no strict URL-format check, same as the admin Project form's own schema) -- any non-empty string passes", () => {
+    expect(validateProposedEdit("videoUrl", "not a url at all").ok).toBe(true);
+    expect(validateProposedEdit("googleMapsUrl", "https://maps.app.goo.gl/abc").ok).toBe(true);
+  });
+
+  it("rejects an empty value for any field", () => {
+    expect(validateProposedEdit("tagline", "").ok).toBe(false);
+    expect(validateProposedEdit("tagline", "   ").ok).toBe(false);
+  });
+
+  it("rejects an unrecognized possession month name", () => {
+    expect(validateProposedEdit("possessionMonth", "Smarch").ok).toBe(false);
+    expect(validateProposedEdit("possessionMonth", "February").ok).toBe(true);
+  });
+
+  it("rejects an out-of-range possession year", () => {
+    expect(validateProposedEdit("possessionYear", "1500").ok).toBe(false);
+    expect(validateProposedEdit("possessionYear", "2030").ok).toBe(true);
+  });
+
+  it("a plain string field (tagline, address, etc.) only needs to be non-empty", () => {
+    expect(validateProposedEdit("tagline", "A shoreline sanctuary").ok).toBe(true);
+    expect(validateProposedEdit("address", "off, Fun Republic, New Link road").ok).toBe(true);
+  });
+});
+
+describe("getFieldEditorKind (Phase 36 — which editor control a field needs)", () => {
+  it("12. array-shaped fields get the list editor", () => {
+    for (const key of ["highlights", "specifications", "amenities", "faqs", "images", "documents"]) {
+      expect(getFieldEditorKind(key, 10)).toBe("array");
+    }
+  });
+
+  it("enum fields get their own dedicated editor kind", () => {
+    expect(getFieldEditorKind("status", 5)).toBe("enum-status");
+    expect(getFieldEditorKind("category", 5)).toBe("enum-category");
+  });
+
+  it("possessionMonth gets the month editor", () => {
+    expect(getFieldEditorKind("possessionMonth", 5)).toBe("month");
+  });
+
+  it("a short plain string gets a single-line text input", () => {
+    expect(getFieldEditorKind("videoUrl", 40)).toBe("text");
+  });
+
+  it("a long plain string gets a textarea", () => {
+    expect(getFieldEditorKind("tagline", 200)).toBe("textarea");
   });
 });
