@@ -26,6 +26,7 @@ import { puravankaraAdapter, PURVA_ESTRELLA_PROJECT_URL } from "@/lib/enrichment
 import { lodhaAdapter, LODHA_CULLINAN_PROJECT_URL } from "@/lib/enrichment/adapters/lodhaAdapter";
 import { oberoiRealtyAdapter, OBEROI_SKY_HEIGHTS_PROJECT_URL, OBEROI_SPRINGS_PROJECT_URL } from "@/lib/enrichment/adapters/oberoiRealtyAdapter";
 import { koltePatilAdapter, KOLTE_PATIL_SERENOVA_PROJECT_URL } from "@/lib/enrichment/adapters/koltePatilAdapter";
+import { runwalRealtyAdapter, RUNWAL_SANCTUARY_PROJECT_URL } from "@/lib/enrichment/adapters/runwalRealtyAdapter";
 import { resolveProjectSource, type DeveloperSource } from "@/lib/enrichment/projectSourceResolution";
 import { buildEnrichmentSummary, withFieldTouched, type ProjectEnrichmentStatus } from "@/lib/enrichment/enrichmentSummary";
 import type { EnrichmentField } from "@/lib/enrichment/types";
@@ -119,6 +120,11 @@ const CURATED_SOURCES: Record<string, DeveloperSource> = {
     adapter: koltePatilAdapter,
     projects: { "serenova": KOLTE_PATIL_SERENOVA_PROJECT_URL },
     sitemapUrl: "https://www.koltepatil.com/sitemap.xml",
+  },
+  "https://runwalrealty.com": {
+    adapter: runwalRealtyAdapter,
+    projects: { "runwal sanctuary": RUNWAL_SANCTUARY_PROJECT_URL },
+    sitemapUrl: "https://runwalrealty.com/residential-ongoing-sitemap.xml",
   },
 };
 

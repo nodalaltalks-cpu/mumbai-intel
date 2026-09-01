@@ -32,4 +32,9 @@ describe("resolveDeveloperDomain (Phase 28 Part E — curated, never guessed)", 
   it("Phase 47 — resolves Kolte Patil, the eighth curated developer", () => {
     expect(resolveDeveloperDomain("Kolte Patil Developers Ltd.")).toBe("https://www.koltepatil.com");
   });
+
+  it("Phase 48 — resolves Runwal Realty, the ninth curated developer", () => {
+    expect(resolveDeveloperDomain("Runwal Realty")).toBe("https://runwalrealty.com");
+    expect(resolveDeveloperDomain("Runwal")).toBe("https://runwalrealty.com");
+  });
 });

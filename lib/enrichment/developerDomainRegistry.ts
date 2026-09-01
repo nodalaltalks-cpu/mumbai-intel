@@ -59,6 +59,13 @@ const CURATED_DEVELOPER_DOMAINS: Record<string, string> = {
   // and structured JSON-LD on the actual Serenova project page.
   "kolte patil developers ltd.": "https://www.koltepatil.com",
   "kolte patil": "https://www.koltepatil.com",
+  // Phase 48 -- ninth developer, part of the Mumbai-wide coverage audit.
+  // Confirmed via runwalrealty.com's own Organization JSON-LD (name "Runwal
+  // Realty", foundingDate 1978, matching real facebook/instagram/linkedin/
+  // youtube profiles), a clean robots.txt, and a real sitemap with dedicated
+  // residential-ongoing/upcoming/complete sub-sitemaps.
+  "runwal realty": "https://runwalrealty.com",
+  "runwal": "https://runwalrealty.com",
 };
 
 function normalize(name: string): string {
