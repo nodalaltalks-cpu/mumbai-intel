@@ -74,6 +74,17 @@ const CURATED_DEVELOPER_DOMAINS: Record<string, string> = {
   // pages, and a real @graph JSON-LD naming the developer directly.
   "rustomjee": "https://www.rustomjee.com",
   "keystone realtors": "https://www.rustomjee.com",
+  // Phase 52 -- eleventh developer, the focused full-treatment target.
+  // Confirmed via sunteckindia.com's own Organization JSON-LD (name "Sunteck
+  // Realty", phone +91-22-6198-9898 matching real linkedin/instagram/facebook
+  // profiles), a robots.txt that only disallows career/investor/disclaimer
+  // pages (every residential project page is explicitly crawlable) with a
+  // real Sitemap directive, and a real sitemap.xml listing the developer's
+  // own current project pages -- also confirmed to be the correct listed
+  // company (BSE 512179 / NSE SUNTECK), not the unrelated same-named IT firm
+  // the founder flagged during this phase's research.
+  "sunteck realty": "https://www.sunteckindia.com",
+  "sunteck": "https://www.sunteckindia.com",
 };
 
 function normalize(name: string): string {

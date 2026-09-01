@@ -47,6 +47,7 @@ import {
   RUSTOMJEE_CLIFF_TOWER_PROJECT_URL,
   OZONE_SKYE_GOREGAON_WEST_PROJECT_URL,
 } from "@/lib/enrichment/adapters/rustomjeeAdapter";
+import { sunteckAdapter, SUNTECK_4TH_AVENUE_PROJECT_URL, SUNTECK_ALTAVIA_PROJECT_URL } from "@/lib/enrichment/adapters/sunteckAdapter";
 import { resolveProjectSource, type DeveloperSource } from "@/lib/enrichment/projectSourceResolution";
 import { buildEnrichmentSummary, withFieldTouched, type ProjectEnrichmentStatus } from "@/lib/enrichment/enrichmentSummary";
 import type { EnrichmentField } from "@/lib/enrichment/types";
@@ -191,6 +192,23 @@ const CURATED_SOURCES: Record<string, DeveloperSource> = {
       "rustomjee ozone skye": OZONE_SKYE_GOREGAON_WEST_PROJECT_URL,
     },
     sitemapUrl: "https://www.rustomjee.com/sitemap-projects.xml",
+  },
+  // Phase 52 -- 11th developer. Only 2 of Sunteck's own 16 current Mumbai-area
+  // project pages resolve to an existing Mumbai-CITY Locality (both Goregaon
+  // West); the rest (BKC/Andheri West pages) are already Occupancy-Certificate
+  // "OC Received"/complete, and several more (Mira Road, Naigaon, Vasai,
+  // Kalyan, Airoli) sit outside Mumbai city proper -- see sunteckAdapter.ts's
+  // own doc comment and this phase's final report for the full audit.
+  "https://www.sunteckindia.com": {
+    adapter: sunteckAdapter,
+    projects: {
+      "sunteckcity 4th avenue": SUNTECK_4TH_AVENUE_PROJECT_URL,
+      "sunteckcity 4th avenue goregaon": SUNTECK_4TH_AVENUE_PROJECT_URL,
+      "4th avenue": SUNTECK_4TH_AVENUE_PROJECT_URL,
+      "sunteck altavia": SUNTECK_ALTAVIA_PROJECT_URL,
+      "altavia": SUNTECK_ALTAVIA_PROJECT_URL,
+    },
+    sitemapUrl: "https://www.sunteckindia.com/sitemap.xml",
   },
 };
 

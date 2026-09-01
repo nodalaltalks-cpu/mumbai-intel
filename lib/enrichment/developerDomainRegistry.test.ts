@@ -42,4 +42,9 @@ describe("resolveDeveloperDomain (Phase 28 Part E — curated, never guessed)", 
     expect(resolveDeveloperDomain("Rustomjee")).toBe("https://www.rustomjee.com");
     expect(resolveDeveloperDomain("Keystone Realtors")).toBe("https://www.rustomjee.com");
   });
+
+  it("Phase 52 — resolves Sunteck Realty, the eleventh curated developer (sunteckindia.com, NOT the unrelated same-named IT firm)", () => {
+    expect(resolveDeveloperDomain("Sunteck Realty")).toBe("https://www.sunteckindia.com");
+    expect(resolveDeveloperDomain("Sunteck")).toBe("https://www.sunteckindia.com");
+  });
 });
