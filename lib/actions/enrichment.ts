@@ -48,6 +48,15 @@ import {
   OZONE_SKYE_GOREGAON_WEST_PROJECT_URL,
 } from "@/lib/enrichment/adapters/rustomjeeAdapter";
 import { sunteckAdapter, SUNTECK_4TH_AVENUE_PROJECT_URL, SUNTECK_ALTAVIA_PROJECT_URL } from "@/lib/enrichment/adapters/sunteckAdapter";
+import {
+  shapoorjiPallonjiAdapter,
+  SP_HEARTLAND_PROJECT_URL,
+  SP_THE_ODYSSEY_PROJECT_URL,
+  SP_NINE_ARCS_PROJECT_URL,
+  SP_BKC_9_PROJECT_URL,
+  SP_BKC_28_PROJECT_URL,
+  SP_CODENAME_NP_1_2_PROJECT_URL,
+} from "@/lib/enrichment/adapters/shapoorjiPallonjiAdapter";
 import { resolveProjectSource, type DeveloperSource } from "@/lib/enrichment/projectSourceResolution";
 import { buildEnrichmentSummary, withFieldTouched, type ProjectEnrichmentStatus } from "@/lib/enrichment/enrichmentSummary";
 import type { EnrichmentField } from "@/lib/enrichment/types";
@@ -209,6 +218,31 @@ const CURATED_SOURCES: Record<string, DeveloperSource> = {
       "altavia": SUNTECK_ALTAVIA_PROJECT_URL,
     },
     sitemapUrl: "https://www.sunteckindia.com/sitemap.xml",
+  },
+  // Phase 53 -- 12th developer. "Codename Zest" is Heartland's own pre-launch
+  // internal name (a real 301 redirect on the developer's own site, not a
+  // separate project) -- deliberately never curated as its own entry here.
+  // "The Minerva" (listed on the developer's own Mumbai project index page)
+  // 301-redirects to the homepage -- no real project page exists yet, so it
+  // is not curated either; see this phase's report for the full audit.
+  "https://shapoorjirealestate.com": {
+    adapter: shapoorjiPallonjiAdapter,
+    projects: {
+      "heartland": SP_HEARTLAND_PROJECT_URL,
+      "shapoorji pallonji heartland": SP_HEARTLAND_PROJECT_URL,
+      "the odyssey": SP_THE_ODYSSEY_PROJECT_URL,
+      "shapoorji pallonji the odyssey": SP_THE_ODYSSEY_PROJECT_URL,
+      "nine arcs": SP_NINE_ARCS_PROJECT_URL,
+      "shapoorji pallonji nine arcs": SP_NINE_ARCS_PROJECT_URL,
+      "bkc 9": SP_BKC_9_PROJECT_URL,
+      "shapoorji pallonji bkc 9": SP_BKC_9_PROJECT_URL,
+      "bkc 28": SP_BKC_28_PROJECT_URL,
+      "shapoorji pallonji bkc 28": SP_BKC_28_PROJECT_URL,
+      "codename np 1.2": SP_CODENAME_NP_1_2_PROJECT_URL,
+      "codename np 1-2": SP_CODENAME_NP_1_2_PROJECT_URL,
+      "shapoorji pallonji codename np 1.2": SP_CODENAME_NP_1_2_PROJECT_URL,
+    },
+    sitemapUrl: "https://shapoorjirealestate.com/sitemap.xml",
   },
 };
 

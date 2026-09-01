@@ -85,6 +85,14 @@ const CURATED_DEVELOPER_DOMAINS: Record<string, string> = {
   // the founder flagged during this phase's research.
   "sunteck realty": "https://www.sunteckindia.com",
   "sunteck": "https://www.sunteckindia.com",
+  // Phase 53 -- twelfth developer, selected via an evidence-based ranking
+  // against 5 real candidates (see Phase 53's own report). Confirmed as the
+  // single official site by the site's own explicit self-description ("the
+  // ONLY official website of Shapoorji Pallonji Real Estate"), a clean
+  // robots.txt (Disallow: empty, real Sitemap directive), a real sitemap.xml,
+  // and a dedicated real project index at /residential-projects-in/mumbai/.
+  "shapoorji pallonji real estate": "https://shapoorjirealestate.com",
+  "shapoorji pallonji": "https://shapoorjirealestate.com",
 };
 
 function normalize(name: string): string {

@@ -47,4 +47,9 @@ describe("resolveDeveloperDomain (Phase 28 Part E — curated, never guessed)", 
     expect(resolveDeveloperDomain("Sunteck Realty")).toBe("https://www.sunteckindia.com");
     expect(resolveDeveloperDomain("Sunteck")).toBe("https://www.sunteckindia.com");
   });
+
+  it("Phase 53 — resolves Shapoorji Pallonji Real Estate, the twelfth curated developer", () => {
+    expect(resolveDeveloperDomain("Shapoorji Pallonji Real Estate")).toBe("https://shapoorjirealestate.com");
+    expect(resolveDeveloperDomain("Shapoorji Pallonji")).toBe("https://shapoorjirealestate.com");
+  });
 });
