@@ -106,4 +106,21 @@ describe("resolveAreaToLocality (Phase 43 Part E)", () => {
       expect(resolveAreaToLocality("Pali Hill", [CHEMBUR])).toEqual({ status: "NO_MATCH" });
     });
   });
+
+  describe("Phase 51 -- Mumbai/non-Mumbai filtering (real Rustomjee sitemap findings: Thane/Dombivli/Virar projects genuinely outside scope)", () => {
+    it("Thane, Dombivli, and Virar area strings never resolve against a Mumbai-only locality list, even though 'Thane' shares no accidental overlap with real Mumbai locality names", () => {
+      expect(resolveAreaToLocality("Thane", [ANDHERI_WEST, CHEMBUR])).toEqual({ status: "NO_MATCH" });
+      expect(resolveAreaToLocality("Dombivli", [ANDHERI_WEST, CHEMBUR])).toEqual({ status: "NO_MATCH" });
+      expect(resolveAreaToLocality("Virar", [ANDHERI_WEST, CHEMBUR])).toEqual({ status: "NO_MATCH" });
+    });
+
+    it("a bare directional name with no East/West suffix (the real Gurukrupa 'Bandra'/'Vikhroli' page wording) correctly returns NO_MATCH rather than guessing which side", () => {
+      const BANDRA_EAST = { id: "loc-bandra-east", name: "Bandra East", aliases: [] as string[] };
+      const BANDRA_WEST = { id: "loc-bandra-west", name: "Bandra West", aliases: [] as string[] };
+      const VIKHROLI_EAST = { id: "loc-vikhroli-east", name: "Vikhroli East", aliases: [] as string[] };
+      const VIKHROLI_WEST = { id: "loc-vikhroli-west", name: "Vikhroli West", aliases: [] as string[] };
+      expect(resolveAreaToLocality("Bandra", [BANDRA_EAST, BANDRA_WEST])).toEqual({ status: "NO_MATCH" });
+      expect(resolveAreaToLocality("Vikhroli", [VIKHROLI_EAST, VIKHROLI_WEST])).toEqual({ status: "NO_MATCH" });
+    });
+  });
 });

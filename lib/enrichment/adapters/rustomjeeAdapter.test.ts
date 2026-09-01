@@ -153,5 +153,31 @@ describe("extractRustomjeeFacts (Phase 49 -- tenth developer, Next.js Script-inj
     expect(thinFacts.reraNumber).toBeUndefined(); // genuinely no RERA text anywhere on this page
   });
 
+  describe("Phase 51 -- real project-status findings (Rustomjee Seasons was confirmed genuinely 'Sold Out' via a real availability widget outside the @graph structure)", () => {
+    it("16. a 'Sold Out' availability widget elsewhere on the page is NOT captured as facts.status -- confirmed real limitation, not a bug: only the structured @graph 'Property Status' field feeds facts.status, so a page with no such field (or one that only says 'Under Construction' there while a separate widget says 'Sold Out') reports status as MISSING or the structured value, never the sold-out text", () => {
+      const html = buildRichPageHtml({ title: "Rustomjee Seasons", name: "Rustomjee Seasons", propertyStatus: "Under Construction" })
+        .replace("</body>", '<p class="ui-project-details-section__availability-text">Sold Out</p></body>');
+      const facts = extractRustomjeeFacts(html);
+      // The adapter reports exactly what the structured field says -- it does not
+      // reconcile this against the separate "Sold Out" availability widget text.
+      // Phase 51's own real classification work had to resolve this by hand.
+      expect(facts.status?.value).toBe("Under Construction");
+    });
+
+    it("17. a page with genuinely no Property Status field AND no RERA (the real Elita/7-JVPD/9-JVPD shape) reports status as MISSING, never inferred from page size or template alone", () => {
+      const html = buildThinPageHtml({ title: "Rustomjee Elita in Juhu" });
+      const facts = extractRustomjeeFacts(html);
+      expect(facts.status).toBeUndefined();
+      expect(facts.reraNumber).toBeUndefined();
+    });
+
+    it("18. a real 'New Launch' project with a confirmed Property Status still classifies correctly end-to-end (EOI/newly-launched projects are not excluded by the adapter itself -- that judgment stays with Phase 51's own founder-facing classification, not baked into extraction)", () => {
+      const html = buildRichPageHtml({ title: "Ozone Skye", name: "Ozone Skye", addressLocality: "Goregaon West", propertyStatus: "Under Construction" });
+      const facts = extractRustomjeeFacts(html);
+      expect(facts.status?.value).toBe("Under Construction");
+      expect(facts.locality?.value).toBe("Goregaon West");
+    });
+  });
+
   afterEach(() => vi.unstubAllGlobals());
 });

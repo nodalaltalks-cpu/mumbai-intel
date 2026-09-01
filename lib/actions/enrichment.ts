@@ -113,6 +113,13 @@ const CURATED_SOURCES: Record<string, DeveloperSource> = {
       "gurukrupa ekam": GURUKRUPA_EKAM_PROJECT_URL,
       "gurukrupa maurya": "https://gurukruparealcon.com/projects/gurukrupa-maurya",
       "gurukrupa dhyanam": "https://gurukruparealcon.com/projects/gurukrupa-dhyanam",
+      // Phase 51 -- two more real, verified-active Gurukrupa Realcon
+      // projects (confirmed "Under Construction" + real RERA on the
+      // developer's own site), reusing the SAME existing adapter -- zero
+      // new engineering, exactly Part F's "developer -> adapter -> many
+      // project URLs" model.
+      "gurukrupa aatman": "https://gurukruparealcon.com/projects/gurukrupa-aatman",
+      "gurukrupa alaknanda": "https://gurukruparealcon.com/projects/gurukrupa-alaknanda",
     },
     sitemapUrl: "https://gurukruparealcon.com/sitemap.xml",
   },
