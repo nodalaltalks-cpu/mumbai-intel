@@ -57,6 +57,7 @@ import {
   SP_BKC_28_PROJECT_URL,
   SP_CODENAME_NP_1_2_PROJECT_URL,
 } from "@/lib/enrichment/adapters/shapoorjiPallonjiAdapter";
+import { piramalRealtyAdapter, PIRAMAL_MAHALAXMI_PROJECT_URL, PIRAMAL_ARANYA_PROJECT_URL, PIRAMAL_REVANTA_PROJECT_URL } from "@/lib/enrichment/adapters/piramalRealtyAdapter";
 import { resolveProjectSource, type DeveloperSource } from "@/lib/enrichment/projectSourceResolution";
 import { buildEnrichmentSummary, withFieldTouched, type ProjectEnrichmentStatus } from "@/lib/enrichment/enrichmentSummary";
 import type { EnrichmentField } from "@/lib/enrichment/types";
@@ -243,6 +244,23 @@ const CURATED_SOURCES: Record<string, DeveloperSource> = {
       "shapoorji pallonji codename np 1.2": SP_CODENAME_NP_1_2_PROJECT_URL,
     },
     sitemapUrl: "https://shapoorjirealestate.com/sitemap.xml",
+  },
+  // Phase 54 -- thirteenth developer. Only 3 genuine current Mumbai-city
+  // residential projects exist for this developer at all (not a truncated
+  // sample -- Piramal Vaikunth is Thane/MMR, excluded; Piramal Corporate
+  // Park is commercial-only, excluded); see this phase's report for the
+  // full research audit. sitemapUrl is listed but not used as a discovery
+  // tier for these 3 -- their canonical slugs weren't confirmed present in
+  // the sitemap's own listing, so it's curated here as a last-resort tier
+  // only, same caveat already documented for several other developers.
+  "https://www.piramalrealty.com": {
+    adapter: piramalRealtyAdapter,
+    projects: {
+      "piramal mahalaxmi": PIRAMAL_MAHALAXMI_PROJECT_URL,
+      "piramal aranya": PIRAMAL_ARANYA_PROJECT_URL,
+      "piramal revanta": PIRAMAL_REVANTA_PROJECT_URL,
+    },
+    sitemapUrl: "https://www.piramalrealty.com/sitemap.xml",
   },
 };
 

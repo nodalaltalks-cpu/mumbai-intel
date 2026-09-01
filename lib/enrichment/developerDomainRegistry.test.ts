@@ -52,4 +52,9 @@ describe("resolveDeveloperDomain (Phase 28 Part E — curated, never guessed)", 
     expect(resolveDeveloperDomain("Shapoorji Pallonji Real Estate")).toBe("https://shapoorjirealestate.com");
     expect(resolveDeveloperDomain("Shapoorji Pallonji")).toBe("https://shapoorjirealestate.com");
   });
+
+  it("Phase 54 — resolves Piramal Realty, the thirteenth curated developer", () => {
+    expect(resolveDeveloperDomain("Piramal Realty")).toBe("https://www.piramalrealty.com");
+    expect(resolveDeveloperDomain("Piramal")).toBe("https://www.piramalrealty.com");
+  });
 });

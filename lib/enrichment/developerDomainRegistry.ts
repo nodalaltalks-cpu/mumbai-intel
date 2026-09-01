@@ -93,6 +93,17 @@ const CURATED_DEVELOPER_DOMAINS: Record<string, string> = {
   // and a dedicated real project index at /residential-projects-in/mumbai/.
   "shapoorji pallonji real estate": "https://shapoorjirealestate.com",
   "shapoorji pallonji": "https://shapoorjirealestate.com",
+  // Phase 54 -- thirteenth developer, chosen via an evidence-based ranking
+  // against 5 real candidates (Piramal Realty, Omkar Realtors, Birla
+  // Estates, Ekta World, Chandak Group -- see Phase 54's own report).
+  // Confirmed via piramalrealty.com's own Organization JSON-LD (name
+  // "Piramal Realty", foundingDate 2012, matching real facebook/twitter/
+  // youtube/linkedin/instagram profiles), a robots.txt with an explicit
+  // `Allow: /` for every crawler (including AI/LLM crawlers) and a real
+  // `Sitemap:` directive, and real structured JSON-LD on all 3 of the
+  // developer's genuine current Mumbai-city project pages.
+  "piramal realty": "https://www.piramalrealty.com",
+  "piramal": "https://www.piramalrealty.com",
 };
 
 function normalize(name: string): string {
