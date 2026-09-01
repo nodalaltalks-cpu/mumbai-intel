@@ -65,4 +65,45 @@ describe("resolveAreaToLocality (Phase 43 Part E)", () => {
     const result = resolveAreaToLocality("Hrushikesh, Lokhandwala, Andheri (W)", [CHEMBUR]);
     expect(result.status).toBe("NO_MATCH");
   });
+
+  describe("Phase 50 -- new micro-market entries, only usable once their real target Locality exists", () => {
+    const BANDRA_EAST = { id: "loc-bandra-east", name: "Bandra East", aliases: [] as string[] };
+    const BANDRA_WEST = { id: "loc-bandra-west", name: "Bandra West", aliases: [] as string[] };
+    const ANDHERI_EAST = { id: "loc-andheri-east", name: "Andheri East", aliases: [] as string[] };
+    const VILE_PARLE_WEST = { id: "loc-vile-parle-west", name: "Vile Parle West", aliases: [] as string[] };
+    const POWAI = { id: "loc-powai", name: "Powai", aliases: [] as string[] };
+    const MALAD_WEST = { id: "loc-malad-west", name: "Malad West", aliases: [] as string[] };
+    const KHAR_WEST = { id: "loc-khar-west", name: "Khar West", aliases: [] as string[] };
+
+    it("BKC and 'BKC Annexe' (the real Rustomjee Prive/Cleon wording) resolve to Bandra East, not Bandra West", () => {
+      expect(resolveAreaToLocality("BKC", [BANDRA_EAST, BANDRA_WEST])).toMatchObject({ status: "SINGLE_MATCH", tier: "MICRO_MARKET", localityId: "loc-bandra-east" });
+      expect(resolveAreaToLocality("BKC Annexe", [BANDRA_EAST, BANDRA_WEST])).toMatchObject({ status: "SINGLE_MATCH", tier: "MICRO_MARKET", localityId: "loc-bandra-east" });
+      expect(resolveAreaToLocality("Bandra Kurla Complex", [BANDRA_EAST, BANDRA_WEST])).toMatchObject({ status: "SINGLE_MATCH", localityId: "loc-bandra-east" });
+    });
+
+    it("'Pali Hill' (the real Rustomjee Parishram/Crescent wording) resolves to Bandra West, not Bandra East", () => {
+      expect(resolveAreaToLocality("Pali Hill", [BANDRA_EAST, BANDRA_WEST])).toMatchObject({ status: "SINGLE_MATCH", tier: "MICRO_MARKET", localityId: "loc-bandra-west" });
+    });
+
+    it("'JVPD' (the real Rustomjee 7/9 JVPD wording) resolves to Vile Parle West", () => {
+      expect(resolveAreaToLocality("JVPD", [VILE_PARLE_WEST])).toMatchObject({ status: "SINGLE_MATCH", tier: "MICRO_MARKET", localityId: "loc-vile-parle-west" });
+    });
+
+    it("Chakala/Marol/MIDC resolve to Andheri East, not Andheri West", () => {
+      expect(resolveAreaToLocality("Chakala", [ANDHERI_EAST])).toMatchObject({ status: "SINGLE_MATCH", localityId: "loc-andheri-east" });
+      expect(resolveAreaToLocality("Marol", [ANDHERI_EAST])).toMatchObject({ status: "SINGLE_MATCH", localityId: "loc-andheri-east" });
+      expect(resolveAreaToLocality("MIDC", [ANDHERI_EAST])).toMatchObject({ status: "SINGLE_MATCH", localityId: "loc-andheri-east" });
+    });
+
+    it("Hiranandani Gardens resolves to Powai; Mindspace resolves to Malad West; Khar Danda resolves to Khar West", () => {
+      expect(resolveAreaToLocality("Hiranandani Gardens", [POWAI])).toMatchObject({ status: "SINGLE_MATCH", localityId: "loc-powai" });
+      expect(resolveAreaToLocality("Mindspace", [MALAD_WEST])).toMatchObject({ status: "SINGLE_MATCH", localityId: "loc-malad-west" });
+      expect(resolveAreaToLocality("Khar Danda", [KHAR_WEST])).toMatchObject({ status: "SINGLE_MATCH", localityId: "loc-khar-west" });
+    });
+
+    it("a Phase 50 micro-market entry correctly falls through to NO_MATCH when its target Locality doesn't exist in the given list -- never invents one", () => {
+      expect(resolveAreaToLocality("BKC", [CHEMBUR])).toEqual({ status: "NO_MATCH" });
+      expect(resolveAreaToLocality("Pali Hill", [CHEMBUR])).toEqual({ status: "NO_MATCH" });
+    });
+  });
 });

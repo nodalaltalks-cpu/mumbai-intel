@@ -75,6 +75,28 @@ const MICRO_MARKET_TO_LOCALITY: Record<string, string> = {
   "new link road": "Andheri West",
   "yari road": "Andheri West",
   "model town": "Andheri West",
+  // Phase 50 -- added once the target Locality actually existed (this map
+  // never points at a Locality name that isn't real yet). Each entry below
+  // was confirmed against either a real Phase 44-49 official-developer page
+  // (Kolte Patil Serenova's own address: "Four Bungalows, Versova, Andheri
+  // West"; Rustomjee's own pages naming "JVPD"/"Vile Parle West" and "BKC
+  // Annexe"/"Pali Hill" directly) or well-established BMC ward geography
+  // (BKC sits administratively in Bandra East, not its own ward).
+  "seven bungalows": "Andheri West",
+  "four bungalows": "Andheri West",
+  "chakala": "Andheri East",
+  "marol": "Andheri East",
+  "midc": "Andheri East",
+  "midc andheri": "Andheri East",
+  "bkc": "Bandra East",
+  "bandra kurla complex": "Bandra East",
+  "bkc annexe": "Bandra East",
+  "pali hill": "Bandra West",
+  "khar danda": "Khar West",
+  "jvpd": "Vile Parle West",
+  "juhu vile parle development": "Vile Parle West",
+  "hiranandani gardens": "Powai",
+  mindspace: "Malad West",
 };
 
 function splitSegments(areaName: string): string[] {
