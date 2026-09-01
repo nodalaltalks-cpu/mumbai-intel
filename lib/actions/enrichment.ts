@@ -27,6 +27,26 @@ import { lodhaAdapter, LODHA_CULLINAN_PROJECT_URL } from "@/lib/enrichment/adapt
 import { oberoiRealtyAdapter, OBEROI_SKY_HEIGHTS_PROJECT_URL, OBEROI_SPRINGS_PROJECT_URL } from "@/lib/enrichment/adapters/oberoiRealtyAdapter";
 import { koltePatilAdapter, KOLTE_PATIL_SERENOVA_PROJECT_URL } from "@/lib/enrichment/adapters/koltePatilAdapter";
 import { runwalRealtyAdapter, RUNWAL_SANCTUARY_PROJECT_URL } from "@/lib/enrichment/adapters/runwalRealtyAdapter";
+import {
+  rustomjeeAdapter,
+  RUSTOMJEE_OCEAN_VISTA_PROJECT_URL,
+  RUSTOMJEE_BALMORAL_GOLFLINKS_PROJECT_URL,
+  RUSTOMJEE_ASHIANA_JUHU_PROJECT_URL,
+  RUSTOMJEE_PARISHRAM_BANDRA_PROJECT_URL,
+  RUSTOMJEE_CROWN_PRABHADEVI_PROJECT_URL,
+  RUSTOMJEE_PRIVE_BKC_PROJECT_URL,
+  RUSTOMJEE_ELEMENTS_JUHU_PROJECT_URL,
+  RUSTOMJEE_ELITA_JUHU_PROJECT_URL,
+  RUSTOMJEE_SEASONS_BANDRA_BKC_PROJECT_URL,
+  RUSTOMJEE_ADEN_BANDRA_BKC_PROJECT_URL,
+  RUSTOMJEE_CLEON_BKC_PROJECT_URL,
+  RUSTOMJEE_STELLA_BANDRA_PROJECT_URL,
+  RUSTOMJEE_VISTA_BAY_PAREL_PROJECT_URL,
+  RUSTOMJEE_7_JVPD_PROJECT_URL,
+  RUSTOMJEE_9_JVPD_PROJECT_URL,
+  RUSTOMJEE_CLIFF_TOWER_PROJECT_URL,
+  OZONE_SKYE_GOREGAON_WEST_PROJECT_URL,
+} from "@/lib/enrichment/adapters/rustomjeeAdapter";
 import { resolveProjectSource, type DeveloperSource } from "@/lib/enrichment/projectSourceResolution";
 import { buildEnrichmentSummary, withFieldTouched, type ProjectEnrichmentStatus } from "@/lib/enrichment/enrichmentSummary";
 import type { EnrichmentField } from "@/lib/enrichment/types";
@@ -125,6 +145,45 @@ const CURATED_SOURCES: Record<string, DeveloperSource> = {
     adapter: runwalRealtyAdapter,
     projects: { "runwal sanctuary": RUNWAL_SANCTUARY_PROJECT_URL },
     sitemapUrl: "https://runwalrealty.com/residential-ongoing-sitemap.xml",
+  },
+  // Phase 49 -- 16 hand-verified real Mumbai residential projects, each
+  // individually confirmed against rustomjee.com's own sitemap-projects.xml
+  // and real page content (name/locality/RERA where present).
+  "https://www.rustomjee.com": {
+    adapter: rustomjeeAdapter,
+    projects: {
+      "rustomjee ocean vista": RUSTOMJEE_OCEAN_VISTA_PROJECT_URL,
+      "rustomjee balmoral golflinks": RUSTOMJEE_BALMORAL_GOLFLINKS_PROJECT_URL,
+      "rustomjee balmoral golf links": RUSTOMJEE_BALMORAL_GOLFLINKS_PROJECT_URL,
+      "rustomjee ashiana": RUSTOMJEE_ASHIANA_JUHU_PROJECT_URL,
+      "rustomjee ashiana juhu": RUSTOMJEE_ASHIANA_JUHU_PROJECT_URL,
+      "rustomjee parishram": RUSTOMJEE_PARISHRAM_BANDRA_PROJECT_URL,
+      "rustomjee crown": RUSTOMJEE_CROWN_PRABHADEVI_PROJECT_URL,
+      "rustomjee crown prabhadevi": RUSTOMJEE_CROWN_PRABHADEVI_PROJECT_URL,
+      "rustomjee prive": RUSTOMJEE_PRIVE_BKC_PROJECT_URL,
+      "rustomjee prive bkc annexe": RUSTOMJEE_PRIVE_BKC_PROJECT_URL,
+      "rustomjee elements": RUSTOMJEE_ELEMENTS_JUHU_PROJECT_URL,
+      "rustomjee elements juhu": RUSTOMJEE_ELEMENTS_JUHU_PROJECT_URL,
+      "rustomjee elita": RUSTOMJEE_ELITA_JUHU_PROJECT_URL,
+      "rustomjee elita juhu": RUSTOMJEE_ELITA_JUHU_PROJECT_URL,
+      "rustomjee seasons": RUSTOMJEE_SEASONS_BANDRA_BKC_PROJECT_URL,
+      "rustomjee seasons bandra bkc": RUSTOMJEE_SEASONS_BANDRA_BKC_PROJECT_URL,
+      "rustomjee aden": RUSTOMJEE_ADEN_BANDRA_BKC_PROJECT_URL,
+      "rustomjee aden bandra": RUSTOMJEE_ADEN_BANDRA_BKC_PROJECT_URL,
+      "rustomjee cleon": RUSTOMJEE_CLEON_BKC_PROJECT_URL,
+      "rustomjee cleon bkc": RUSTOMJEE_CLEON_BKC_PROJECT_URL,
+      "rustomjee stella": RUSTOMJEE_STELLA_BANDRA_PROJECT_URL,
+      "rustomjee stella bandra": RUSTOMJEE_STELLA_BANDRA_PROJECT_URL,
+      "rustomjee vista bay": RUSTOMJEE_VISTA_BAY_PAREL_PROJECT_URL,
+      "vista bay parel": RUSTOMJEE_VISTA_BAY_PAREL_PROJECT_URL,
+      "rustomjee 7 jvpd": RUSTOMJEE_7_JVPD_PROJECT_URL,
+      "rustomjee 9 jvpd": RUSTOMJEE_9_JVPD_PROJECT_URL,
+      "rustomjee cliff tower": RUSTOMJEE_CLIFF_TOWER_PROJECT_URL,
+      "ozone skye": OZONE_SKYE_GOREGAON_WEST_PROJECT_URL,
+      "ozone skye goregaon west": OZONE_SKYE_GOREGAON_WEST_PROJECT_URL,
+      "rustomjee ozone skye": OZONE_SKYE_GOREGAON_WEST_PROJECT_URL,
+    },
+    sitemapUrl: "https://www.rustomjee.com/sitemap-projects.xml",
   },
 };
 

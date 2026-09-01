@@ -37,4 +37,9 @@ describe("resolveDeveloperDomain (Phase 28 Part E — curated, never guessed)", 
     expect(resolveDeveloperDomain("Runwal Realty")).toBe("https://runwalrealty.com");
     expect(resolveDeveloperDomain("Runwal")).toBe("https://runwalrealty.com");
   });
+
+  it("Phase 49 — resolves Rustomjee, the tenth curated developer", () => {
+    expect(resolveDeveloperDomain("Rustomjee")).toBe("https://www.rustomjee.com");
+    expect(resolveDeveloperDomain("Keystone Realtors")).toBe("https://www.rustomjee.com");
+  });
 });

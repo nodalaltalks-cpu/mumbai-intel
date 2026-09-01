@@ -66,6 +66,14 @@ const CURATED_DEVELOPER_DOMAINS: Record<string, string> = {
   // residential-ongoing/upcoming/complete sub-sitemaps.
   "runwal realty": "https://runwalrealty.com",
   "runwal": "https://runwalrealty.com",
+  // Phase 49 -- tenth developer, the primary scaling test (biggest single
+  // Mumbai footprint verified so far: 57 real top-level residential project
+  // pages on its own sitemap-projects.xml). Confirmed via a clean robots.txt
+  // (only /wp-admin/ disallowed, real Sitemap directive), real per-project
+  // content matching the developer's own known brand across dozens of
+  // pages, and a real @graph JSON-LD naming the developer directly.
+  "rustomjee": "https://www.rustomjee.com",
+  "keystone realtors": "https://www.rustomjee.com",
 };
 
 function normalize(name: string): string {
