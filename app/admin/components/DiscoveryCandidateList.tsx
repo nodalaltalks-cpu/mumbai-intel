@@ -68,10 +68,10 @@ export default function DiscoveryCandidateList({
   }
 
   return (
-    <div className="overflow-x-auto rounded-sm border border-border">
+    <div className="max-h-[70vh] overflow-auto rounded-sm border border-border">
       <table className="w-full min-w-[1100px] border-collapse text-xs">
-        <thead>
-          <tr className="border-b border-border bg-surface-raised text-[10px] uppercase tracking-wide text-muted">
+        <thead className="sticky top-0 z-10 bg-surface-raised">
+          <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted">
             <th className="px-3 py-2 text-left">Project</th>
             <th className="px-3 py-2 text-left">Developer</th>
             <th className="px-3 py-2 text-left">Area</th>
