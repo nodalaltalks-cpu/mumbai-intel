@@ -69,12 +69,13 @@ export default function DiscoveryCandidateList({
 
   return (
     <div className="overflow-x-auto rounded-sm border border-border">
-      <table className="w-full min-w-[900px] border-collapse text-xs">
+      <table className="w-full min-w-[1100px] border-collapse text-xs">
         <thead>
           <tr className="border-b border-border bg-surface-raised text-[10px] uppercase tracking-wide text-muted">
             <th className="px-3 py-2 text-left">Project</th>
             <th className="px-3 py-2 text-left">Developer</th>
             <th className="px-3 py-2 text-left">Area</th>
+            <th className="px-3 py-2 text-left">Source URL</th>
             <th className="px-3 py-2 text-left">Discovery source</th>
             <th className="px-3 py-2 text-left">Official source</th>
             <th className="px-3 py-2 text-left">Confidence</th>
@@ -93,6 +94,11 @@ export default function DiscoveryCandidateList({
                 <td className="px-3 py-2 align-top text-foreground">{p.projectName}</td>
                 <td className="px-3 py-2 align-top text-foreground">{p.developerName}</td>
                 <td className="px-3 py-2 align-top text-muted">{p.areaName}</td>
+                <td className="px-3 py-2 align-top">
+                  <a href={p.sourceUrl} target="_blank" rel="noreferrer" className="break-all text-accent hover:underline">
+                    {p.sourceUrl}
+                  </a>
+                </td>
                 <td className="px-3 py-2 align-top text-muted">
                   {p.discoverySource}
                   <br />
