@@ -57,4 +57,19 @@ describe("resolveDeveloperDomain (Phase 28 Part E — curated, never guessed)", 
     expect(resolveDeveloperDomain("Piramal Realty")).toBe("https://www.piramalrealty.com");
     expect(resolveDeveloperDomain("Piramal")).toBe("https://www.piramalrealty.com");
   });
+
+  it("Phase 55 — resolves the 7 developers newly curated for the automated-discovery MVP", () => {
+    expect(resolveDeveloperDomain("L&T Realty")).toBe("https://www.lntrealty.com");
+    expect(resolveDeveloperDomain("House of Hiranandani")).toBe("https://www.houseofhiranandani.com");
+    expect(resolveDeveloperDomain("Chandak Group")).toBe("https://www.chandakgroup.com");
+    expect(resolveDeveloperDomain("Kanakia Group")).toBe("https://www.kanakia.com");
+    expect(resolveDeveloperDomain("MICL Group")).toBe("https://www.micl.com");
+    expect(resolveDeveloperDomain("Mahindra Lifespace Developers")).toBe("https://www.mahindralifespaces.com");
+    expect(resolveDeveloperDomain("JP Infra")).toBe("https://www.jpinfra.com");
+  });
+
+  it("Phase 55 — deliberately does NOT resolve bare 'Hiranandani', which real research found genuinely ambiguous between multiple separate companies", () => {
+    expect(resolveDeveloperDomain("Hiranandani")).toBeNull();
+    expect(resolveDeveloperDomain("Hiranandani Group")).toBeNull();
+  });
 });

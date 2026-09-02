@@ -104,6 +104,40 @@ const CURATED_DEVELOPER_DOMAINS: Record<string, string> = {
   // developer's genuine current Mumbai-city project pages.
   "piramal realty": "https://www.piramalrealty.com",
   "piramal": "https://www.piramalrealty.com",
+  // Phase 55 -- Part B of the automated-discovery MVP: 7 new developers
+  // verified the same way as every entry above (never scanned before being
+  // curated here). Each confirmed via a real, live fetch of its own
+  // robots.txt (200, real Sitemap: directive, no blanket Disallow) plus
+  // either a self-identifying JSON-LD Organization.name or -- when no
+  // JSON-LD name was present -- a consistent developer-name handle across
+  // multiple real social platforms (facebook/instagram/linkedin/youtube),
+  // same secondary-evidence standard already used for Gurukrupa Realcon.
+  // Lookalike/lead-gen domains found alongside each real one during this
+  // phase's research were deliberately excluded (e.g. lntupcomingprojects.com,
+  // lt-realty-homes.com, lntrealtybandra.com, mumbaiprelaunch.com/lntrealty
+  // for L&T; chandakdevelopers.in for Chandak, no corroborating JSON-LD or
+  // social evidence found; jpprojects.in for JP Infra, same reason).
+  "l&t realty": "https://www.lntrealty.com",
+  "l and t realty": "https://www.lntrealty.com",
+  // "Hiranandani" alone is deliberately NOT curated -- real research this
+  // phase found the Hiranandani business split into multiple genuinely
+  // separate companies post family-split (hiranandani.com and
+  // hiranandanicommunities.com, neither with a self-identifying JSON-LD
+  // Organization name to disambiguate). Only "House of Hiranandani" is
+  // curated here: its own homepage JSON-LD explicitly names the
+  // Organization "House of Hiranandani", with matching facebook/twitter/
+  // linkedin/instagram handles all reading "houseofhiranandani".
+  "house of hiranandani": "https://www.houseofhiranandani.com",
+  "chandak group": "https://www.chandakgroup.com",
+  "chandak": "https://www.chandakgroup.com",
+  "kanakia group": "https://www.kanakia.com",
+  "kanakia": "https://www.kanakia.com",
+  "micl group": "https://www.micl.com",
+  "micl": "https://www.micl.com",
+  "mahindra lifespace developers": "https://www.mahindralifespaces.com",
+  "mahindra lifespaces": "https://www.mahindralifespaces.com",
+  "jp infra": "https://www.jpinfra.com",
+  "jp infra mumbai pvt. ltd.": "https://www.jpinfra.com",
 };
 
 function normalize(name: string): string {

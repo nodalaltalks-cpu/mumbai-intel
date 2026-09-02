@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { applyDiscoveryFounderAction } from "@/lib/actions/discovery";
 import type { DiscoveryStatus, ProjectDiscoveryCandidatePayload } from "@/lib/ingestion/discovery/types";
 import DiscoveryCandidateList, { type DiscoveryCandidateRow } from "@/app/admin/components/DiscoveryCandidateList";
+import MumbaiDiscoveryRunForm from "@/app/admin/components/MumbaiDiscoveryRunForm";
 import EmptyState from "@/app/components/ui/EmptyState";
 
 export const metadata: Metadata = { title: "Project Discovery — NoDalalTalks Admin" };
@@ -48,6 +49,8 @@ export default async function ProjectDiscoveryPage() {
           for enrichment once a candidate is Included.
         </p>
       </div>
+
+      <MumbaiDiscoveryRunForm />
 
       {rows.length === 0 ? (
         <EmptyState title="No discovery candidates yet" message="Run a discovery batch for an area to populate this list." />

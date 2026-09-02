@@ -19,6 +19,10 @@ import {
 import { applyFounderDiscoveryAction, type DiscoveryFounderAction } from "@/lib/ingestion/discovery/statusTransitions";
 import { DISCOVERY_ENTITY_TYPE, type DiscoveryStatus, type ProjectDiscoveryCandidatePayload } from "@/lib/ingestion/discovery/types";
 import type { ConnectorRunSummary } from "@/lib/ingestion/types";
+import { resolveDeveloperDomain } from "@/lib/enrichment/developerDomainRegistry";
+import { discoverDeveloperProjects, type DeveloperDiscoveryResult } from "@/lib/ingestion/discovery/generic/discoverDeveloperProjects";
+import { stageMumbaiDiscoveryCandidates, type DeveloperStagingTally } from "@/lib/ingestion/discovery/generic/stageMumbaiDiscoveryCandidates";
+import { runWithConcurrency } from "@/lib/ingestion/discovery/generic/runWithConcurrency";
 
 /**
  * Phase 39 Part H/K — stages a batch of discovery candidates for ONE already-
@@ -281,4 +285,117 @@ export async function applyDiscoveryFounderAction(id: string, action: DiscoveryF
   });
 
   return { ok: true, projectStagingRecordId: projectStagingRecord.id };
+}
+
+const DISCOVERY_USER_AGENT = "Mozilla/5.0 (compatible; MumbaiIntelBot/1.0)";
+/** Part L — start conservative: two developers scanned at once, never a burst against many sites simultaneously. */
+const DEVELOPER_SCAN_CONCURRENCY = 2;
+
+export interface RunMumbaiDiscoveryResult {
+  batchId: string | null;
+  developersRequested: number;
+  developersScanned: number;
+  /** A requested name that isn't in the curated developerDomainRegistry yet — never scanned with a guessed domain (Part B). */
+  developersSkippedUnknownDomain: string[];
+  developerClassifications: Record<string, DeveloperDiscoveryResult["classification"]>;
+  candidateUrlsDiscoveredTotal: number;
+  pagesFetchedTotal: number;
+  totals: DeveloperStagingTally;
+  perDeveloper: Record<string, DeveloperStagingTally>;
+  durationMs: number;
+}
+
+/**
+ * Phase 55 Part J — the smallest practical automation trigger: a founder
+ * hands this a list of developer NAMES (must already be curated in
+ * developerDomainRegistry.ts — Part B forbids guessing a domain here too),
+ * and it runs the full discovery → Mumbai/status filter → duplicate-
+ * protected staging pipeline (Part C–K), landing results in the EXISTING,
+ * unmodified Discovery Queue (/admin/data-sync/discovery) for founder
+ * review. Never approves, never enriches, never touches Transactions —
+ * exactly Part K's "discovery only" scope.
+ *
+ * Runs synchronously inside the request (no queue/job infrastructure, per
+ * Part O) — for a large developer list this can take several minutes
+ * (network-bound: robots.txt + sitemap + a bounded sample of project pages
+ * per developer). The founder should run it in reasonably sized batches.
+ */
+export async function runMumbaiDiscoveryBatch(developerNames: string[]): Promise<RunMumbaiDiscoveryResult> {
+  const start = Date.now();
+  const session = await requireMutateSession();
+
+  const city = await prisma.city.findUnique({ where: { slug: PRIMARY_CITY_SLUG }, select: { id: true } });
+  if (!city) throw new Error(`Primary city "${PRIMARY_CITY_SLUG}" is not seeded`);
+
+  const skippedUnknownDomain: string[] = [];
+  const targets: { developerName: string; domain: string }[] = [];
+  for (const name of developerNames) {
+    const domain = resolveDeveloperDomain(name);
+    if (!domain) {
+      skippedUnknownDomain.push(name);
+      continue;
+    }
+    targets.push({ developerName: name, domain });
+  }
+
+  const scanResults = await runWithConcurrency(targets, DEVELOPER_SCAN_CONCURRENCY, (t) =>
+    discoverDeveloperProjects(t.developerName, t.domain, { fetchImpl: fetch, userAgent: DISCOVERY_USER_AGENT })
+  );
+  const developerResults: DeveloperDiscoveryResult[] = scanResults.filter((r) => r.result !== null).map((r) => r.result!);
+
+  const batchLabel = `Mumbai Discovery — ${new Date().toISOString().slice(0, 10)}`;
+  const stageOutcome = await stageMumbaiDiscoveryCandidates({
+    prisma,
+    cityId: city.id,
+    batchLabel,
+    sourceKey: `mumbai-discovery-auto:${Date.now()}`,
+    triggeredByUserId: session.userId,
+    developerResults,
+  });
+
+  await logAudit(session.userId, "discovery.mumbai_auto_run", "IngestBatch", stageOutcome.batchId, {
+    after: {
+      batchLabel,
+      developersScanned: developerResults.length,
+      staged: stageOutcome.totals.staged,
+      needsReview: stageOutcome.totals.needsReview,
+      rejectedDuplicate: stageOutcome.totals.rejectedDuplicate,
+    },
+  });
+
+  return {
+    batchId: stageOutcome.batchId,
+    developersRequested: developerNames.length,
+    developersScanned: developerResults.length,
+    developersSkippedUnknownDomain: skippedUnknownDomain,
+    developerClassifications: Object.fromEntries(developerResults.map((r) => [r.developerName, r.classification])),
+    candidateUrlsDiscoveredTotal: developerResults.reduce((sum, r) => sum + r.candidateUrlsIdentified, 0),
+    pagesFetchedTotal: developerResults.reduce((sum, r) => sum + r.pagesFetched, 0),
+    totals: stageOutcome.totals,
+    perDeveloper: stageOutcome.perDeveloper,
+    durationMs: Date.now() - start,
+  };
+}
+
+export interface RunMumbaiDiscoveryFormState {
+  error?: string;
+  result?: RunMumbaiDiscoveryResult;
+}
+
+/** Thin `useActionState`-compatible wrapper around runMumbaiDiscoveryBatch — parses a comma/newline-separated developer-name textarea (Part J's minimal trigger). */
+export async function runMumbaiDiscoveryFormAction(
+  _prev: RunMumbaiDiscoveryFormState,
+  formData: FormData
+): Promise<RunMumbaiDiscoveryFormState> {
+  const raw = String(formData.get("developerNames") ?? "");
+  const developerNames = [...new Set(raw.split(/[\n,]/).map((s) => s.trim()).filter(Boolean))];
+  if (developerNames.length === 0) {
+    return { error: "Enter at least one developer name (comma or newline separated)." };
+  }
+  try {
+    const result = await runMumbaiDiscoveryBatch(developerNames);
+    return { result };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
 }
