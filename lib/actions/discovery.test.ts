@@ -19,7 +19,7 @@ vi.mock("@/lib/prisma", () => ({
 vi.mock("@/lib/queries", () => ({ PRIMARY_CITY_SLUG: "mumbai" }));
 
 import { prisma } from "@/lib/prisma";
-import { applyDiscoveryFounderAction, stageDiscoveryBatch } from "./discovery";
+import { applyDiscoveryFounderAction, stageDiscoveryBatch, updateDiscoveryCandidateDetails } from "./discovery";
 import { DISCOVERY_ENTITY_TYPE } from "@/lib/ingestion/discovery/types";
 import type { ProjectDiscoveryCandidatePayload } from "@/lib/ingestion/discovery/types";
 
@@ -33,6 +33,7 @@ const stagingCreateMock = vi.mocked(prisma.ingestStagingRecord.create);
 const stagingFindUniqueMock = vi.mocked(prisma.ingestStagingRecord.findUnique);
 const stagingFindManyMock = vi.mocked(prisma.ingestStagingRecord.findMany);
 const stagingUpdateMock = vi.mocked(prisma.ingestStagingRecord.update);
+const auditCreateMock = vi.mocked(prisma.auditLog.create);
 
 const ANDHERI_WEST_LOCALITY = { id: "loc-andheri-west", name: "Andheri West", aliases: [] };
 
@@ -331,5 +332,145 @@ describe("applyDiscoveryFounderAction — Include (Phase 40 Part B/E)", () => {
     await applyDiscoveryFounderAction("cand-1", "INCLUDE");
     expect((prisma as unknown as { project: { update?: unknown; create?: unknown } }).project.update).toBeUndefined();
     expect((prisma as unknown as { project: { update?: unknown; create?: unknown } }).project.create).toBeUndefined();
+  });
+});
+
+describe("updateDiscoveryCandidateDetails (Phase 59 Part 1 -- founder-editable source/details)", () => {
+  it("manually entering a developer official source URL marks officialSourceStatus IDENTIFIED, and never touches the project-specific sourceUrl (Part 1's A/B separation, the real 'Gurukrupa' worked example)", async () => {
+    stagingFindUniqueMock.mockResolvedValue(
+      discoveryCandidateRecord({ payload: { officialDeveloperUrl: null, officialSourceStatus: "OFFICIAL_SOURCE_UNKNOWN" } }) as never
+    );
+    const result = await updateDiscoveryCandidateDetails("cand-1", { officialDeveloperUrl: "https://gurukruparealcon.com/" });
+    expect(result.ok).toBe(true);
+    const written = stagingUpdateMock.mock.calls[0][0].data.payload as Record<string, unknown>;
+    expect(written.officialDeveloperUrl).toBe("https://gurukruparealcon.com/");
+    expect(written.officialSourceStatus).toBe("IDENTIFIED");
+    expect(written.sourceUrl).toBe("internal:x"); // unchanged -- a developer homepage is never auto-treated as the project page
+  });
+
+  it("editing the project-specific source URL (B) never touches the developer homepage (A)", async () => {
+    stagingFindUniqueMock.mockResolvedValue(discoveryCandidateRecord() as never);
+    const result = await updateDiscoveryCandidateDetails("cand-1", { sourceUrl: "https://gurukruparealcon.com/projects/gurukrupa-darshanam" });
+    expect(result.ok).toBe(true);
+    const written = stagingUpdateMock.mock.calls[0][0].data.payload as Record<string, unknown>;
+    expect(written.sourceUrl).toBe("https://gurukruparealcon.com/projects/gurukrupa-darshanam");
+    expect(written.officialDeveloperUrl).toBe("https://gurukruparealcon.com"); // unchanged
+  });
+
+  it("rejects a project source URL that isn't a full http(s):// URL, and writes nothing", async () => {
+    stagingFindUniqueMock.mockResolvedValue(discoveryCandidateRecord() as never);
+    const result = await updateDiscoveryCandidateDetails("cand-1", { sourceUrl: "gurukruparealcon.com/darshanam" });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("http");
+    expect(stagingUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a developer website URL that isn't a full http(s):// URL", async () => {
+    stagingFindUniqueMock.mockResolvedValue(discoveryCandidateRecord() as never);
+    const result = await updateDiscoveryCandidateDetails("cand-1", { officialDeveloperUrl: "not-a-url" });
+    expect(result.ok).toBe(false);
+    expect(stagingUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects an empty project name rather than silently clearing it", async () => {
+    stagingFindUniqueMock.mockResolvedValue(discoveryCandidateRecord() as never);
+    const result = await updateDiscoveryCandidateDetails("cand-1", { projectName: "   " });
+    expect(result.ok).toBe(false);
+    expect(stagingUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("edits project name, developer, and locality together", async () => {
+    stagingFindUniqueMock.mockResolvedValue(discoveryCandidateRecord() as never);
+    const result = await updateDiscoveryCandidateDetails("cand-1", {
+      projectName: "Gurukrupa Darshanam",
+      developerName: "Gurukrupa Realcon Pvt. Ltd.",
+      areaName: "Vikhroli East",
+    });
+    expect(result.ok).toBe(true);
+    const written = stagingUpdateMock.mock.calls[0][0].data.payload as Record<string, unknown>;
+    expect(written.projectName).toBe("Gurukrupa Darshanam");
+    expect(written.developerName).toBe("Gurukrupa Realcon Pvt. Ltd.");
+    expect(written.areaName).toBe("Vikhroli East");
+  });
+
+  it("saves a founder status note and a separate founder decision note without mixing the two", async () => {
+    stagingFindUniqueMock.mockResolvedValue(discoveryCandidateRecord() as never);
+    const result = await updateDiscoveryCandidateDetails("cand-1", {
+      founderStatusNote: "Confirmed under construction via site visit, Sep 2026",
+      founderDecisionNote: "Excluding -- same tower as an already-approved project",
+    });
+    expect(result.ok).toBe(true);
+    const written = stagingUpdateMock.mock.calls[0][0].data.payload as Record<string, unknown>;
+    expect(written.founderStatusNote).toBe("Confirmed under construction via site visit, Sep 2026");
+    expect(written.founderDecisionNote).toBe("Excluding -- same tower as an already-approved project");
+  });
+
+  it("records the edit in the existing AuditLog (logAudit) with before/after payload snapshots -- no new audit mechanism", async () => {
+    stagingFindUniqueMock.mockResolvedValue(discoveryCandidateRecord() as never);
+    await updateDiscoveryCandidateDetails("cand-1", { sourceUrl: "https://gurukruparealcon.com/projects/gurukrupa-darshanam" });
+    expect(auditCreateMock).toHaveBeenCalledTimes(1);
+    const call = auditCreateMock.mock.calls[0][0].data as Record<string, unknown>;
+    expect(call.action).toBe("discovery.candidate.edit");
+    expect(call.entityType).toBe(DISCOVERY_ENTITY_TYPE);
+    expect(call.entityId).toBe("cand-1");
+    expect((call.before as Record<string, unknown>).sourceUrl).toBe("internal:x");
+    expect((call.after as Record<string, unknown>).sourceUrl).toBe("https://gurukruparealcon.com/projects/gurukrupa-darshanam");
+  });
+
+  it("returns an error for a non-existent candidate id, and never calls update", async () => {
+    stagingFindUniqueMock.mockResolvedValue(null);
+    const result = await updateDiscoveryCandidateDetails("missing", { sourceUrl: "https://example.test/x" });
+    expect(result.ok).toBe(false);
+    expect(stagingUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("editing details does NOT weaken duplicate detection -- a subsequent Include on the (now-renamed) candidate still runs the same live duplicate check and still refuses a real collision", async () => {
+    // The candidate is renamed via the edit action to something that collides with a live Project.
+    stagingFindUniqueMock.mockResolvedValue(discoveryCandidateRecord({ payload: { projectName: "Godrej Sky Shore" } }) as never);
+    projectFindManyMock.mockResolvedValue([{ id: "proj-1", name: "Godrej Sky Shore", localityId: "loc-andheri-west", reraNumber: null }] as never);
+
+    const result = await applyDiscoveryFounderAction("cand-1", "INCLUDE");
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("already exists");
+    expect(stagingCreateMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("Phase 59 Part 2 -- a founder decision is never a one-way door", () => {
+  it("EXCLUDE -> INCLUDE: a previously-excluded candidate can be included later, once new information appears", async () => {
+    stagingFindUniqueMock.mockResolvedValue(discoveryCandidateRecord({ status: "EXCLUDED" }) as never);
+    const result = await applyDiscoveryFounderAction("cand-1", "INCLUDE");
+    expect(result.ok).toBe(true);
+    expect(stagingCreateMock).toHaveBeenCalledTimes(1);
+    expect(stagingUpdateMock).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "PROJECT_STAGED" }) }));
+  });
+
+  it("INCLUDE -> EXCLUDE: a candidate already staged as a Project can still be marked Excluded at the discovery-candidate level (the separate Project Review Queue keeps its own independent approve/reject workflow, untouched)", async () => {
+    stagingFindUniqueMock.mockResolvedValue(discoveryCandidateRecord({ status: "PROJECT_STAGED" }) as never);
+    const result = await applyDiscoveryFounderAction("cand-1", "EXCLUDE");
+    expect(result.ok).toBe(true);
+    expect(stagingUpdateMock).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "EXCLUDED" }) }));
+    expect(stagingCreateMock).not.toHaveBeenCalled(); // no second Project staging record created
+  });
+
+  it("REVIEW -> INCLUDE: a candidate parked for review can still be included once the founder is confident", async () => {
+    stagingFindUniqueMock.mockResolvedValue(discoveryCandidateRecord({ status: "NEEDS_REVIEW" }) as never);
+    const result = await applyDiscoveryFounderAction("cand-1", "INCLUDE");
+    expect(result.ok).toBe(true);
+    expect(stagingCreateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("REVIEW -> EXCLUDE: a candidate parked for review can still be excluded", async () => {
+    stagingFindUniqueMock.mockResolvedValue(discoveryCandidateRecord({ status: "NEEDS_REVIEW" }) as never);
+    const result = await applyDiscoveryFounderAction("cand-1", "EXCLUDE");
+    expect(result.ok).toBe(true);
+    expect(stagingUpdateMock).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "EXCLUDED" }) }));
+  });
+
+  it("a changed decision persists exactly as written -- the next read of this same row (what a page reload does) would see the new status, not the old one", async () => {
+    stagingFindUniqueMock.mockResolvedValue(discoveryCandidateRecord({ status: "EXCLUDED" }) as never);
+    await applyDiscoveryFounderAction("cand-1", "REVIEW");
+    const written = stagingUpdateMock.mock.calls[0][0].data as Record<string, unknown>;
+    expect(written.status).toBe("NEEDS_REVIEW"); // this is exactly what a subsequent findUnique/page reload would read back
   });
 });

@@ -3,7 +3,7 @@ import { requireSession } from "@/lib/auth/guard";
 import { getDiscoveryCandidates } from "@/lib/admin-queries";
 import { prisma } from "@/lib/prisma";
 import { PRIMARY_CITY_SLUG } from "@/lib/queries";
-import { applyDiscoveryFounderAction } from "@/lib/actions/discovery";
+import { applyDiscoveryFounderAction, updateDiscoveryCandidateDetails } from "@/lib/actions/discovery";
 import { computeLiveDuplicateStatuses } from "@/lib/ingestion/discovery/liveDuplicateStatus";
 import type { DiscoveryStatus, ProjectDiscoveryCandidatePayload } from "@/lib/ingestion/discovery/types";
 import type { ProjectImportPayload } from "@/lib/ingestion/connectors/fileImport/types";
@@ -68,6 +68,8 @@ export default async function ProjectDiscoveryPage() {
       liveDuplicateStatus: live?.duplicateStatus ?? null,
       liveDuplicateMatch: live?.match ?? null,
       createdAt: r.createdAt.toISOString(),
+      /** Phase 59 — non-null once a founder has made ANY Include/Exclude/Review decision on this row, used to decide whether changing it now needs a confirmation. */
+      reviewedAt: r.reviewedAt ? r.reviewedAt.toISOString() : null,
     };
   });
 
@@ -89,7 +91,7 @@ export default async function ProjectDiscoveryPage() {
       {rows.length === 0 ? (
         <EmptyState title="No discovery candidates yet" message="Run a discovery batch for an area to populate this list." />
       ) : (
-        <DiscoveryCandidateList rows={rows} onAction={applyDiscoveryFounderAction} />
+        <DiscoveryCandidateList rows={rows} onAction={applyDiscoveryFounderAction} onEdit={updateDiscoveryCandidateDetails} />
       )}
     </div>
   );

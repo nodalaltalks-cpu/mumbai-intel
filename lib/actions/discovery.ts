@@ -287,6 +287,87 @@ export async function applyDiscoveryFounderAction(id: string, action: DiscoveryF
   return { ok: true, projectStagingRecordId: projectStagingRecord.id };
 }
 
+/** A full http(s):// URL, same discipline every other founder-facing URL field in this app already applies — never a bare domain or relative path. */
+function isFullHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export interface DiscoveryCandidateEditInput {
+  projectName?: string;
+  developerName?: string;
+  areaName?: string;
+  /** The project-specific official page — e.g. https://gurukruparealcon.com/projects/gurukrupa-darshanam. Deliberately never inferred from officialDeveloperUrl. */
+  sourceUrl?: string;
+  /** The developer's own homepage — e.g. https://gurukruparealcon.com/. Deliberately never inferred from sourceUrl, and never used as a stand-in for a project-specific page. */
+  officialDeveloperUrl?: string;
+  founderStatusNote?: string;
+  founderDecisionNote?: string;
+}
+
+/**
+ * Phase 59 — lets a founder correct/enter a discovery candidate's own details
+ * (never a real Project's) before or after deciding Include/Exclude/Review.
+ * Deliberately narrow: edits ONLY the fields Part 1 of the phase spec lists,
+ * on the SAME ProjectDiscoveryCandidatePayload the pipeline already writes —
+ * no new model, no Project-table write, no re-run of the discovery pipeline.
+ * Reuses the existing AuditLog (logAudit) exactly as applyDiscoveryFounderAction
+ * already does, rather than a new history mechanism.
+ *
+ * `sourceUrl` (the project-specific page) and `officialDeveloperUrl` (the
+ * developer's homepage) are edited independently on purpose — Part 1's own
+ * instruction is that a developer homepage must never be silently treated as
+ * a project page. Saving officialDeveloperUrl alone marks officialSourceStatus
+ * IDENTIFIED without ever touching sourceUrl.
+ */
+export async function updateDiscoveryCandidateDetails(id: string, edits: DiscoveryCandidateEditInput): Promise<{ ok: boolean; error?: string }> {
+  const session = await requireMutateSession();
+  const record = await loadDiscoveryCandidate(id);
+  if (!record) return { ok: false, error: "Discovery candidate not found." };
+
+  const before = record.payload as unknown as ProjectDiscoveryCandidatePayload;
+  const after: ProjectDiscoveryCandidatePayload = { ...before };
+
+  if (edits.projectName !== undefined) {
+    const trimmed = edits.projectName.trim();
+    if (!trimmed) return { ok: false, error: "Project name can't be empty." };
+    after.projectName = trimmed;
+  }
+  if (edits.developerName !== undefined) {
+    const trimmed = edits.developerName.trim();
+    if (!trimmed) return { ok: false, error: "Developer can't be empty." };
+    after.developerName = trimmed;
+  }
+  if (edits.areaName !== undefined) {
+    const trimmed = edits.areaName.trim();
+    if (!trimmed) return { ok: false, error: "Locality can't be empty." };
+    after.areaName = trimmed;
+  }
+  if (edits.sourceUrl !== undefined) {
+    const trimmed = edits.sourceUrl.trim();
+    if (!trimmed) return { ok: false, error: "Project source URL can't be empty — clear it isn't supported, only replaced." };
+    if (!isFullHttpUrl(trimmed)) return { ok: false, error: "Project source URL must be a full http:// or https:// URL." };
+    after.sourceUrl = trimmed;
+  }
+  if (edits.officialDeveloperUrl !== undefined) {
+    const trimmed = edits.officialDeveloperUrl.trim();
+    if (trimmed && !isFullHttpUrl(trimmed)) return { ok: false, error: "Developer website URL must be a full http:// or https:// URL." };
+    after.officialDeveloperUrl = trimmed || null;
+    after.officialSourceStatus = trimmed ? "IDENTIFIED" : "OFFICIAL_SOURCE_UNKNOWN";
+  }
+  if (edits.founderStatusNote !== undefined) after.founderStatusNote = edits.founderStatusNote.trim() || null;
+  if (edits.founderDecisionNote !== undefined) after.founderDecisionNote = edits.founderDecisionNote.trim() || null;
+
+  await prisma.ingestStagingRecord.update({ where: { id }, data: { payload: after as unknown as Prisma.InputJsonValue } });
+  await logAudit(session.userId, "discovery.candidate.edit", DISCOVERY_ENTITY_TYPE, id, { before, after });
+
+  return { ok: true };
+}
+
 const DISCOVERY_USER_AGENT = "Mozilla/5.0 (compatible; MumbaiIntelBot/1.0)";
 /** Part L — start conservative: two developers scanned at once, never a burst against many sites simultaneously. */
 const DEVELOPER_SCAN_CONCURRENCY = 2;

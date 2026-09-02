@@ -80,4 +80,13 @@ export interface ProjectDiscoveryCandidatePayload {
   confidence: EnrichmentConfidence;
   duplicateStatus: DiscoveryDuplicateStatus;
   duplicateMatch: DiscoveryDuplicateMatch | null;
+  /**
+   * Phase 59 — a founder's own free-text observation about the project's real-world
+   * status (e.g. "confirmed under construction via a site visit, Sep 2026"), kept
+   * separate from the pipeline's own status-evidence text in discoverySource. Never
+   * set by the discovery pipeline itself, only by updateDiscoveryCandidateDetails.
+   */
+  founderStatusNote?: string | null;
+  /** Phase 59 — a founder's own reasoning for their Include/Exclude/Review decision, e.g. "excluding — same tower as an already-approved project". */
+  founderDecisionNote?: string | null;
 }
