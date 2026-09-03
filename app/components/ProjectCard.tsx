@@ -189,7 +189,7 @@ export default function ProjectCard({ project, onNavigate }: { project: ProjectC
                 row still falls through to the full-card Link. */}
             <div className="mt-0.5 flex items-center justify-between gap-2">
               <span aria-hidden="true" className="inline-flex items-center gap-1 text-xs font-semibold text-accent">
-                View Details
+                View Project Intelligence
                 <span className="transition-transform group-hover:translate-x-0.5">→</span>
               </span>
               <div className="pointer-events-auto flex items-center gap-1.5">
@@ -333,7 +333,7 @@ function QuickViewModal({ project, onClose }: { project: ProjectCardData; onClos
 
           <div className="mt-1 flex gap-2">
             <Button href={`/projects/${project.slug}`} size="sm" fullWidth>
-              Open full details
+              View Project Intelligence
             </Button>
             {project.brochureAvailable && !project.brochureThumbnailUrl ? (
               <BrochureDownloadLink

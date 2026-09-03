@@ -682,8 +682,29 @@ export async function getPublicProjectsPaged(filters: PublicProjectFilters) {
   }
   if (filters.localityId) where.localityId = filters.localityId;
   if (filters.builderId) where.builderId = filters.builderId;
-  if (filters.status) where.status = filters.status as ProjectStatus;
-  if (filters.category) where.category = filters.category as Prisma.ProjectWhereInput["category"];
+  // Phase 62 — an unfiltered visit to /projects defaults to the current
+  // product focus (genuinely under-construction Residential in Mumbai) using
+  // the SAME status grouping developer analytics already uses, not a new
+  // vocabulary. Explicit filters (including the existing "Ready to Move"
+  // quick chip) always override this and are never blocked; the Filters
+  // dialog's "All statuses"/"All categories" options pass the literal "all"
+  // sentinel so a visitor can still deliberately widen the search back to
+  // every status/category, distinct from simply landing on the page with no
+  // filter chosen yet.
+  if (filters.status === "all") {
+    // no status constraint
+  } else if (filters.status) {
+    where.status = filters.status as ProjectStatus;
+  } else {
+    where.status = { in: BUILDER_UNDER_CONSTRUCTION_STATUSES };
+  }
+  if (filters.category === "all") {
+    // no category constraint
+  } else if (filters.category) {
+    where.category = filters.category as Prisma.ProjectWhereInput["category"];
+  } else {
+    where.category = "RESIDENTIAL";
+  }
   if (filters.bedrooms) {
     const n = Number(filters.bedrooms);
     where.configurations = { some: n >= 4 ? { bedrooms: { gte: 4 } } : { bedrooms: { gte: n, lt: n + 1 } } };

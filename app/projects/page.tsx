@@ -14,8 +14,8 @@ import { getPublicSession } from "@/lib/public-auth/session";
 import { maskProjectBrochure } from "@/lib/premium/mask";
 
 export const metadata: Metadata = {
-  title: "Projects - NoDalalTalks",
-  description: "Browse residential and commercial real estate projects across Mumbai with source-tagged pricing, status and configuration data.",
+  title: "Mumbai Real Estate Projects - NoDalalTalks",
+  description: "Explore under-construction residential projects across Mumbai with source-tagged pricing, RERA status, configuration and construction data.",
   alternates: { canonical: "/projects" },
 };
 export const dynamic = "force-dynamic";
@@ -57,6 +57,12 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   return (
     <div className="flex min-h-screen flex-1 flex-col bg-background">
       <Navbar />
+
+      <div className="mx-auto w-full max-w-6xl px-4 pt-6 sm:px-6">
+        <h1 className="font-mono text-xl font-bold text-foreground sm:text-2xl">Mumbai Real Estate Projects</h1>
+        <p className="mt-1 text-sm text-muted">Explore under-construction residential projects across Mumbai — source-tagged pricing, status and configuration data.</p>
+      </div>
+
       <ProjectFilters localities={localities} builders={builders} />
 
       <main id="main-content" className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">
@@ -129,9 +135,9 @@ async function ProjectResults({ searchParams }: { searchParams: Promise<Projects
   return (
     <>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="font-mono text-lg font-semibold text-foreground">
+        <h2 className="font-mono text-sm font-semibold text-muted">
           {total} project{total === 1 ? "" : "s"}
-        </h1>
+        </h2>
       </div>
 
       {projects.length === 0 ? (

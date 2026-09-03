@@ -199,9 +199,9 @@ export default function ProjectFilters({ localities, builders }: { localities: F
   if (localityName) chips.push({ keys: ["locality"], label: `Locality: ${localityName}` });
   const builderName = builders.find((b) => b.id === searchParams.get("builder"))?.name;
   if (builderName) chips.push({ keys: ["builder"], label: `Builder: ${builderName}` });
-  if (currentStatus) chips.push({ keys: ["status"], label: STATUS_LABEL[currentStatus as ProjectStatus] ?? currentStatus });
+  if (currentStatus) chips.push({ keys: ["status"], label: currentStatus === "all" ? "All statuses (incl. Ready to Move, Delivered)" : STATUS_LABEL[currentStatus as ProjectStatus] ?? currentStatus });
   const categoryValue = searchParams.get("category");
-  if (categoryValue) chips.push({ keys: ["category"], label: CATEGORY_LABEL[categoryValue as PropertyCategory] ?? categoryValue });
+  if (categoryValue) chips.push({ keys: ["category"], label: categoryValue === "all" ? "All categories" : CATEGORY_LABEL[categoryValue as PropertyCategory] ?? categoryValue });
   const bedroomsValue = searchParams.get("bedrooms");
   if (bedroomsValue) chips.push({ keys: ["bedrooms"], label: CONFIGURATION_FILTER_OPTIONS.find((o) => o.value === bedroomsValue)?.label ?? bedroomsValue });
   if (searchParams.get("priceMin") || searchParams.get("priceMax")) {
@@ -284,7 +284,7 @@ export default function ProjectFilters({ localities, builders }: { localities: F
                     ))}
                   </select>
                   <select value={draftStatus} onChange={(e) => updateDraft("status", e.target.value)} className={selectClass} style={selectStyle}>
-                    <option value="">All statuses</option>
+                    <option value="all">All statuses</option>
                     {PROJECT_STATUSES.map((s) => (
                       <option key={s} value={s}>
                         {STATUS_LABEL[s]}
@@ -314,7 +314,7 @@ export default function ProjectFilters({ localities, builders }: { localities: F
                     ))}
                   </select>
                   <select value={draftParams?.get("category") ?? ""} onChange={(e) => updateDraft("category", e.target.value)} className={selectClass} style={selectStyle}>
-                    <option value="">All categories</option>
+                    <option value="all">All categories</option>
                     {PROPERTY_CATEGORIES.map((c) => (
                       <option key={c} value={c}>
                         {CATEGORY_LABEL[c]}

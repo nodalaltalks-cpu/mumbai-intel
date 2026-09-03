@@ -20,7 +20,10 @@ const REPORT_CATEGORIES = [
 export default async function ReportsHubPage() {
   const [localities, projects, builders] = await Promise.all([
     getPublicLocalitiesPaged({ pageSize: 8, sortBy: "price_desc" }),
-    getPublicProjectsPaged({ pageSize: 8 }),
+    // Phase 62's under-construction/Residential default lives in getPublicProjectsPaged
+    // for the /projects discovery page specifically — this hub's own long-standing intent
+    // (a broad market sample) is preserved explicitly here with the "all" overrides.
+    getPublicProjectsPaged({ pageSize: 8, status: "all", category: "all" }),
     getPublicBuildersPaged({ pageSize: 8, sortBy: "projects_desc" }),
   ]);
 
