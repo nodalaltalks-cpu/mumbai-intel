@@ -94,6 +94,15 @@ describe("classifyCandidateUrl", () => {
     expect(classifyCandidateUrl("https://www.rustomjee.com/exclusive-payment-plan/financing/").likely).toBe(false);
   });
 
+  it("rejects a WordPress-style tag archive page (real MICL Group false positive from the Phase 65 rerun)", () => {
+    expect(classifyCandidateUrl("https://www.micl.com/tag/aaradhya-evoq/").likely).toBe(false);
+    expect(classifyCandidateUrl("https://www.micl.com/tag/micl-group/").likely).toBe(false);
+  });
+
+  it("rejects a press/timeline entry (real MICL Group false positive from the Phase 65 rerun)", () => {
+    expect(classifyCandidateUrl("https://www.micl.com/timeline/launch-of-indias-tallest-residential-project-aaradhya-avaan-tardeo/").likely).toBe(false);
+  });
+
   it("never throws on an unparseable URL", () => {
     expect(() => classifyCandidateUrl("not a url")).not.toThrow();
     expect(classifyCandidateUrl("not a url").likely).toBe(false);

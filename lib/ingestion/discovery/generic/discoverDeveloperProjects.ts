@@ -4,6 +4,7 @@ import { classifyCandidateUrl } from "./projectUrlHeuristics";
 import { extractGenericProjectFacts, type AreaEvidenceItem } from "./extractGenericFacts";
 import { classifyGenericProjectStatus, type GenericStatusBucket } from "./classifyProjectStatus";
 import { runWithConcurrency } from "./runWithConcurrency";
+import { fetchWithTimeout } from "./fetchWithTimeout";
 
 /** Part L: conservative defaults — a developer's sitemap can list hundreds of URLs; this MVP fetches a bounded sample, never the whole thing. */
 export const DEFAULT_MAX_PAGES_PER_DEVELOPER = 40;
@@ -124,7 +125,7 @@ export async function discoverDeveloperProjects(
 
   let pagesFailed = 0;
   const fetchResults = await runWithConcurrency(selected, pageConcurrency, async (url): Promise<CandidatePageResult | null> => {
-    const res = await opts.fetchImpl(url, { headers: { "User-Agent": opts.userAgent } });
+    const res = await fetchWithTimeout(opts.fetchImpl, url, { headers: { "User-Agent": opts.userAgent } });
     if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${url}`);
     const html = await res.text();
     const facts = extractGenericProjectFacts(html, url);

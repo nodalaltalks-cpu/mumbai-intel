@@ -1,6 +1,7 @@
 import type { SourceTier, EnrichmentConfidence } from "@/lib/enrichment/types";
 import { resolveAreaToLocality, type ExistingLocalityWithAliases, type AreaLocalityMatch } from "../areaLocalityResolution";
 import { deriveAreaSearchStrings } from "./areaEvidenceSearch";
+import { detectMmrPeripheralArea } from "../mmrBoundary";
 import type { AreaEvidenceItem, AreaEvidenceSource } from "./extractGenericFacts";
 import type { CandidatePageResult } from "./discoverDeveloperProjects";
 
@@ -29,6 +30,7 @@ export type CandidateFate =
   | { decision: "EXCLUDED_STATUS"; reason: string }
   | { decision: "EXCLUDED_NO_LOCATION_TEXT"; reason: string }
   | { decision: "EXCLUDED_LOCATION_UNRESOLVED"; reason: string }
+  | { decision: "EXCLUDED_MMR_LOCATION"; reason: string; matchedKeyword: string }
   | { decision: "AMBIGUOUS_LOCATION"; reason: string; candidateLocalityNames: string[] };
 
 /**
@@ -112,9 +114,25 @@ export function decideCandidateFate(
   const best = resolveBestAreaMatch(candidate.areaEvidence, localities);
 
   if (!best) {
+    // Phase 63 — before falling back to the generic "unresolved" bucket,
+    // check whether the evidence itself names a well-known MMR/peripheral
+    // area. The exclusion outcome is identical either way (this candidate
+    // was never going to be staged as a Mumbai project) — this only makes
+    // WHY visible, distinguishing a real Thane/Navi Mumbai project from a
+    // genuinely unparseable page for the founder-facing metrics.
+    for (const evidence of candidate.areaEvidence) {
+      const matchedKeyword = detectMmrPeripheralArea(evidence.text);
+      if (matchedKeyword) {
+        return {
+          decision: "EXCLUDED_MMR_LOCATION",
+          reason: `Locality evidence "${evidence.text}" (${evidence.source}) names "${matchedKeyword}" — outside Mumbai city (MMR/peripheral), correctly excluded rather than staged.`,
+          matchedKeyword,
+        };
+      }
+    }
     return {
       decision: "EXCLUDED_LOCATION_UNRESOLVED",
-      reason: `None of this page's locality evidence (${candidate.areaEvidence.map((e) => e.source).join(", ")}) resolved to any existing Mumbai Locality (name/alias/micro-market/fuzzy) — excluded rather than guessed. May be genuinely outside Mumbai city (MMR) or simply unparseable; this pipeline never creates a new Locality to find out.`,
+      reason: `None of this page's locality evidence (${candidate.areaEvidence.map((e) => e.source).join(", ")}) resolved to any existing Mumbai Locality (name/alias/micro-market/fuzzy) — excluded rather than guessed. Not a recognized MMR/peripheral area either; genuinely unparseable from this page's evidence.`,
     };
   }
 

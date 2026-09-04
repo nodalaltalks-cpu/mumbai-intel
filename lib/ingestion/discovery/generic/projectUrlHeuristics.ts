@@ -84,6 +84,12 @@ const NEGATIVE_PATH_SEGMENTS = [
   // project generically, never one specific project.
   "payment-plan",
   "financing",
+  // Phase 65 -- real MICL Group false positives: WordPress-style taxonomy
+  // archive pages (/tag/aaradhya-evoq/, /tag/micl-group/) and press/timeline
+  // entries (/timeline/launch-of-...) both pass the "distinctive leaf slug"
+  // fallback below despite never being a single project's own page.
+  "tag",
+  "timeline",
 ];
 
 const NEGATIVE_FILE_EXTENSIONS = [".pdf", ".jpg", ".jpeg", ".png", ".webp", ".svg", ".xml", ".gz", ".css", ".js", ".ico", ".mp4"];

@@ -46,7 +46,7 @@ export default function MumbaiDiscoveryRunForm() {
             Staged as new discovery candidates: {state.result.totals.staged} · Needs review: {state.result.totals.needsReview} · Duplicates: {state.result.totals.rejectedDuplicate}
           </p>
           <p className="mt-1">
-            Excluded — status: {state.result.totals.excludedStatus}, no name: {state.result.totals.excludedNoName}, no location: {state.result.totals.excludedNoLocationText}, unresolved location: {state.result.totals.excludedLocationUnresolved}, ambiguous location: {state.result.totals.ambiguousLocation}
+            Excluded — status: {state.result.totals.excludedStatus}, no name: {state.result.totals.excludedNoName}, no location: {state.result.totals.excludedNoLocationText}, unresolved location: {state.result.totals.excludedLocationUnresolved}, outside Mumbai (MMR): {state.result.totals.excludedMmrLocation}, ambiguous location: {state.result.totals.ambiguousLocation}
           </p>
         </div>
       ) : null}

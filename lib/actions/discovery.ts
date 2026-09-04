@@ -401,7 +401,10 @@ export interface RunMumbaiDiscoveryResult {
  * (network-bound: robots.txt + sitemap + a bounded sample of project pages
  * per developer). The founder should run it in reasonably sized batches.
  */
-export async function runMumbaiDiscoveryBatch(developerNames: string[]): Promise<RunMumbaiDiscoveryResult> {
+export async function runMumbaiDiscoveryBatch(
+  developerNames: string[],
+  opts?: { maxPagesToFetch?: number }
+): Promise<RunMumbaiDiscoveryResult> {
   const start = Date.now();
   const session = await requireMutateSession();
 
@@ -420,7 +423,11 @@ export async function runMumbaiDiscoveryBatch(developerNames: string[]): Promise
   }
 
   const scanResults = await runWithConcurrency(targets, DEVELOPER_SCAN_CONCURRENCY, (t) =>
-    discoverDeveloperProjects(t.developerName, t.domain, { fetchImpl: fetch, userAgent: DISCOVERY_USER_AGENT })
+    discoverDeveloperProjects(t.developerName, t.domain, {
+      fetchImpl: fetch,
+      userAgent: DISCOVERY_USER_AGENT,
+      maxPagesToFetch: opts?.maxPagesToFetch,
+    })
   );
   const developerResults: DeveloperDiscoveryResult[] = scanResults.filter((r) => r.result !== null).map((r) => r.result!);
 
@@ -434,13 +441,47 @@ export async function runMumbaiDiscoveryBatch(developerNames: string[]): Promise
     developerResults,
   });
 
+  const candidateUrlsDiscoveredTotal = developerResults.reduce((sum, r) => sum + r.candidateUrlsIdentified, 0);
+  const pagesFetchedTotal = developerResults.reduce((sum, r) => sum + r.pagesFetched, 0);
+  const durationMs = Date.now() - start;
+
+  // Phase 63 — captures the fuller metric set (previously only staged/
+  // needsReview/rejectedDuplicate) so a later run's numbers can be compared
+  // against this one via the existing AuditLog, without a new metrics table.
   await logAudit(session.userId, "discovery.mumbai_auto_run", "IngestBatch", stageOutcome.batchId, {
     after: {
       batchLabel,
+      developersRequested: developerNames.length,
       developersScanned: developerResults.length,
+      developersSkippedUnknownDomain: skippedUnknownDomain,
+      // Phase 64 — per-developer detail (classification + raw fetch counts) was
+      // previously only ever visible in the transient client-side result of
+      // one specific run, never persisted -- a real gap when producing any
+      // later coverage report. Small, additive: same shape already returned
+      // to the caller, just also written to the existing AuditLog record.
+      perDeveloper: developerResults.map((r) => ({
+        developerName: r.developerName,
+        domain: r.domain,
+        classification: r.classification,
+        sitemapPageUrlsFound: r.sitemapPageUrlsFound,
+        candidateUrlsIdentified: r.candidateUrlsIdentified,
+        pagesFetched: r.pagesFetched,
+        pagesFailed: r.pagesFailed,
+        robotsFetched: r.robotsFetched,
+        disallowsEverythingForAllAgents: r.disallowsEverythingForAllAgents,
+      })),
+      candidateUrlsDiscoveredTotal,
+      pagesFetchedTotal,
       staged: stageOutcome.totals.staged,
       needsReview: stageOutcome.totals.needsReview,
       rejectedDuplicate: stageOutcome.totals.rejectedDuplicate,
+      excludedStatus: stageOutcome.totals.excludedStatus,
+      excludedNoName: stageOutcome.totals.excludedNoName,
+      excludedNoLocationText: stageOutcome.totals.excludedNoLocationText,
+      excludedLocationUnresolved: stageOutcome.totals.excludedLocationUnresolved,
+      excludedMmrLocation: stageOutcome.totals.excludedMmrLocation,
+      ambiguousLocation: stageOutcome.totals.ambiguousLocation,
+      durationMs,
     },
   });
 
@@ -450,11 +491,11 @@ export async function runMumbaiDiscoveryBatch(developerNames: string[]): Promise
     developersScanned: developerResults.length,
     developersSkippedUnknownDomain: skippedUnknownDomain,
     developerClassifications: Object.fromEntries(developerResults.map((r) => [r.developerName, r.classification])),
-    candidateUrlsDiscoveredTotal: developerResults.reduce((sum, r) => sum + r.candidateUrlsIdentified, 0),
-    pagesFetchedTotal: developerResults.reduce((sum, r) => sum + r.pagesFetched, 0),
+    candidateUrlsDiscoveredTotal,
+    pagesFetchedTotal,
     totals: stageOutcome.totals,
     perDeveloper: stageOutcome.perDeveloper,
-    durationMs: Date.now() - start,
+    durationMs,
   };
 }
 

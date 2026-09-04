@@ -1,6 +1,7 @@
 import type { PrismaClient, Prisma } from "@prisma/client";
 import { buildDiscoveryCandidate } from "../buildCandidate";
-import { resolveAreaToLocality, type ExistingLocalityWithAliases } from "../areaLocalityResolution";
+import type { ExistingLocalityWithAliases } from "../areaLocalityResolution";
+import { resolveStoredAreaNameToLocality } from "./areaEvidenceSearch";
 import { existingDiscoveryCandidatesAsExistingCandidates, pendingProjectStagingAsExistingCandidates } from "../includeCandidate";
 import { DISCOVERY_ENTITY_TYPE, type ProjectDiscoveryCandidatePayload } from "../types";
 import type { ExistingProjectCandidate } from "@/lib/ingestion/duplicateMatch";
@@ -50,11 +51,23 @@ export interface DeveloperStagingTally {
   excludedNoName: number;
   excludedNoLocationText: number;
   excludedLocationUnresolved: number;
+  /** Phase 63 — subset of what used to be lumped into excludedLocationUnresolved, now labeled distinctly. */
+  excludedMmrLocation: number;
   ambiguousLocation: number;
 }
 
 function emptyTally(): DeveloperStagingTally {
-  return { staged: 0, needsReview: 0, rejectedDuplicate: 0, excludedStatus: 0, excludedNoName: 0, excludedNoLocationText: 0, excludedLocationUnresolved: 0, ambiguousLocation: 0 };
+  return {
+    staged: 0,
+    needsReview: 0,
+    rejectedDuplicate: 0,
+    excludedStatus: 0,
+    excludedNoName: 0,
+    excludedNoLocationText: 0,
+    excludedLocationUnresolved: 0,
+    excludedMmrLocation: 0,
+    ambiguousLocation: 0,
+  };
 }
 
 export interface StageMumbaiDiscoveryOutcome {
@@ -84,14 +97,14 @@ export async function stageMumbaiDiscoveryCandidates(params: StageMumbaiDiscover
   const resolvedExistingDiscoveryCandidates: { id: string; payload: ProjectDiscoveryCandidatePayload }[] = [];
   for (const r of existingDiscoveryCandidatesRaw) {
     const payload = r.payload as unknown as ProjectDiscoveryCandidatePayload;
-    const match = resolveAreaToLocality(payload.areaName, localities);
+    const match = resolveStoredAreaNameToLocality(payload.areaName, localities);
     if (match.status === "SINGLE_MATCH") resolvedExistingDiscoveryCandidates.push({ id: r.id, payload });
   }
   const existingCandidates: ExistingProjectCandidate[] = [
     ...liveProjects,
     ...pendingProjectStagingAsExistingCandidates(pendingProjectStagingRaw.map((r) => ({ id: r.id, payload: r.payload as unknown as ProjectImportPayload }))),
     ...resolvedExistingDiscoveryCandidates.flatMap((r) => {
-      const match = resolveAreaToLocality(r.payload.areaName, localities);
+      const match = resolveStoredAreaNameToLocality(r.payload.areaName, localities);
       return match.status === "SINGLE_MATCH" ? existingDiscoveryCandidatesAsExistingCandidates([{ id: r.id, payload: r.payload }], match.localityId!) : [];
     }),
   ];
@@ -128,6 +141,11 @@ export async function stageMumbaiDiscoveryCandidates(params: StageMumbaiDiscover
       if (fate.decision === "EXCLUDED_LOCATION_UNRESOLVED") {
         tally.excludedLocationUnresolved += 1;
         totals.excludedLocationUnresolved += 1;
+        continue;
+      }
+      if (fate.decision === "EXCLUDED_MMR_LOCATION") {
+        tally.excludedMmrLocation += 1;
+        totals.excludedMmrLocation += 1;
         continue;
       }
       if (fate.decision === "AMBIGUOUS_LOCATION") {
@@ -171,7 +189,14 @@ export async function stageMumbaiDiscoveryCandidates(params: StageMumbaiDiscover
 
   await prisma.ingestBatch.update({
     where: { id: batch.id },
-    data: { status: "success", finishedAt: new Date(), recordsWritten: 0, recordsSkipped: totals.excludedNoName + totals.excludedStatus + totals.excludedNoLocationText + totals.excludedLocationUnresolved + totals.ambiguousLocation, recordsFailed: 0 },
+    data: {
+      status: "success",
+      finishedAt: new Date(),
+      recordsWritten: 0,
+      recordsSkipped:
+        totals.excludedNoName + totals.excludedStatus + totals.excludedNoLocationText + totals.excludedLocationUnresolved + totals.excludedMmrLocation + totals.ambiguousLocation,
+      recordsFailed: 0,
+    },
   });
 
   return { batchId: batch.id, totals, perDeveloper, ambiguousLocationSamples };

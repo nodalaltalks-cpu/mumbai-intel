@@ -9,6 +9,8 @@
  * sitemap index, a blanket Disallow) is unit-testable without a network call.
  */
 
+import { fetchWithTimeout } from "./fetchWithTimeout";
+
 const MAX_SITEMAPS_FETCHED = 15;
 const MAX_SITEMAP_RECURSION_DEPTH = 2;
 
@@ -95,7 +97,7 @@ export async function fetchDeveloperUrlUniverse(
 
   let sitemapCandidates: string[] = [];
   try {
-    const robotsRes = await fetchImpl(`${domain.replace(/\/$/, "")}/robots.txt`, { headers: { "User-Agent": userAgent } });
+    const robotsRes = await fetchWithTimeout(fetchImpl, `${domain.replace(/\/$/, "")}/robots.txt`, { headers: { "User-Agent": userAgent } });
     if (robotsRes.ok) {
       result.robotsFetched = true;
       const parsed = parseRobotsTxt(await robotsRes.text());
@@ -120,7 +122,7 @@ export async function fetchDeveloperUrlUniverse(
       if (seenSitemaps.has(sitemapUrl) || result.sitemapsFetched.length >= MAX_SITEMAPS_FETCHED) continue;
       seenSitemaps.add(sitemapUrl);
       try {
-        const res = await fetchImpl(sitemapUrl, { headers: { "User-Agent": userAgent } });
+        const res = await fetchWithTimeout(fetchImpl, sitemapUrl, { headers: { "User-Agent": userAgent } });
         if (!res.ok) {
           result.sitemapsFailed.push(sitemapUrl);
           continue;

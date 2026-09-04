@@ -159,4 +159,34 @@ describe("decideCandidateFate", () => {
     );
     expect(fate.decision).not.toBe("STAGE");
   });
+
+  // --- Phase 63: MMR/peripheral boundary labeling ---
+
+  it("labels a genuine Thane project as EXCLUDED_MMR_LOCATION rather than the generic unresolved bucket", () => {
+    const fate = decideCandidateFate("Test Developer", "https://d.com", candidate({ areaEvidence: evidence("Ghodbunder Road, Thane") }), localities);
+    expect(fate.decision).toBe("EXCLUDED_MMR_LOCATION");
+    if (fate.decision === "EXCLUDED_MMR_LOCATION") expect(fate.matchedKeyword).toBe("thane");
+  });
+
+  it("labels a Navi Mumbai project as EXCLUDED_MMR_LOCATION", () => {
+    const fate = decideCandidateFate("Test Developer", "https://d.com", candidate({ areaEvidence: evidence("Sector 15, Kharghar, Navi Mumbai") }), localities);
+    expect(fate.decision).toBe("EXCLUDED_MMR_LOCATION");
+  });
+
+  it("still uses EXCLUDED_LOCATION_UNRESOLVED (not MMR) for genuinely unparseable text with no MMR keyword", () => {
+    const fate = decideCandidateFate("Test Developer", "https://d.com", candidate({ areaEvidence: evidence("Some Totally Unrelated Neighbourhood") }), localities);
+    expect(fate.decision).toBe("EXCLUDED_LOCATION_UNRESOLVED");
+  });
+
+  it("never misclassifies genuine Mumbai-city Dahisar as MMR merely because it borders Mira-Bhayandar", () => {
+    const DAHISAR: ExistingLocalityWithAliases = { id: "loc-dahisar", name: "Dahisar", aliases: [] };
+    const fate = decideCandidateFate("Test Developer", "https://d.com", candidate({ areaEvidence: evidence("Dahisar") }), [...localities, DAHISAR]);
+    expect(fate.decision).toBe("STAGE");
+  });
+
+  it("does not false-positive MMR on a word that merely contains a keyword substring (e.g. a street/building name)", () => {
+    // "Panvelwadi" contains "panvel" as a substring but is not the word "Panvel" itself.
+    const fate = decideCandidateFate("Test Developer", "https://d.com", candidate({ areaEvidence: evidence("Panvelwadi Society Road") }), localities);
+    expect(fate.decision).not.toBe("EXCLUDED_MMR_LOCATION");
+  });
 });

@@ -10,6 +10,8 @@
  * entirely owned by areaLocalityResolution.ts, never reimplemented here.
  */
 
+import { resolveAreaToLocality, type AreaLocalityMatch, type ExistingLocalityWithAliases } from "../areaLocalityResolution";
+
 const SPLIT_PATTERN = /[|,;•]|\s[-–—]\s|\b(?:in|at|near)\b/i;
 
 /** Pure. Ordered, deduped candidate strings: the full text first, then delimiter-split segments, then 3- and 2-word sliding windows (catches a locality name buried inside a longer slug/title with no delimiter at all). */
@@ -44,4 +46,32 @@ export function deriveAreaSearchStrings(text: string): string[] {
   }
 
   return candidates;
+}
+
+/**
+ * Phase 63 — re-resolves a STORED `ProjectDiscoveryCandidatePayload.areaName`
+ * back to a Locality. This is the piece decideCandidateFate.ts's own
+ * `resolveBestAreaMatch` doesn't expose on its own: `areaName` is saved as
+ * the winning evidence's raw text (e.g. "Andheri East on Western Express
+ * Highway"), which — same as at first-resolution time — often does NOT
+ * resolve as a whole string; it only resolved originally because
+ * deriveAreaSearchStrings() tried shorter derived phrases from within it.
+ * Calling resolveAreaToLocality() directly on the stored raw text (skipping
+ * that derivation) was a real, confirmed bug: stageMumbaiDiscoveryCandidates.ts
+ * used it to rebuild the cross-run duplicate-detection pool, silently
+ * dropped every such candidate from that pool (NO_MATCH), and so re-staged
+ * the exact same candidates on every re-run — a genuine idempotency failure
+ * found by actually running the pipeline twice. Reuses the exact same
+ * deriveAreaSearchStrings + resolveAreaToLocality pair decideCandidateFate.ts
+ * already uses, just without that function's source-tier "weak source"
+ * restriction (irrelevant here — we're not making a first-time trust
+ * decision, only re-deriving which Locality an already-accepted areaName
+ * maps to).
+ */
+export function resolveStoredAreaNameToLocality(areaName: string, localities: ExistingLocalityWithAliases[]): AreaLocalityMatch {
+  for (const searchString of deriveAreaSearchStrings(areaName)) {
+    const match = resolveAreaToLocality(searchString, localities);
+    if (match.status !== "NO_MATCH") return match;
+  }
+  return { status: "NO_MATCH" };
 }

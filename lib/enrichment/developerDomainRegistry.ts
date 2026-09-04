@@ -12,7 +12,7 @@
  * Adding a developer means adding one verified row here -- never a fallback
  * to an unverified guess.
  */
-const CURATED_DEVELOPER_DOMAINS: Record<string, string> = {
+export const CURATED_DEVELOPER_DOMAINS: Record<string, string> = {
   "godrej properties ltd.": "https://www.godrejproperties.com",
   "godrej properties limited": "https://www.godrejproperties.com",
   "godrej properties": "https://www.godrejproperties.com",
@@ -148,4 +148,20 @@ function normalize(name: string): string {
 export function resolveDeveloperDomain(developerGroup: string | undefined | null): string | null {
   if (!developerGroup) return null;
   return CURATED_DEVELOPER_DOMAINS[normalize(developerGroup)] ?? null;
+}
+
+/**
+ * Phase 63 — one row per distinct curated domain (not per alias key), for the
+ * Discovery Coverage report. `CURATED_DEVELOPER_DOMAINS` has multiple name
+ * keys pointing at the same domain (e.g. "kalpataru" / "kalpataru limited"),
+ * which would otherwise double-count a single real developer.
+ */
+export function listCuratedDeveloperDomains(): { domain: string; names: string[] }[] {
+  const byDomain = new Map<string, string[]>();
+  for (const [name, domain] of Object.entries(CURATED_DEVELOPER_DOMAINS)) {
+    const existing = byDomain.get(domain);
+    if (existing) existing.push(name);
+    else byDomain.set(domain, [name]);
+  }
+  return Array.from(byDomain.entries()).map(([domain, names]) => ({ domain, names }));
 }

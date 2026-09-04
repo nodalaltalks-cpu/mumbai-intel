@@ -333,7 +333,16 @@ async function computeEnrichmentResult(stagingRecordId: string): Promise<EnrichP
 
   let facts;
   try {
-    facts = await source.adapter.fetchProjectFacts(projectUrl);
+    // Phase 65 — same real production defect class as Phase 63's discovery-pipeline
+    // fix: an adapter's fetchProjectFacts has no timeout of its own, and a single
+    // real-world page that never responds (confirmed live, not hypothetical) would
+    // otherwise hang this whole action indefinitely. A timeout here becomes just
+    // another rejection, already handled by the existing catch below exactly the
+    // same as any other fetch failure -- no new failure mode, no retry logic.
+    facts = await Promise.race([
+      source.adapter.fetchProjectFacts(projectUrl),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Timed out fetching ${projectUrl}`)), 20_000)),
+    ]);
   } catch {
     return { status: "SOURCE_UNAVAILABLE" };
   }
