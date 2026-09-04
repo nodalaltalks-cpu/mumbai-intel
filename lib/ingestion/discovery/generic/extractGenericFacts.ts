@@ -243,8 +243,22 @@ export interface AreaEvidenceItem {
   source: AreaEvidenceSource;
 }
 
+/**
+ * Phase 68 -- widened to retain commas INSIDE the capture (was: stopping at
+ * the first comma), so a real multi-segment address ("located at <street>,
+ * <sub-locality>, <locality>, Mumbai" -- the shape Housiey's own prose uses,
+ * lacking any JSON-LD address) no longer gets truncated to just its first,
+ * street-level segment before the actual locality is ever reached. A
+ * sentence boundary (period/semicolon/tag/newline) is still the only stop
+ * point, so this only changes behavior for sentences that already contained
+ * a comma before that boundary; a single-segment sentence ("located in
+ * Andheri West.") is unaffected. The wider comma-separated text still flows
+ * through the SAME existing comma-segment resolution tier in
+ * areaLocalityResolution.ts (built for this exact "<micro-market>,
+ * <locality>" shape) -- no change needed there or in deriveAreaSearchStrings.
+ */
 const PAGE_CONTENT_LOCATION_PATTERN =
-  /\b(?:located in|situated in|nestled in|located at|situated at|located near|in the heart of)\s+([A-Z][A-Za-z0-9.'\s]{2,50}?)(?=[.,;<\n]|$)/;
+  /\b(?:located in|situated in|nestled in|located at|situated at|located near|in the heart of)\s+([A-Z][A-Za-z0-9.',\s]{2,80}?)(?=[.;<\n]|$)/;
 
 function extractPageContentAreaText(bodyText: string): string | null {
   const m = bodyText.match(PAGE_CONTENT_LOCATION_PATTERN);

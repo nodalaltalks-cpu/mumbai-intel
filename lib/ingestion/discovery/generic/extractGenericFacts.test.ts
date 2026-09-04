@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { extractGenericProjectFacts, assessProjectNameQuality } from "./extractGenericFacts";
+import { deriveAreaSearchStrings } from "./areaEvidenceSearch";
+import { resolveAreaToLocality, type ExistingLocalityWithAliases } from "../areaLocalityResolution";
 
 function withJsonLd(node: object, restOfHtml = ""): string {
   return `<html><head><script type="application/ld+json">${JSON.stringify(node)}</script></head><body>${restOfHtml}</body></html>`;
@@ -214,6 +216,50 @@ describe("assessProjectNameQuality (Phase 56 Part D)", () => {
 
   it("rejects a developer blog's boilerplate og:title (real MICL 'MICL Blog' repeated across every article page in the Phase 56 rerun)", () => {
     expect(assessProjectNameQuality("MICL Blog").ok).toBe(false);
+  });
+});
+
+describe("page_content evidence — multi-segment address extraction (Phase 68, real Housiey unresolved-location fix)", () => {
+  const WORLI_LOCALITY: ExistingLocalityWithAliases[] = [{ id: "worli-id", name: "Worli", aliases: [] }];
+
+  it("retains a comma-separated locality segment instead of truncating at the first comma, and the resulting evidence resolves to the real Locality (real Housiey 'Birla Niyaara' address shape)", () => {
+    const html = `<html><head></head><body>
+      <p>It is located at On Pandurang Budhkar Marg, Kamagar N, Worli, Mumbai.</p>
+    </body></html>`;
+    const facts = extractGenericProjectFacts(html);
+    const pageContentEvidence = facts.areaEvidence.find((e) => e.source === "page_content");
+
+    expect(pageContentEvidence?.text).toBe("On Pandurang Budhkar Marg, Kamagar N, Worli, Mumbai");
+
+    // Reaches the real resolver (unmodified) and resolves EXACT, not FUZZY — the
+    // fix works entirely by giving the existing comma-segment tier something
+    // to find, not by loosening resolution itself.
+    const searchStrings = deriveAreaSearchStrings(pageContentEvidence!.text);
+    const resolved = searchStrings
+      .map((s) => resolveAreaToLocality(s, WORLI_LOCALITY))
+      .find((m) => m.status === "SINGLE_MATCH");
+    expect(resolved?.localityName).toBe("Worli");
+    expect(resolved?.tier).toBe("EXACT");
+  });
+
+  it("still extracts a normal single-segment location sentence unchanged (no regression for existing developer pages)", () => {
+    const html = `<html><head></head><body>
+      <p>This project is located in Andheri West.</p>
+    </body></html>`;
+    const facts = extractGenericProjectFacts(html);
+    const pageContentEvidence = facts.areaEvidence.find((e) => e.source === "page_content");
+    expect(pageContentEvidence?.text).toBe("Andheri West");
+  });
+
+  it("stops at the sentence boundary and does not over-capture into the following sentence", () => {
+    const html = `<html><head></head><body>
+      <p>It is located at Worli, Mumbai. Nearby schools include ABC International and DEF Academy, both highly rated.</p>
+    </body></html>`;
+    const facts = extractGenericProjectFacts(html);
+    const pageContentEvidence = facts.areaEvidence.find((e) => e.source === "page_content");
+    expect(pageContentEvidence?.text).toBe("Worli, Mumbai");
+    expect(pageContentEvidence?.text).not.toContain("Nearby schools");
+    expect(pageContentEvidence?.text).not.toContain("ABC International");
   });
 });
 
