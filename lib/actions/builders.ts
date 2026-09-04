@@ -13,6 +13,7 @@ import { deleteImageByPublicId, publicIdFromUrl } from "@/lib/cloudinary";
 import { logAudit } from "@/lib/audit";
 import { emit } from "@/lib/events";
 import { normalizeWebsiteUrl } from "@/lib/enrichment/developerWebsite";
+import { resolveBuilderMatch } from "@/lib/enrichment/resolveNamedEntity";
 import { friendlyPrismaError, updateManyByRow } from "./errors";
 
 const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefined ? undefined : v);
@@ -304,48 +305,87 @@ export interface SaveDeveloperWebsiteResult {
   ok: boolean;
   error?: string;
   websiteUrl?: string;
+  builderId?: string;
+  builderName?: string;
 }
 
 /**
- * Phase 69 — the narrow, purpose-built write behind the Discovery Queue's
+ * Phase 71 — the narrow, purpose-built write behind the Discovery Queue's
  * "Save to Developer" / "Update Developer Website" action. Deliberately NOT
  * a call into updateBuilderAction above (that action requires a full form
  * submit — every Builder field plus a redirect to /admin/builders — which is
- * the wrong shape for a single-field inline save from another page). Updates
- * ONLY Builder.websiteUrl, the SAME canonical field the full Builder edit
- * form already writes, via the same emit("BuilderUpdated", ...) path that
- * form's own updateBuilderAction uses — its subscribers (audit + cache) are
- * what actually log the AuditLog row and revalidate the builder's pages, so
- * this action deliberately does NOT call logAudit/revalidateBuilder directly
- * itself (that would double them).
+ * the wrong shape for a single-field inline save from another page).
+ *
+ * Phase 69's version required an EXISTING Builder row (took a builderId) —
+ * the real bug this phase fixes: almost no discovery candidate's developer
+ * has a Builder row yet (Builder rows are only created once a Project is
+ * actually approved), so "Save to Developer" was unreachable for the exact
+ * worked example the feature was built for (Godrej Properties). This version
+ * takes the developer NAME instead, resolves it the SAME exact-match way
+ * Include's own builder resolution already does (resolveBuilderMatch,
+ * confidence-1 only — never fuzzy, never merges two actually-different
+ * developers), and if no Builder exists yet, creates ONE minimal Builder row
+ * via the exact same shared creation path the Project form's own inline
+ * "+ New Builder" already uses (createBuilderRecord) — still the existing
+ * Builder registry, never a second developer-website model/table.
+ *
+ * Either way, the website lands on the SAME canonical Builder.websiteUrl
+ * field the full Builder edit form already writes, via the same
+ * emit("BuilderUpdated", ...) path that form's own updateBuilderAction uses
+ * for an update — its subscribers (audit + cache) are what actually log the
+ * AuditLog row and revalidate the builder's pages, so an UPDATE to an
+ * existing Builder deliberately does NOT call logAudit/revalidateBuilder
+ * directly itself (that would double them). A brand-new Builder's own
+ * creation is already audited by createBuilderRecord itself.
  */
-export async function saveDeveloperWebsiteAction(builderId: string, rawUrl: string): Promise<SaveDeveloperWebsiteResult> {
+export async function saveDeveloperWebsiteAction(developerName: string, rawUrl: string): Promise<SaveDeveloperWebsiteResult> {
   const session = await requireMutateSession();
   if (!(await hasPermission(session, "content.edit"))) {
     return { ok: false, error: "You don't have permission to do this." };
   }
 
+  const trimmedName = developerName.trim();
+  if (!trimmedName) return { ok: false, error: "Developer name is required to save a developer website." };
+
   const normalized = normalizeWebsiteUrl(rawUrl);
   if (!normalized) return { ok: false, error: "Enter a valid http(s) website URL." };
 
-  const existing = await prisma.builder.findUnique({ where: { id: builderId }, select: { slug: true, websiteUrl: true } });
-  if (!existing) return { ok: false, error: "Builder not found." };
+  const builders = await prisma.builder.findMany({ select: { id: true, name: true, legalNames: true, reraNumber: true, slug: true, websiteUrl: true } });
+  const match = resolveBuilderMatch(builders, trimmedName);
+  const existingBuilder =
+    match.status === "SINGLE_MATCH" && match.candidates[0].confidence === 1 ? builders.find((b) => b.id === match.candidates[0].id) : undefined;
+
+  if (!existingBuilder) {
+    // No Builder for this developer yet -- create the minimal record (same shared
+    // path as the Project form's own inline "+ New Builder"), with the website
+    // set from the start rather than a separate create-then-update round trip.
+    try {
+      const created = await createBuilderRecord(
+        { name: trimmedName, websiteUrl: normalized, dataSource: "MANUALLY_VERIFIED", confidence: "HIGH", isPublished: false, isFeatured: false },
+        [],
+        session.userId
+      );
+      return { ok: true, websiteUrl: normalized, builderId: created.id, builderName: trimmedName };
+    } catch (error) {
+      return { ok: false, error: friendlyPrismaError(error) };
+    }
+  }
 
   try {
-    await prisma.builder.update({ where: { id: builderId }, data: { websiteUrl: normalized } });
+    await prisma.builder.update({ where: { id: existingBuilder.id }, data: { websiteUrl: normalized } });
   } catch (error) {
     return { ok: false, error: friendlyPrismaError(error) };
   }
 
   await emit("BuilderUpdated", {
-    builderId,
-    slug: existing.slug,
+    builderId: existingBuilder.id,
+    slug: existingBuilder.slug,
     actorId: session.userId,
-    before: { websiteUrl: existing.websiteUrl },
+    before: { websiteUrl: existingBuilder.websiteUrl },
     after: { websiteUrl: normalized },
   });
 
-  return { ok: true, websiteUrl: normalized };
+  return { ok: true, websiteUrl: normalized, builderId: existingBuilder.id, builderName: existingBuilder.name };
 }
 
 /** Moves a builder to Trash — forces unpublished+archived so every existing public query already excludes it. ADMIN-only. */

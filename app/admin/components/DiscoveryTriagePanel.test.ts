@@ -37,7 +37,6 @@ function row(overrides: Partial<DiscoveryCandidateRow> = {}): DiscoveryCandidate
     liveDuplicateMatch: null,
     createdAt: new Date().toISOString(),
     reviewedAt: null,
-    savedDeveloperWebsite: null,
     ...overrides,
   };
 }

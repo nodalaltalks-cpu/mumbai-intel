@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { PRIMARY_CITY_SLUG } from "@/lib/queries";
 import { applyDiscoveryFounderAction, updateDiscoveryCandidateDetails } from "@/lib/actions/discovery";
 import { computeLiveDuplicateStatuses } from "@/lib/ingestion/discovery/liveDuplicateStatus";
-import { resolveSavedDeveloperWebsite, type BuilderForWebsiteLookup } from "@/lib/enrichment/developerWebsite";
+import type { BuilderForWebsiteLookup } from "@/lib/enrichment/developerWebsite";
 import type { DiscoveryStatus, ProjectDiscoveryCandidatePayload } from "@/lib/ingestion/discovery/types";
 import type { ProjectImportPayload } from "@/lib/ingestion/connectors/fileImport/types";
 import { type DiscoveryCandidateRow } from "@/app/admin/components/DiscoveryCandidateList";
@@ -61,11 +61,13 @@ export default async function ProjectDiscoveryPage() {
   const city = await prisma.city.findUnique({ where: { slug: PRIMARY_CITY_SLUG }, select: { id: true } });
   const liveDuplicateByCandidateId = city ? await computeLiveDuplicateStatuses(prisma, city.id, openCandidates) : new Map();
 
-  // Phase 69 — the canonical developer website already lives on the existing
-  // Builder model (websiteUrl); resolve each row's free-text developerName
-  // against it (exact match only, same discipline Include's own builder
-  // resolution already uses) so the edit panel can offer "Use saved website"
-  // instead of the founder re-pasting the same URL on every project.
+  // Phase 69/71 — the canonical developer website already lives on the
+  // existing Builder model (websiteUrl). The full lightweight registry is
+  // passed down to the client so the edit panel can look up "does this
+  // developer have a saved website" LIVE, from whatever the founder
+  // currently has typed/selected as the developer — not frozen to whatever
+  // developerName this one candidate happened to be staged under (Phase 71
+  // fix; see DiscoveryCandidateList.tsx's own doc comment).
   const builders: BuilderForWebsiteLookup[] = await prisma.builder.findMany({
     select: { id: true, name: true, legalNames: true, reraNumber: true, websiteUrl: true },
   });
@@ -83,7 +85,6 @@ export default async function ProjectDiscoveryPage() {
       createdAt: r.createdAt.toISOString(),
       /** Phase 59 — non-null once a founder has made ANY Include/Exclude/Review decision on this row, used to decide whether changing it now needs a confirmation. */
       reviewedAt: r.reviewedAt ? r.reviewedAt.toISOString() : null,
-      savedDeveloperWebsite: resolveSavedDeveloperWebsite(payload.developerName, builders),
     };
   });
 
@@ -106,7 +107,7 @@ export default async function ProjectDiscoveryPage() {
       {rows.length === 0 ? (
         <EmptyState title="No discovery candidates yet" message="Run a discovery batch for an area to populate this list." />
       ) : (
-        <DiscoveryTriagePanel rows={rows} onAction={applyDiscoveryFounderAction} onEdit={updateDiscoveryCandidateDetails} />
+        <DiscoveryTriagePanel rows={rows} onAction={applyDiscoveryFounderAction} onEdit={updateDiscoveryCandidateDetails} builders={builders} />
       )}
     </div>
   );

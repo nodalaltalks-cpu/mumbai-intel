@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import FormTabs, { type FormTab } from "./FormTabs";
 import DiscoveryCandidateList, { type DiscoveryCandidateRow } from "./DiscoveryCandidateList";
+import type { BuilderForWebsiteLookup } from "@/lib/enrichment/developerWebsite";
 import type { DiscoveryFounderAction } from "@/lib/ingestion/discovery/statusTransitions";
 import type { DiscoveryStatus } from "@/lib/ingestion/discovery/types";
 import type { DiscoveryCandidateEditInput } from "@/lib/actions/discovery";
@@ -81,10 +82,13 @@ export default function DiscoveryTriagePanel({
   rows,
   onAction,
   onEdit,
+  builders,
 }: {
   rows: DiscoveryCandidateRow[];
   onAction: (id: string, action: DiscoveryFounderAction) => Promise<{ ok: boolean; error?: string; projectStagingRecordId?: string }>;
   onEdit: (id: string, edits: DiscoveryCandidateEditInput) => Promise<{ ok: boolean; error?: string }>;
+  /** Phase 71 — the existing Builder registry, passed through unchanged so the edit panel can look up a developer's saved website LIVE as the founder types/selects, not just from whatever developerName the candidate happened to be staged with. */
+  builders: BuilderForWebsiteLookup[];
 }) {
   // Requirement 2 — "Needs Review" is the founder's default landing view.
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("NEEDS_REVIEW");
@@ -234,7 +238,7 @@ export default function DiscoveryTriagePanel({
           message={hasActiveFilters ? "Try a different status, source, or clear all filters to see the full queue." : "No discovery candidates yet."}
         />
       ) : (
-        <DiscoveryCandidateList rows={visibleRows} onAction={onAction} onEdit={onEdit} />
+        <DiscoveryCandidateList rows={visibleRows} onAction={onAction} onEdit={onEdit} builders={builders} />
       )}
     </div>
   );
