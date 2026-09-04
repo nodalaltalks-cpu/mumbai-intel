@@ -145,10 +145,9 @@ describe("extractKalpataruVianFacts (Phase 38 — third-developer generalization
     expect(facts.microMarket?.value).toBe("Hrushikesh, Lokhandwala, Andheri (W)");
   });
 
-  it("6. extracts priceMin ONLY from a 'starting from' figure -- never fabricates priceMax", () => {
+  it("6. extracts priceMin from a 'starting from' figure", () => {
     const facts = extractKalpataruVianFacts(buildRealShapedHtml());
     expect(facts.priceMin?.value).toBe("₹5.61 Cr");
-    expect(facts.priceMax).toBeUndefined();
   });
 
   it("7. extracts real possession month/year from a plain-English 'Month Year' label", () => {
@@ -162,10 +161,9 @@ describe("extractKalpataruVianFacts (Phase 38 — third-developer generalization
     expect(facts.category?.value).toBe("Residential");
   });
 
-  it("9. extracts the real RERA number and infers 'Registered' status from that structured evidence", () => {
+  it("9. extracts the real RERA number", () => {
     const facts = extractKalpataruVianFacts(buildRealShapedHtml());
     expect(facts.reraNumber?.value).toBe("PR1180002600863");
-    expect(facts.reraStatus?.value).toBe("Registered");
     expect(facts.reraCertificateUrl).toBeUndefined(); // no project-specific certificate link exists on this page
   });
 
@@ -218,10 +216,8 @@ describe("extractKalpataruVianFacts (Phase 38 — third-developer generalization
     expect(facts.documents?.items).toEqual(["https://d2j4tkbto6uvqv.cloudfront.net/kalpataru/1783089933.pdf"]);
   });
 
-  it("17. never fabricates fields genuinely absent from this page (latitude/longitude/address/specifications/faqs/totalUnits/totalTowers)", () => {
+  it("17. never fabricates fields genuinely absent from this page (address/specifications/faqs/totalUnits/totalTowers)", () => {
     const facts = extractKalpataruVianFacts(buildRealShapedHtml());
-    expect(facts.latitude).toBeUndefined();
-    expect(facts.longitude).toBeUndefined();
     expect(facts.address).toBeUndefined();
     expect(facts.specifications).toBeUndefined();
     expect(facts.faqs).toBeUndefined();
@@ -280,9 +276,8 @@ describe("extractKalpataruVianFacts (Phase 38 — third-developer generalization
     expect(byKey("name").classification).toBe("GREEN_NEW");
     expect(byKey("reraNumber").classification).toBe("GREEN_NEW");
     expect(byKey("landAreaAcres").classification).toBe("YELLOW");
-    expect(byKey("priceMax").classification).toBe("MISSING");
-    expect(byKey("latitude").classification).toBe("MISSING");
-    expect(result).toHaveLength(44);
+    expect(byKey("googleMapsUrl").classification).toBe("MISSING");
+    expect(result).toHaveLength(40);
   });
 
   it("23. never leaks Godrej fixture content into a Kalpataru extraction run", () => {

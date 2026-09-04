@@ -3,27 +3,36 @@ import { CATEGORY_LABEL, POSSESSION_MONTH_LABEL, STATUS_LABEL } from "@/lib/proj
 export type ApplyAcceptedFieldResult = { ok: true; payload: Record<string, unknown> } | { ok: false; error: string };
 
 /**
- * Converts one EnrichmentField's already-classified proposal into the exact
- * shape the EXISTING Project staging payload / reviewFieldRegistry.ts expects
- * for that specific key, and returns a NEW payload object with just that one
- * key changed (Phase 32 Part E) -- never mutates the object passed in.
+ * Converts one EnrichmentField's already-classified proposal (or, per Phase
+ * 67, a founder's own manually-typed value for a currently-MISSING field --
+ * same write path, no second mechanism) into the exact shape the EXISTING
+ * Project staging payload / reviewFieldRegistry.ts expects for that specific
+ * key, and returns a NEW payload object with just that one key changed
+ * (Phase 32 Part E) -- never mutates the object passed in.
  *
- * Every registry field the two live adapters (Godrej, Adani) can actually
- * produce a value for is handled below. A field is deliberately EXCLUDED
- * (falls through to the final "cannot be accepted" error) when accepting it
- * safely would require guessing something this module has no way to verify:
- *  - `locality`/`builder` are foreign keys (localityId/builderId) -- the
- *    proposed value is a NAME, and resolving a name to the correct existing
- *    row is a matching problem outside this phase's scope. Silently picking
- *    a locality/builder by name would risk pointing the project at the
- *    WRONG row.
+ * Every registry field this module can safely write is handled below. A
+ * field is deliberately EXCLUDED (falls through to the final "cannot be
+ * accepted" error) when writing it safely would require guessing something
+ * this module has no way to verify:
+ *  - `locality`/`builder` are foreign keys (localityId/builderId) resolved
+ *    via the separate entity-match mechanism -- the proposed/typed value is
+ *    a NAME, and resolving a name to the correct existing row is a matching
+ *    problem outside this module's scope. Silently picking a row by name
+ *    would risk pointing the project at the WRONG one. `microMarket` is a
+ *    narrower exception: it's accepted as a raw name string straight into
+ *    `microMarketId` (a pre-existing, deliberately looser convention for
+ *    this one lower-stakes field, not a real foreign-key resolution).
  *  - `slug` is always auto-derived at approval time, never a real field.
- *  - `description` is Phase 28's own documented exception (better prose,
- *    same topic -- not suited to a blunt accept/reject).
- *  - `launchDate` has no adapter-produced value yet to model a parser
- *    against; deferred rather than guessed at.
  *  - `dataSource`/`sourceRef` describe the STAGING record's own origin
- *    (e.g. MagicBricks), not something an official source cross-checks.
+ *    (e.g. MagicBricks), not something an official source cross-checks or a
+ *    founder types by hand.
+ *
+ * `description` and `launchDate` (Phase 28/60's earlier "deferred, not
+ * guessed at" exclusions) are now handled below, Phase 67: the founder can
+ * type either directly (the automation-decision layer still never
+ * AUTO_ACCEPTs either -- description is Tier C, launchDate is Tier B, both
+ * always HUMAN_REVIEW regardless -- this only unblocks the founder's own
+ * manual accept/edit).
  */
 export function applyAcceptedField(
   currentPayload: Record<string, unknown>,
@@ -52,17 +61,22 @@ export function applyAcceptedField(
     return { ok: true, payload: { ...currentPayload, category: key } };
   }
 
-  if (fieldKey === "priceMin" || fieldKey === "priceMax") {
+  if (fieldKey === "priceMin") {
     const rupees = parseCurrencyToRupees(value);
     if (rupees === null) return { ok: false, error: `"${value}" is not a recognized price format.` };
-    const payloadKey = fieldKey === "priceMin" ? "priceMinRupees" : "priceMaxRupees";
-    return { ok: true, payload: { ...currentPayload, [payloadKey]: rupees } };
+    return { ok: true, payload: { ...currentPayload, priceMinRupees: rupees } };
   }
 
-  if (fieldKey === "latitude" || fieldKey === "longitude" || fieldKey === "totalUnits" || fieldKey === "totalTowers") {
+  if (fieldKey === "totalUnits" || fieldKey === "totalTowers") {
     const n = parsePlainNumber(value);
     if (n === null) return { ok: false, error: `"${value}" is not a valid number.` };
     return { ok: true, payload: { ...currentPayload, [fieldKey]: n } };
+  }
+
+  if (fieldKey === "launchDate") {
+    const iso = parseIsoDate(value);
+    if (iso === null) return { ok: false, error: `"${value}" is not a valid date (expected YYYY-MM-DD).` };
+    return { ok: true, payload: { ...currentPayload, launchDateIso: iso } };
   }
 
   if (fieldKey === "constructionPercent") {
@@ -136,14 +150,18 @@ export function validateProposedEdit(fieldKey: string, value: string): ValidateE
     return reverseLabel(CATEGORY_LABEL, trimmed) ? { ok: true } : { ok: false, error: `"${trimmed}" is not a recognized property category.` };
   }
 
-  if (fieldKey === "priceMin" || fieldKey === "priceMax") {
+  if (fieldKey === "priceMin") {
     return parseCurrencyToRupees(trimmed) !== null
       ? { ok: true }
       : { ok: false, error: `"${trimmed}" is not a recognized price format (e.g. "₹1.25 Cr" or "₹45.00 L").` };
   }
 
-  if (fieldKey === "latitude" || fieldKey === "longitude" || fieldKey === "totalUnits" || fieldKey === "totalTowers") {
+  if (fieldKey === "totalUnits" || fieldKey === "totalTowers") {
     return parsePlainNumber(trimmed) !== null ? { ok: true } : { ok: false, error: `"${trimmed}" is not a valid number.` };
+  }
+
+  if (fieldKey === "launchDate") {
+    return parseIsoDate(trimmed) !== null ? { ok: true } : { ok: false, error: `"${trimmed}" is not a valid date (expected YYYY-MM-DD).` };
   }
 
   if (fieldKey === "constructionPercent") {
@@ -164,11 +182,11 @@ const DIRECT_STRING_FIELDS: Record<string, string> = {
   name: "name",
   developerGroup: "developerGroup",
   tagline: "tagline",
+  description: "description",
   microMarket: "microMarketId",
   address: "address",
   googleMapsUrl: "googleMapsUrl",
   reraNumber: "reraNumber",
-  reraStatus: "reraStatus",
   reraCertificateUrl: "reraCertificateUrl",
   paymentPlanType: "paymentPlanType",
   paymentPlanDescription: "paymentPlanDescription",
@@ -192,7 +210,35 @@ const ARRAY_WRAP_FIELDS: Record<string, string> = {
   documents: "documents",
 };
 
-export type FieldEditorKind = "array" | "enum-status" | "enum-category" | "month" | "text" | "textarea";
+/** Special-cased-by-name fields handled directly in applyAcceptedField, above and beyond DIRECT_STRING_FIELDS/ARRAY_WRAP_FIELDS. */
+const SPECIAL_CASED_FIELDS: ReadonlySet<string> = new Set([
+  "possessionMonth",
+  "possessionYear",
+  "status",
+  "category",
+  "priceMin",
+  "totalUnits",
+  "totalTowers",
+  "constructionPercent",
+  "landAreaAcres",
+  "launchDate",
+]);
+
+/**
+ * Phase 67 -- whether applyAcceptedField can actually write this field key at
+ * all, independent of classification. Used to decide whether a founder gets
+ * an Edit affordance for a currently-MISSING field (there's no proposed
+ * value to edit-then-accept, but the founder can still type one from
+ * scratch) -- reuses the exact same three lookups applyAcceptedField's own
+ * dispatch already keys on, so this can never drift from what Accept would
+ * actually do. Excludes locality/builder/slug/dataSource/sourceRef -- see
+ * this file's own top doc comment for why each is unsupported.
+ */
+export function isFieldManuallyEditable(fieldKey: string): boolean {
+  return Object.hasOwn(DIRECT_STRING_FIELDS, fieldKey) || Object.hasOwn(ARRAY_WRAP_FIELDS, fieldKey) || SPECIAL_CASED_FIELDS.has(fieldKey);
+}
+
+export type FieldEditorKind = "array" | "enum-status" | "enum-category" | "month" | "date" | "text" | "textarea";
 
 /**
  * Phase 36 -- tells EnrichmentProposalPanel which editing control a field
@@ -209,6 +255,7 @@ export function getFieldEditorKind(fieldKey: string, currentValueLength: number)
   if (fieldKey === "status") return "enum-status";
   if (fieldKey === "category") return "enum-category";
   if (fieldKey === "possessionMonth") return "month";
+  if (fieldKey === "launchDate") return "date";
   return currentValueLength > 60 ? "textarea" : "text";
 }
 
@@ -220,7 +267,7 @@ function reverseLabel<T extends string>(labels: Record<T, string>, value: string
   return null;
 }
 
-/** Inverse of lib/format.ts's formatPaise, restricted to the exact shapes it produces ("₹X.XX Cr", "₹X.XX L", "₹N,NN,NNN") -- the only shapes an EnrichmentField's proposedValue for priceMin/priceMax can ever be in, since both adapters format via that same helper. Returns rupees (matching payload.priceMin/MaxRupees's own unit). */
+/** Inverse of lib/format.ts's formatPaise, restricted to the exact shapes it produces ("₹X.XX Cr", "₹X.XX L", "₹N,NN,NNN") -- the only shape an EnrichmentField's proposedValue for priceMin can ever be in, since the adapters format via that same helper. Returns rupees (matching payload.priceMinRupees's own unit). */
 function parseCurrencyToRupees(display: string): number | null {
   const cr = display.match(/₹\s*([\d,.]+)\s*Cr/i);
   if (cr) return Math.round(parseFloat(cr[1].replace(/,/g, "")) * 1e7);
@@ -234,6 +281,13 @@ function parseCurrencyToRupees(display: string): number | null {
 function parsePlainNumber(display: string): number | null {
   const n = Number(display.replace(/,/g, "").trim());
   return Number.isFinite(n) ? n : null;
+}
+
+/** Accepts the native `<input type="date">` value shape ("YYYY-MM-DD") -- the exact format the "date" FieldEditorKind's control emits. Returns a full ISO timestamp (matching payload.launchDateIso's own shape) or null for anything else, including a technically-parseable-by-Date but non-YYYY-MM-DD string (never guesses a locale-ambiguous "MM/DD" vs "DD/MM" input). */
+function parseIsoDate(display: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(display.trim())) return null;
+  const d = new Date(`${display.trim()}T00:00:00.000Z`);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
 function parsePercent(display: string): number | null {

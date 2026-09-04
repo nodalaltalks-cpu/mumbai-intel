@@ -4,7 +4,7 @@ import { useState } from "react";
 import Badge, { type BadgeTone } from "@/app/components/ui/Badge";
 import type { EnrichmentClassification, EnrichmentField } from "@/lib/enrichment/types";
 import { SOURCE_TIER_LABEL } from "@/lib/enrichment/types";
-import { getFieldEditorKind, validateProposedEdit, type FieldEditorKind } from "@/lib/enrichment/applyAcceptedField";
+import { getFieldEditorKind, isFieldManuallyEditable, validateProposedEdit, type FieldEditorKind } from "@/lib/enrichment/applyAcceptedField";
 import type { EnrichmentHistoryEntry } from "@/lib/enrichment/enrichmentHistory";
 import { CATEGORY_LABEL, POSSESSION_MONTH_LABEL, STATUS_LABEL } from "@/lib/project-meta";
 import EnrichmentFieldHistoryDialog from "./EnrichmentFieldHistoryDialog";
@@ -120,8 +120,16 @@ export default function EnrichmentProposalPanel({
     { CONFIRMED: 0, GREEN_NEW: 0, YELLOW: 0, CONFLICT: 0, MISSING: 0 } as Record<EnrichmentClassification, number>
   );
 
+  /**
+   * Phase 67: falls back to `currentValue` when there's no proposal at all
+   * (the MISSING case -- e.g. RERA number already has a value but no new
+   * source confirmed/changed it) so starting an edit seeds from what's
+   * actually there today, not a blank field the founder has to retype from
+   * scratch. Never changes anything for GREEN_NEW/YELLOW/CONFLICT/CONFIRMED,
+   * which always carry a real proposedValue already.
+   */
   function displayValue(field: EnrichmentField): string | null {
-    return editedValue[field.key] ?? field.proposedValue;
+    return editedValue[field.key] ?? field.proposedValue ?? field.currentValue;
   }
 
   function displayItems(field: EnrichmentField): string[] | undefined {
@@ -324,7 +332,12 @@ export default function EnrichmentProposalPanel({
               const busy = state === "saving";
               const done = state === "saved" || state === "kept";
               const isEditing = editingKey === field.key;
-              const canEdit = field.proposedValue !== null && (field.classification === "GREEN_NEW" || field.classification === "YELLOW" || field.classification === "CONFLICT");
+              // Phase 67: gates on whether applyAcceptedField can actually write this
+              // key at all (excludes locality/builder/slug/dataSource/sourceRef),
+              // independent of classification -- including MISSING, so a field like
+              // RERA number that already has a value but no new source confirmed it
+              // still gets an Edit path, not just View History.
+              const canEdit = isFieldManuallyEditable(field.key);
               return (
                 <div key={field.key} className="flex flex-col gap-1 px-3 py-2 text-xs">
                   <div className="flex items-center justify-between gap-2">
@@ -478,14 +491,16 @@ export default function EnrichmentProposalPanel({
 
                   {!isEditing && field.classification === "CONFIRMED" ? (
                     <div className="mt-1 flex items-center gap-2">
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => startEdit(field)}
-                        className="rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-accent hover:text-accent disabled:opacity-50"
-                      >
-                        Edit
-                      </button>
+                      {canEdit ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => startEdit(field)}
+                          className="rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-accent hover:text-accent disabled:opacity-50"
+                        >
+                          Edit
+                        </button>
+                      ) : null}
                       {statusLine(field.key)}
                       <button
                         type="button"
@@ -497,12 +512,35 @@ export default function EnrichmentProposalPanel({
                     </div>
                   ) : null}
 
-                  {field.classification === "MISSING" ? (
-                    <div className="mt-1 flex items-center justify-end">
+                  {!isEditing && field.classification === "MISSING" ? (
+                    <div className="mt-1 flex items-center gap-2">
+                      {canEdit ? (
+                        <button
+                          type="button"
+                          disabled={busy || done}
+                          onClick={() => startEdit(field)}
+                          className="rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-accent hover:text-accent disabled:opacity-50"
+                        >
+                          Edit
+                        </button>
+                      ) : null}
+                      {/* Only offer Save once the founder has actually typed something --
+                          there's no source proposal to accept as-is for a MISSING field. */}
+                      {canEdit && editedValue[field.key] !== undefined ? (
+                        <button
+                          type="button"
+                          disabled={busy || done}
+                          onClick={() => handleAccept(field)}
+                          className="rounded-sm border border-positive/40 px-2 py-0.5 text-[10px] font-mono uppercase text-positive hover:bg-positive/10 disabled:opacity-50"
+                        >
+                          Save
+                        </button>
+                      ) : null}
+                      {statusLine(field.key)}
                       <button
                         type="button"
                         onClick={() => handleViewHistory(field.key)}
-                        className="rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-accent hover:text-accent"
+                        className="ml-auto rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-accent hover:text-accent"
                       >
                         View History
                       </button>

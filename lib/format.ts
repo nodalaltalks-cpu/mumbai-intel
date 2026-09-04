@@ -9,10 +9,14 @@ export function formatPaise(paise: number | bigint | null | undefined): string {
   return `₹${rupees.toLocaleString("en-IN")}`;
 }
 
-export function formatPriceBand(
-  min: number | bigint | null | undefined,
-  max: number | bigint | null | undefined
-): string {
+/**
+ * Renders a price range for entities that legitimately have both a min AND
+ * max (e.g. a Configuration's own price band). `max` is optional — Project
+ * itself has only a starting price (`priceMinPaise`; Phase 67 removed the
+ * project-level max as misleading), so every Project-level call site passes
+ * just `min`, which this collapses to a single formatted value.
+ */
+export function formatPriceBand(min: number | bigint | null | undefined, max?: number | bigint | null | undefined): string {
   if (!min && !max) return "Price on request";
   if (min && max && Number(min) !== Number(max)) {
     return `${formatPaise(min)} – ${formatPaise(max)}`;

@@ -115,8 +115,8 @@ function parseAcres(text: string): string | null {
  *    interactive tour -- `tour360Url` correctly reports MISSING rather than
  *    treating a mislabeled image as a real 360 tour.
  *  - No price is published on this page at all (its own FAQ says prices are
- *    "available on request") -- priceMin/priceMax correctly report MISSING,
- *    not inferred from anything.
+ *    "available on request") -- priceMin correctly reports MISSING, not
+ *    inferred from anything.
  *
  * As tolerant of missing/malformed sections as the Godrej adapter (Part I):
  * every field extraction is independent.
@@ -217,14 +217,6 @@ export function extractAdaniLinkbayFacts(html: string): SourceFactsMap {
     const reraModal = Array.isArray(rera?.reraModal) ? (rera!.reraModal as Record<string, unknown>[])[0] : undefined;
     const certFact = fact(reraModal?.downloadLink, "High", { note: "Direct certificate file link embedded in the page's own RERA modal data." });
     if (certFact) facts.reraCertificateUrl = certFact;
-
-    if (reraNumberFact) {
-      facts.reraStatus = {
-        value: "Registered",
-        confidence: "High",
-        note: "Inferred from the page's own structured RERA data (a real registration number plus a link to the official MahaRERA portal), not from marketing prose.",
-      };
-    }
   } catch {
     /* ignore */
   }
@@ -328,14 +320,13 @@ export function extractAdaniLinkbayFacts(html: string): SourceFactsMap {
 
   // Deliberately NOT populated -- confirmed genuinely absent, mismapped, or
   // not a real interactive asset on this page (Phase 31 inspection), not a
-  // parsing failure: priceMin, priceMax (page states prices are "available
-  // on request"), locality (no discrete neighbourhood-name field distinct
-  // from the address string -- extracting one from prose would be exactly
-  // the kind of inference Part F forbids), microMarket, googleMapsUrl,
-  // latitude, longitude, tagline, description, specifications, totalUnits,
-  // totalTowers, launchDate, actualPossession, constructionPercent,
-  // paymentPlanType, paymentPlanDescription, tour360Url, brochure, documents,
-  // builder.
+  // parsing failure: priceMin (page states prices are "available on
+  // request"), locality (no discrete neighbourhood-name field distinct from
+  // the address string -- extracting one from prose would be exactly the
+  // kind of inference Part F forbids), microMarket, googleMapsUrl, tagline,
+  // description, specifications, totalUnits, totalTowers, launchDate,
+  // actualPossession, constructionPercent, paymentPlanType,
+  // paymentPlanDescription, tour360Url, brochure, documents, builder.
 
   return facts;
 }

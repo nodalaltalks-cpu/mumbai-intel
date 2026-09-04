@@ -50,6 +50,11 @@ export const MMR_PERIPHERAL_AREA_KEYWORDS: string[] = [
   "ambernath",
   "kamothe",
   "seawoods",
+  // Phase 67 — real gap found by the Housiey feasibility investigation:
+  // housiey.com's own Mumbai locality-link list names "khopoli" (a genuine
+  // MMR/peripheral town well outside Mumbai city) alongside real Mumbai
+  // localities under the same URL prefix.
+  "khopoli",
 ];
 
 /** Matches a bare `keyword` as its own word/phrase, not merely as a substring of an unrelated word. */

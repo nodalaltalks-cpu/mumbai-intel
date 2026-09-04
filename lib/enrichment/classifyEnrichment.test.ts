@@ -17,7 +17,6 @@ const GODREJ_PAYLOAD: ProjectImportPayload = {
   reraNumber: "PM1180002500076",
   description: "3 BHK, Multistorey Apartment is available for Sale in Andheri West, Mumbai for 8.4 Crore(s)",
   developerGroup: "Godrej Properties Ltd.",
-  priceMaxRupees: 84000000,
   priceMinRupees: 84000000,
   possessionDateIso: "2031-12-01T00:00:00.000Z",
 };
@@ -66,7 +65,7 @@ describe("classifyProjectEnrichment — Part M rules (generic, not project-speci
   it("7. no source value for a field -> MISSING, whether or not it's currently blank", () => {
     const result = classifyProjectEnrichment(GODREJ_PAYLOAD, CONTEXT, {}, { url: "https://example.com", tier: "OFFICIAL_DEVELOPER" });
     expect(byKey(result, "brochure")!.classification).toBe("MISSING");
-    expect(byKey(result, "reraStatus")!.classification).toBe("MISSING");
+    expect(byKey(result, "launchDate")!.classification).toBe("MISSING");
   });
 
   it("8. no fabrication across a full run with zero facts provided", () => {
@@ -77,10 +76,10 @@ describe("classifyProjectEnrichment — Part M rules (generic, not project-speci
     }
   });
 
-  it("15. reuses the existing 44-field registry exactly -- same field count, same keys, no second registry", () => {
+  it("15. reuses the existing 40-field registry exactly -- same field count, same keys, no second registry", () => {
     const completeness = buildProjectReviewCompleteness(GODREJ_PAYLOAD, CONTEXT);
     const result = classifyProjectEnrichment(GODREJ_PAYLOAD, CONTEXT, {}, { url: "https://example.com", tier: "OFFICIAL_DEVELOPER" });
-    expect(result).toHaveLength(44);
+    expect(result).toHaveLength(40);
     expect(result).toHaveLength(completeness.totalFields);
     const registryKeys = completeness.groups.flatMap((g) => g.fields.map((f) => f.key)).sort();
     const enrichmentKeys = result.map((f) => f.key).sort();
@@ -93,18 +92,18 @@ describe("mergeEnrichmentResults — source priority (5, 6. multiple sources / s
     const govFacts = classifyProjectEnrichment(
       GODREJ_PAYLOAD,
       CONTEXT,
-      { reraStatus: { value: "Registered", confidence: "High" } },
+      { reraNumber: { value: "PM1180002500076-CORRECTED", confidence: "High" } },
       { url: "https://maharera.example", tier: "GOVERNMENT" }
     );
     const portalFacts = classifyProjectEnrichment(
       GODREJ_PAYLOAD,
       CONTEXT,
-      { reraStatus: { value: "Unregistered (wrong)", confidence: "Low" } },
+      { reraNumber: { value: "WRONG-NUMBER", confidence: "Low" } },
       { url: "https://portal.example", tier: "LISTING_PORTAL" }
     );
     const merged = mergeEnrichmentResults([portalFacts, govFacts]); // deliberately listed lower-tier first
-    const f = merged.find((m) => m.key === "reraStatus")!;
-    expect(f.proposedValue).toBe("Registered");
+    const f = merged.find((m) => m.key === "reraNumber")!;
+    expect(f.proposedValue).toBe("PM1180002500076-CORRECTED");
     expect(f.sourceType).toBe("GOVERNMENT");
   });
 
@@ -144,13 +143,6 @@ describe("Godrej Sky Shore acceptance test (Phase 28 Part L — the 10 named cas
     expect(year.proposedValue).toBe("2030");
   });
 
-  it("11. price max ₹11.89 Cr -> GREEN_NEW (single-listing-artifact exception), not CONFLICT", () => {
-    const f = byKey(result, "priceMax")!;
-    expect(f.classification).toBe("GREEN_NEW");
-    expect(f.currentValue).toBe("₹8.40 Cr");
-    expect(f.proposedValue).toBe("₹11.89 Cr");
-  });
-
   it("12. address labeled Sales Lounge -> YELLOW", () => {
     const f = byKey(result, "address")!;
     expect(f.classification).toBe("YELLOW");
@@ -176,10 +168,6 @@ describe("Godrej Sky Shore acceptance test (Phase 28 Part L — the 10 named cas
     expect(byKey(result, "brochure")!.classification).toBe("MISSING");
   });
 
-  it("unavailable RERA status -> MISSING", () => {
-    expect(byKey(result, "reraStatus")!.classification).toBe("MISSING");
-  });
-
   it("existing, agreeing fields are CONFIRMED, not falsely flagged", () => {
     expect(byKey(result, "developerGroup")!.classification).toBe("CONFIRMED");
     expect(byKey(result, "locality")!.classification).toBe("CONFIRMED");
@@ -190,7 +178,7 @@ describe("Godrej Sky Shore acceptance test (Phase 28 Part L — the 10 named cas
     expect(byKey(result, "amenities")!.classification).toBe("YELLOW");
   });
 
-  it("total field count is still exactly 44 for the full Godrej run", () => {
-    expect(result).toHaveLength(44);
+  it("total field count is still exactly 40 for the full Godrej run", () => {
+    expect(result).toHaveLength(40);
   });
 });

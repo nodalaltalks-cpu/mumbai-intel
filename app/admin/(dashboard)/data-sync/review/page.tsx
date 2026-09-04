@@ -119,13 +119,8 @@ export default async function DataSyncReviewPage() {
         ].join(" · ")
       );
       if (projectPayload.reraNumber) proposedLines.push(`RERA ${projectPayload.reraNumber}`);
-      if (projectPayload.priceMinRupees || projectPayload.priceMaxRupees) {
-        proposedLines.push(
-          formatPriceBand(
-            projectPayload.priceMinRupees ? projectPayload.priceMinRupees * 100 : null,
-            projectPayload.priceMaxRupees ? projectPayload.priceMaxRupees * 100 : null
-          )
-        );
+      if (projectPayload.priceMinRupees) {
+        proposedLines.push(formatPriceBand(projectPayload.priceMinRupees * 100));
       }
     } else if (infraPayload) {
       proposedTitle = infraPayload.name;

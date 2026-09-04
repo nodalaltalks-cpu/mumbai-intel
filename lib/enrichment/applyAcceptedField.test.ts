@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyAcceptedField, getFieldEditorKind, validateProposedEdit } from "./applyAcceptedField";
+import { applyAcceptedField, getFieldEditorKind, isFieldManuallyEditable, validateProposedEdit } from "./applyAcceptedField";
 
 const BASE_PAYLOAD = {
   name: "Godrej Sky Shore",
@@ -8,7 +8,6 @@ const BASE_PAYLOAD = {
   localityId: "loc-andheri",
   developerGroup: "Godrej Properties Ltd.",
   priceMinRupees: 84000000,
-  priceMaxRupees: 84000000,
   possessionDateIso: "2031-12-01T00:00:00.000Z",
 };
 
@@ -47,11 +46,17 @@ describe("applyAcceptedField (Phase 32 Part E) — direct string fields", () => 
     if (!result.ok) expect(result.error).toContain("no proposed value");
   });
 
-  it("rejects a field key that cannot be safely accepted (locality is a foreign key, builder is a foreign key, slug is auto-derived, description has its own documented exception)", () => {
-    for (const key of ["locality", "builder", "slug", "description", "dataSource", "sourceRef", "launchDate"]) {
+  it("rejects a field key that cannot be safely accepted (locality/builder are foreign keys, slug is auto-derived, dataSource/sourceRef describe the staging record's own origin)", () => {
+    for (const key of ["locality", "builder", "slug", "dataSource", "sourceRef"]) {
       const result = applyAcceptedField(BASE_PAYLOAD, key, "some value");
       expect(result.ok).toBe(false);
     }
+  });
+
+  it("accepts description directly -- Phase 67 moved this out of the excluded set", () => {
+    const result = applyAcceptedField(BASE_PAYLOAD, "description", "A richer, founder-authored description.");
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.payload.description).toBe("A richer, founder-authored description.");
   });
 
   it("rejects an entirely unknown/invalid field key", () => {
@@ -79,11 +84,11 @@ describe("applyAcceptedField — enum fields (status/category)", () => {
   });
 });
 
-describe("applyAcceptedField — currency fields (priceMin/priceMax)", () => {
+describe("applyAcceptedField — currency field (priceMin)", () => {
   it("parses a Crore-formatted value back into rupees", () => {
-    const result = applyAcceptedField(BASE_PAYLOAD, "priceMax", "₹11.89 Cr");
+    const result = applyAcceptedField(BASE_PAYLOAD, "priceMin", "₹11.89 Cr");
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.payload.priceMaxRupees).toBe(118900000);
+    if (result.ok) expect(result.payload.priceMinRupees).toBe(118900000);
   });
 
   it("parses a Lakh-formatted value back into rupees", () => {
@@ -93,19 +98,25 @@ describe("applyAcceptedField — currency fields (priceMin/priceMax)", () => {
   });
 
   it("rejects a price string it doesn't recognize rather than guessing a number", () => {
-    const result = applyAcceptedField(BASE_PAYLOAD, "priceMax", "Contact sales for pricing");
+    const result = applyAcceptedField(BASE_PAYLOAD, "priceMin", "Contact sales for pricing");
     expect(result.ok).toBe(false);
   });
 });
 
-describe("applyAcceptedField — plain numeric fields", () => {
-  it("parses latitude/longitude", () => {
-    const lat = applyAcceptedField(BASE_PAYLOAD, "latitude", "19.133261");
-    if (lat.ok) expect(lat.payload.latitude).toBe(19.133261);
-    const lng = applyAcceptedField(BASE_PAYLOAD, "longitude", "72.8164585");
-    if (lng.ok) expect(lng.payload.longitude).toBe(72.8164585);
+describe("applyAcceptedField — launch date", () => {
+  it("parses a YYYY-MM-DD value into launchDateIso", () => {
+    const result = applyAcceptedField(BASE_PAYLOAD, "launchDate", "2027-03-15");
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.payload.launchDateIso).toBe(new Date("2027-03-15T00:00:00.000Z").toISOString());
   });
 
+  it("rejects a non-YYYY-MM-DD date string rather than guessing a locale", () => {
+    expect(applyAcceptedField(BASE_PAYLOAD, "launchDate", "15/03/2027").ok).toBe(false);
+    expect(applyAcceptedField(BASE_PAYLOAD, "launchDate", "March 2027").ok).toBe(false);
+  });
+});
+
+describe("applyAcceptedField — plain numeric fields", () => {
   it("parses totalUnits/totalTowers", () => {
     const units = applyAcceptedField(BASE_PAYLOAD, "totalUnits", "312");
     if (units.ok) expect(units.payload.totalUnits).toBe(312);
@@ -122,7 +133,7 @@ describe("applyAcceptedField — plain numeric fields", () => {
   });
 
   it("rejects a non-numeric value for a numeric field", () => {
-    expect(applyAcceptedField(BASE_PAYLOAD, "latitude", "somewhere near the coast").ok).toBe(false);
+    expect(applyAcceptedField(BASE_PAYLOAD, "totalUnits", "quite a lot").ok).toBe(false);
   });
 });
 
@@ -180,16 +191,21 @@ describe("applyAcceptedField — possession month/year (derived from a single po
 
 describe("validateProposedEdit (Phase 36 — client-safe pre-check before Save Edit, reuses applyAcceptedField's own parsers)", () => {
   it("9. rejects an invalid numeric value", () => {
-    expect(validateProposedEdit("latitude", "somewhere near the coast").ok).toBe(false);
+    expect(validateProposedEdit("totalUnits", "quite a lot").ok).toBe(false);
     expect(validateProposedEdit("landAreaAcres", "a few acres").ok).toBe(false);
     expect(validateProposedEdit("constructionPercent", "almost done").ok).toBe(false);
   });
 
   it("accepts a valid numeric value in the same format applyAcceptedField itself expects", () => {
-    expect(validateProposedEdit("latitude", "19.133261").ok).toBe(true);
+    expect(validateProposedEdit("totalUnits", "312").ok).toBe(true);
     expect(validateProposedEdit("landAreaAcres", "2.5 acres").ok).toBe(true);
     expect(validateProposedEdit("constructionPercent", "45%").ok).toBe(true);
-    expect(validateProposedEdit("priceMax", "₹11.89 Cr").ok).toBe(true);
+    expect(validateProposedEdit("priceMin", "₹11.89 Cr").ok).toBe(true);
+  });
+
+  it("validates launchDate as a YYYY-MM-DD date", () => {
+    expect(validateProposedEdit("launchDate", "not a date").ok).toBe(false);
+    expect(validateProposedEdit("launchDate", "2027-03-15").ok).toBe(true);
   });
 
   it("10. rejects an invalid enum value for status/category", () => {
@@ -228,6 +244,24 @@ describe("validateProposedEdit (Phase 36 — client-safe pre-check before Save E
   });
 });
 
+describe("isFieldManuallyEditable (Phase 67 — gates the Edit affordance for a currently-MISSING field, not just GREEN_NEW/YELLOW/CONFLICT)", () => {
+  it("editable direct-string, array, and special-cased fields all report true", () => {
+    for (const key of ["name", "reraNumber", "address", "description", "launchDate", "priceMin", "status", "category", "amenities", "highlights"]) {
+      expect(isFieldManuallyEditable(key)).toBe(true);
+    }
+  });
+
+  it("relational and staging-origin fields report false -- no Edit affordance for these regardless of classification", () => {
+    for (const key of ["locality", "builder", "slug", "dataSource", "sourceRef"]) {
+      expect(isFieldManuallyEditable(key)).toBe(false);
+    }
+  });
+
+  it("an unknown field key reports false rather than guessing", () => {
+    expect(isFieldManuallyEditable("someMadeUpField")).toBe(false);
+  });
+});
+
 describe("getFieldEditorKind (Phase 36 — which editor control a field needs)", () => {
   it("12. array-shaped fields get the list editor", () => {
     for (const key of ["highlights", "specifications", "amenities", "faqs", "images", "documents"]) {
@@ -242,6 +276,10 @@ describe("getFieldEditorKind (Phase 36 — which editor control a field needs)",
 
   it("possessionMonth gets the month editor", () => {
     expect(getFieldEditorKind("possessionMonth", 5)).toBe("month");
+  });
+
+  it("launchDate gets the date editor", () => {
+    expect(getFieldEditorKind("launchDate", 10)).toBe("date");
   });
 
   it("a short plain string gets a single-line text input", () => {

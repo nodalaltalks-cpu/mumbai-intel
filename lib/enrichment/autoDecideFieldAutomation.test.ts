@@ -93,15 +93,15 @@ describe("decideFieldAutomation — Section 17's baseline scenarios", () => {
     expect(result.decision).toBe("HUMAN_REVIEW");
   });
 
-  it("8. an unrecognized RERA status value -> HUMAN_REVIEW even though the field is Tier A and GREEN_NEW", () => {
-    const field = byKey(BASE_PAYLOAD, { reraStatus: { value: "Pending Verification By Committee", confidence: "High" } }, "reraStatus");
+  it("8. a structurally-unrecognized RERA number shape -> HUMAN_REVIEW even though the field is Tier A and GREEN_NEW", () => {
+    const field = byKey(BASE_PAYLOAD, { reraNumber: { value: "not a rera number at all", confidence: "High" } }, "reraNumber");
     const result = decideFieldAutomation(field);
     expect(result.decision).toBe("HUMAN_REVIEW");
     expect(result.tag).toBe("UNRECOGNIZED_VALUE_FORMAT");
   });
 
-  it("9. a recognized RERA status value -> AUTO_ACCEPT", () => {
-    const field = byKey(BASE_PAYLOAD, { reraStatus: { value: "Registered", confidence: "High" } }, "reraStatus");
+  it("9. a well-formed RERA number -> AUTO_ACCEPT", () => {
+    const field = byKey(BASE_PAYLOAD, { reraNumber: { value: "PM1180002501525", confidence: "High" } }, "reraNumber");
     expect(decideFieldAutomation(field).decision).toBe("AUTO_ACCEPT");
   });
 });

@@ -110,7 +110,7 @@ export default async function ProjectReportPage({ params }: { params: Promise<{ 
         title={project.name}
         subtitle={`${project.locality.name}${project.builder ? ` · ${project.builder.name}` : ""} · ${STATUS_LABEL[project.status]}`}
         meta={[
-          { label: "Price band", value: formatPriceBand(project.priceMinPaise, project.priceMaxPaise) },
+          { label: "Starting price", value: formatPriceBand(project.priceMinPaise) },
           { label: "Price/sqft", value: gated(locked, formatPricePerSqft(project.configPricePerSqftPaise), maskPricePerSqft()) },
           { label: "Investment score", value: gated(locked, investmentScore !== null ? `${investmentScore.toFixed(1)}/10` : "--", maskScore()) },
         ]}
@@ -133,7 +133,7 @@ export default async function ProjectReportPage({ params }: { params: Promise<{ 
 
         <ReportSection id="kpis" title="Key Performance Indicators">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard label="Price band" value={formatPriceBand(project.priceMinPaise, project.priceMaxPaise)} accent />
+            <StatCard label="Starting price" value={formatPriceBand(project.priceMinPaise)} accent />
             <StatCard label="Price/sqft" value={gated(locked, formatPricePerSqft(project.configPricePerSqftPaise), maskPricePerSqft())} />
             <StatCard label="Category" value={CATEGORY_LABEL[project.category]} />
             <StatCard label="Investment score" value={gated(locked, investmentScore !== null ? `${investmentScore.toFixed(1)}/10` : "--", maskScore())} />

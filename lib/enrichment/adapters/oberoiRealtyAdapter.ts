@@ -140,9 +140,9 @@ export function extractOberoiRealtyFacts(html: string): SourceFactsMap {
   // Deliberately NOT populated -- confirmed genuinely absent from both real
   // pages inspected during Phase 47 (no field/section exists, not a parsing
   // failure): developerGroup (lives on the homepage, not the project page),
-  // builder, priceMin/priceMax, possessionMonth/possessionYear (this
+  // builder, priceMin, possessionMonth/possessionYear (this
   // developer does not publish pricing or possession dates publicly),
-  // reraStatus, reraCertificateUrl, googleMapsUrl, latitude/longitude,
+  // reraCertificateUrl, googleMapsUrl,
   // launchDate, actualPossession, constructionPercent, landAreaAcres,
   // totalUnits, totalTowers, paymentPlanType/Description, specifications,
   // faqs, videoUrl, tour360Url, brochure, documents, images, ogImageUrl.

@@ -76,8 +76,8 @@ export default async function ProjectPreviewPage({ params }: { params: Promise<{
 
       <div className="grid grid-cols-2 gap-3 rounded-sm border border-border bg-surface p-4 sm:grid-cols-4">
         <div>
-          <p className="text-[10px] uppercase tracking-wide text-muted">Price band</p>
-          <p className="font-mono text-sm text-foreground">{formatPriceBand(project.priceMinPaise !== null ? Number(project.priceMinPaise) : null, project.priceMaxPaise !== null ? Number(project.priceMaxPaise) : null)}</p>
+          <p className="text-[10px] uppercase tracking-wide text-muted">Starting price</p>
+          <p className="font-mono text-sm text-foreground">{formatPriceBand(project.priceMinPaise !== null ? Number(project.priceMinPaise) : null)}</p>
         </div>
         <div>
           <p className="text-[10px] uppercase tracking-wide text-muted">Locality</p>

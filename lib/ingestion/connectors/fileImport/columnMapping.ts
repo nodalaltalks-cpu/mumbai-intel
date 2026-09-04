@@ -8,20 +8,16 @@ export const PROJECT_COLUMN_ALIASES: Record<string, string[]> = {
   name: ["name", "project name", "project"],
   reraNumber: ["rera number", "rera no", "rera", "rera registration number"],
   address: ["address", "project address", "location", "full address"],
-  latitude: ["latitude", "lat"],
-  longitude: ["longitude", "lng", "long"],
   status: ["status", "project status", "construction status"],
   category: ["category", "property type", "type"],
   totalUnits: ["total units", "units", "no of units", "number of units"],
   totalTowers: ["total towers", "towers", "no of towers"],
   priceMinRupees: ["price min", "min price", "starting price", "price from"],
-  priceMaxRupees: ["price max", "max price", "price to"],
   possessionDate: ["possession date", "possession", "promised possession", "handover date"],
   launchDate: ["launch date", "launch"],
   builderName: ["builder", "builder name", "developer", "developer name"],
   localityName: ["locality", "locality name", "area", "neighbourhood", "neighborhood"],
   description: ["description", "about", "overview"],
-  reraStatus: ["rera status"],
 };
 
 /**

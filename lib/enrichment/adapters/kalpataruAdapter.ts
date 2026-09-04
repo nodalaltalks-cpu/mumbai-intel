@@ -155,14 +155,10 @@ function extractDownloadLink(html: string, label: string): string | null {
  * (Brochure, Opportunity Docket).
  *
  * Several real, deliberate non-extractions (Part H):
- *  - `priceMax` is never populated -- the page only ever states a "starting
- *    from" figure; inventing a ceiling from that would be exactly the
- *    forbidden conversion Part H names.
- *  - `latitude`/`longitude` are never populated -- unlike Godrej's page (which
- *    embeds raw coordinates in its CMS payload), this page only links a
- *    shortened Google Maps URL (`maps.app.goo.gl/...`). Resolving that
- *    shortlink would require an extra, non-deterministic network hop outside
- *    the page's own content -- left MISSING rather than guessed or fetched
+ *  - `googleMapsUrl` is never populated -- the page only links a shortened
+ *    Google Maps URL (`maps.app.goo.gl/...`). Resolving that shortlink would
+ *    require an extra, non-deterministic network hop outside the page's own
+ *    content -- left MISSING rather than guessed or fetched
  *    as a side effect.
  *  - `landAreaAcres` is YELLOW, not GREEN_NEW -- the page's own figure is
  *    prefixed "Approx." (an approximation, not a settled figure).
@@ -268,7 +264,7 @@ export function extractKalpataruVianFacts(html: string): SourceFactsMap {
       facts.priceMin = {
         value: formatPaise(minRupees * 100),
         confidence: "High",
-        note: `Page's own labeled Price line ("${rawPrice}") -- a "starting from" figure, used only as a minimum. No price maximum is ever stated on this page, so priceMax is correctly left MISSING rather than invented.`,
+        note: `Page's own labeled Price line ("${rawPrice}") -- a "starting from" figure.`,
       };
     }
   }
@@ -295,11 +291,6 @@ export function extractKalpataruVianFacts(html: string): SourceFactsMap {
   });
   if (reraNumberFact) {
     facts.reraNumber = reraNumberFact;
-    facts.reraStatus = {
-      value: "Registered",
-      confidence: "High",
-      note: "Inferred from the page's own disclaimer citing a real MahaRERA registration number and a link to the official maharera.mahaonline.gov.in portal, not from marketing prose.",
-    };
   }
 
   const registeredAs = fact(html.match(/registered with MahaRERA as\s*&quot;([^&"]+)&quot;/i)?.[1] ?? html.match(/registered with MahaRERA as\s*"([^"]+)"/i)?.[1], "Medium", {
@@ -373,7 +364,7 @@ export function extractKalpataruVianFacts(html: string): SourceFactsMap {
 
   // Deliberately NOT populated -- confirmed genuinely absent, mismapped, or
   // not a curated/interactive asset on this page (Phase 38 inspection), not a
-  // parsing failure: priceMax, latitude, longitude, address, builder,
+  // parsing failure: address, builder,
   // specifications, faqs, totalUnits, totalTowers, tour360Url, images,
   // constructionPercent, launchDate, actualPossession, paymentPlanType,
   // paymentPlanDescription, reraCertificateUrl, googleMapsUrl (a real,

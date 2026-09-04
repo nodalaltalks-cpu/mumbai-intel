@@ -121,7 +121,8 @@ export async function stageMumbaiDiscoveryCandidates(params: StageMumbaiDiscover
     const tally = (perDeveloper[devResult.developerName] ??= emptyTally());
 
     for (const candidate of devResult.candidates) {
-      const fate = decideCandidateFate(devResult.developerName, devResult.domain, candidate, localities);
+      const candidateDeveloperName = candidate.developerNameGuess ?? devResult.developerName;
+      const fate = decideCandidateFate(candidateDeveloperName, devResult.domain, candidate, localities, devResult.sourceType);
 
       if (fate.decision === "EXCLUDED_NO_NAME") {
         tally.excludedNoName += 1;

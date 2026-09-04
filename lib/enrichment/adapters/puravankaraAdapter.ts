@@ -102,7 +102,7 @@ function fact(value: unknown, confidence: EnrichmentConfidence, opts: { ambiguou
   return { value: value.trim(), confidence, ...opts };
 }
 
-/** Parses `"3.52 Cr+"` into rupees, matching the registry's own formatPaise() display convention. Deliberately returns ONLY a minimum -- this page never states a maximum, so priceMax stays MISSING rather than invented. */
+/** Parses `"3.52 Cr+"` into rupees, matching the registry's own formatPaise() display convention. */
 function parseStartingPriceDisplay(text: string): string | null {
   const cr = text.match(/([\d.]+)\s*Cr/i);
   if (!cr) return null;
@@ -142,7 +142,7 @@ function unambiguousStatusFromBadgeLabel(label: string): ProjectStatus | null {
  *  - No RERA number is published anywhere on this page (confirmed by
  *    scanning the raw HTML for "rera" -- the only hit is generic marketing
  *    copy, "RERA-compliant projects", not an actual registration number) --
- *    reraNumber/reraStatus correctly report MISSING.
+ *    reraNumber correctly reports MISSING.
  *  - `About.Brochure.data` and `floorPlanPdf.data` are both `null` -- no
  *    brochure has been uploaded yet.
  *  - `Gallery` is `null` and `constructionupdates.video` is an empty array --
@@ -204,7 +204,7 @@ export function extractPurvaEstrellaFacts(html: string): SourceFactsMap {
         facts.priceMin = {
           value: priceDisplay,
           confidence: "High",
-          note: `Page's own labeled Price field ("${attrs.Price}") -- a "starting from" figure, used only as a minimum. No maximum is ever stated on this page, so priceMax correctly reports MISSING.`,
+          note: `Page's own labeled Price field ("${attrs.Price}") -- a "starting from" figure.`,
         };
       }
     }
@@ -281,8 +281,8 @@ export function extractPurvaEstrellaFacts(html: string): SourceFactsMap {
   // Deliberately NOT populated -- confirmed genuinely absent from this page
   // during Phase 42's inspection (no field/section exists for them, not a
   // parsing failure): developerGroup (lives on puravankara.com's homepage,
-  // not this project page), builder, priceMax, reraNumber, reraStatus,
-  // reraCertificateUrl, googleMapsUrl, latitude, longitude, possessionMonth,
+  // not this project page), builder, reraNumber,
+  // reraCertificateUrl, googleMapsUrl, possessionMonth,
   // possessionYear, launchDate, actualPossession, constructionPercent,
   // landAreaAcres, totalUnits, paymentPlanType, paymentPlanDescription,
   // specifications, faqs, videoUrl, tour360Url, brochure, documents, images,

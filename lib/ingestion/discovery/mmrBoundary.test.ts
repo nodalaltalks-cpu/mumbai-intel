@@ -30,6 +30,10 @@ describe("detectMmrPeripheralArea", () => {
     expect(detectMmrPeripheralArea("Kharghar")).toBe("kharghar");
   });
 
+  it("detects Khopoli -- a real gap found by the Phase 67 Housiey feasibility investigation", () => {
+    expect(detectMmrPeripheralArea("Khopoli")).toBe("khopoli");
+  });
+
   it("returns null for genuine Mumbai-city text", () => {
     expect(detectMmrPeripheralArea("Andheri West")).toBeNull();
     expect(detectMmrPeripheralArea("Dahisar")).toBeNull();

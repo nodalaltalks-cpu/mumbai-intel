@@ -109,13 +109,6 @@ function parseReraNumber(title: unknown): string | null {
   return match ? match[1].toUpperCase() : null;
 }
 
-/** Parses a Google Maps embed URL's own `!2d<lng>!3d<lat>` parameters -- a real, structured coordinate pair the page itself embeds, not a guess or a followed redirect. */
-function parseMapsEmbedCoords(embedUrl: unknown): { lat: string; lng: string } | null {
-  if (typeof embedUrl !== "string") return null;
-  const match = embedUrl.match(/!2d([\d.]+)[^!]*!3d([\d.]+)/);
-  return match ? { lng: match[1], lat: match[2] } : null;
-}
-
 /**
  * Extracts the maximum genuinely-supported set of Project facts from a real
  * Gurukrupa Realcon project page (Phase 40 -- fourth developer, first one
@@ -124,16 +117,16 @@ function parseMapsEmbedCoords(embedUrl: unknown): { lat: string; lng: string } |
  * markup for gurukrupa-ekam: `<title>`/meta description, a single
  * BreadcrumbList JSON-LD, and a Strapi-backed `__NEXT_DATA__` payload
  * exposing `projectTitle`, `status`, `location`, `overview`, `rerasec`,
- * `locationAdvantage` (with an embedded Google Maps URL carrying real
- * coordinates), `advantageItems` (a connectivity/location-advantage list),
- * and `projectGallery` (named interior photos).
+ * `locationAdvantage` (with an embedded Google Maps URL), `advantageItems`
+ * (a connectivity/location-advantage list), and `projectGallery` (named
+ * interior photos).
  *
  * Real, deliberate non-extractions (this page's own genuine gaps, not
  * parsing failures):
  *  - No price is published anywhere on this page (confirmed by scanning the
- *    raw HTML for currency/₹/Cr/Lakh text -- none found) -- priceMin/
- *    priceMax correctly report MISSING, matching the Adani Linkbay
- *    precedent rather than inferring anything from a third-party listing.
+ *    raw HTML for currency/₹/Cr/Lakh text -- none found) -- priceMin
+ *    correctly reports MISSING, matching the Adani Linkbay precedent rather
+ *    than inferring anything from a third-party listing.
  *  - `amenities` is a real key in the CMS schema but is `null` on this
  *    specific project record -- a genuine CMS-population gap (the prose in
  *    `overview.description` even mentions "70+ curated lifestyle amenities"),
@@ -223,11 +216,6 @@ export function extractGurukrupaEkamFacts(html: string): SourceFactsMap {
     const reraNumber = parseReraNumber(rerasec?.title);
     if (reraNumber) {
       facts.reraNumber = { value: reraNumber, confidence: "High", note: 'Page\'s own RERA section title ("Maha RERA No. : ...").' };
-      facts.reraStatus = {
-        value: "Registered",
-        confidence: "High",
-        note: "Inferred from the page's own structured RERA section citing a real MahaRERA registration number, not from marketing prose.",
-      };
     }
   } catch {
     /* ignore */
@@ -235,11 +223,6 @@ export function extractGurukrupaEkamFacts(html: string): SourceFactsMap {
 
   try {
     const locationAdvantage = attrs.locationAdvantage as Record<string, unknown> | undefined;
-    const coords = parseMapsEmbedCoords(locationAdvantage?.map);
-    if (coords) {
-      facts.latitude = { value: coords.lat, confidence: "High", note: "Parsed from the page's own embedded Google Maps URL (locationAdvantage.map)." };
-      facts.longitude = { value: coords.lng, confidence: "High", note: "Parsed from the page's own embedded Google Maps URL (locationAdvantage.map)." };
-    }
     if (typeof locationAdvantage?.map === "string") {
       // Phase 43: confirmed against the real gurukrupa-maurya page -- that
       // project's own CMS `map` field has a real data-entry mistake, the
@@ -300,7 +283,7 @@ export function extractGurukrupaEkamFacts(html: string): SourceFactsMap {
   // during Phase 40's inspection (no field/section exists for them, not a
   // parsing failure): developerGroup (lives on the site's homepage, not this
   // project page -- see file doc comment), builder, address, priceMin,
-  // priceMax, possessionMonth, possessionYear, launchDate, actualPossession,
+  // possessionMonth, possessionYear, launchDate, actualPossession,
   // constructionPercent, landAreaAcres, totalUnits, totalTowers,
   // paymentPlanType, paymentPlanDescription, amenities, specifications, faqs,
   // videoUrl, tour360Url, brochure, documents, reraCertificateUrl, ogImageUrl,

@@ -6,10 +6,8 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { clusterMarkers, isClusterGroup } from "@/lib/map/cluster";
 import type { MapFocusTarget, MapMarker } from "@/lib/map/types";
-import { INFRA_TYPE_CHART_COLOR, STATUS_CHART_COLOR } from "@/lib/project-meta";
-import ProjectPopup from "../../popups/ProjectPopup";
+import { INFRA_TYPE_CHART_COLOR } from "@/lib/project-meta";
 import LocalityPopup from "../../popups/LocalityPopup";
-import DeveloperPopup from "../../popups/DeveloperPopup";
 import InfraPopup from "../../popups/InfraPopup";
 
 /**
@@ -22,17 +20,12 @@ import InfraPopup from "../../popups/InfraPopup";
 const MUMBAI_CENTER: [number, number] = [19.076, 72.8777];
 const DEFAULT_ZOOM = 11;
 
-const ICON_SIZE: Record<MapMarker["kind"], number> = { project: 16, locality: 20, developer: 18, infra: 10 };
+const ICON_SIZE: Record<MapMarker["kind"], number> = { locality: 20, infra: 10 };
 
 function markerIcon(marker: MapMarker, selected: boolean): L.DivIcon {
   const size = ICON_SIZE[marker.kind];
   const selectedClass = selected ? " mi-marker--selected" : "";
-  const style =
-    marker.kind === "project"
-      ? ` style="--marker-color: var(${STATUS_CHART_COLOR[marker.status]})"`
-      : marker.kind === "infra"
-        ? ` style="--marker-color: var(${INFRA_TYPE_CHART_COLOR[marker.type]})"`
-        : "";
+  const style = marker.kind === "infra" ? ` style="--marker-color: var(${INFRA_TYPE_CHART_COLOR[marker.type]})"` : "";
   return L.divIcon({
     className: "",
     html: `<div class="mi-marker mi-marker--${marker.kind}${selectedClass}"${style}></div>`,
@@ -129,17 +122,7 @@ export default function LeafletCanvas({
         const container = document.createElement("div");
         const root = createRoot(container);
         popupRootRef.current = root;
-        root.render(
-          marker.kind === "project" ? (
-            <ProjectPopup marker={marker} />
-          ) : marker.kind === "locality" ? (
-            <LocalityPopup marker={marker} />
-          ) : marker.kind === "developer" ? (
-            <DeveloperPopup marker={marker} />
-          ) : (
-            <InfraPopup marker={marker} />
-          )
-        );
+        root.render(marker.kind === "locality" ? <LocalityPopup marker={marker} /> : <InfraPopup marker={marker} />);
         L.popup({ maxWidth: 288, className: "mi-map-popup", offset: [0, -ICON_SIZE[marker.kind] / 2] })
           .setLatLng([marker.position.lat, marker.position.lng])
           .setContent(container)

@@ -22,22 +22,15 @@ for (const category of PROPERTY_CATEGORIES) {
   CATEGORY_LOOKUP.set(normalizeLabel(CATEGORY_LABEL[category]), category);
 }
 
-const INDIA_LAT_RANGE = [6, 38] as const;
-const INDIA_LNG_RANGE = [68, 98] as const;
-
 export interface ValidatedProjectRow {
   name: string;
   reraNumber?: string;
-  reraStatus?: string;
   address?: string;
-  latitude?: number;
-  longitude?: number;
   status: ProjectStatus;
   category: PropertyCategory;
   totalUnits?: number;
   totalTowers?: number;
   priceMinRupees?: number;
-  priceMaxRupees?: number;
   possessionDate?: Date;
   launchDate?: Date;
   builderName?: string;
@@ -76,29 +69,12 @@ export function validateProjectRow(mapped: Record<string, string>): ValidationRe
   const rawCategory = mapped.category ? normalizeLabel(mapped.category) : "";
   const category = (rawCategory && CATEGORY_LOOKUP.get(rawCategory)) || "RESIDENTIAL";
 
-  let latitude: number | undefined;
-  let longitude: number | undefined;
-  if (mapped.latitude || mapped.longitude) {
-    const lat = Number(mapped.latitude);
-    const lng = Number(mapped.longitude);
-    if (!mapped.latitude || !mapped.longitude || Number.isNaN(lat) || Number.isNaN(lng)) {
-      return { ok: false, error: "Latitude and longitude must both be provided as numbers, or both omitted" };
-    }
-    if (lat < INDIA_LAT_RANGE[0] || lat > INDIA_LAT_RANGE[1] || lng < INDIA_LNG_RANGE[0] || lng > INDIA_LNG_RANGE[1]) {
-      return { ok: false, error: `Latitude/longitude (${lat}, ${lng}) falls outside India's bounds` };
-    }
-    latitude = lat;
-    longitude = lng;
-  }
-
   const totalUnits = parsePositiveNumber(mapped.totalUnits, "Total units");
   if (!totalUnits.ok) return totalUnits;
   const totalTowers = parsePositiveNumber(mapped.totalTowers, "Total towers");
   if (!totalTowers.ok) return totalTowers;
   const priceMinRupees = parsePositiveNumber(mapped.priceMinRupees, "Price min");
   if (!priceMinRupees.ok) return priceMinRupees;
-  const priceMaxRupees = parsePositiveNumber(mapped.priceMaxRupees, "Price max");
-  if (!priceMaxRupees.ok) return priceMaxRupees;
 
   const possessionDate = parseDate(mapped.possessionDate, "Possession date");
   if (!possessionDate.ok) return possessionDate;
@@ -110,16 +86,12 @@ export function validateProjectRow(mapped: Record<string, string>): ValidationRe
     data: {
       name,
       reraNumber: mapped.reraNumber || undefined,
-      reraStatus: mapped.reraStatus || undefined,
       address: mapped.address || undefined,
-      latitude,
-      longitude,
       status,
       category,
       totalUnits: totalUnits.value,
       totalTowers: totalTowers.value,
       priceMinRupees: priceMinRupees.value,
-      priceMaxRupees: priceMaxRupees.value,
       possessionDate: possessionDate.value,
       launchDate: launchDate.value,
       builderName: mapped.builderName || undefined,

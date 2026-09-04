@@ -199,7 +199,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <div className="mt-4 grid grid-cols-2 gap-4 rounded-sm border border-border bg-surface p-4 sm:grid-cols-3 lg:grid-cols-5">
           <div>
             <p className="text-[10px] uppercase tracking-wide text-muted">Price</p>
-            <p className="font-mono text-lg font-semibold text-accent sm:text-xl">{formatPriceBand(project.priceMinPaise, project.priceMaxPaise)}</p>
+            <p className="font-mono text-lg font-semibold text-accent sm:text-xl">{formatPriceBand(project.priceMinPaise)}</p>
           </div>
           {project.constructionPercent !== null ? (
             <div>
@@ -306,7 +306,6 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 </a>
               ) : null}
             </div>
-            <Fact label="RERA status" value={project.reraStatus ?? "--"} />
           </div>
 
           {project.sections.map((section) => (
@@ -355,9 +354,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <section id="pricing" className="scroll-mt-32">
           <h2 className="font-mono text-lg font-semibold text-foreground">Pricing</h2>
           <div className="mt-3 grid grid-cols-2 gap-3 rounded-sm border border-border bg-surface p-4 sm:grid-cols-3">
-            <Fact label="Price band" value={formatPriceBand(project.priceMinPaise, project.priceMaxPaise)} accent />
-            <Fact label="Min price" value={formatPaise(project.priceMinPaise)} />
-            <Fact label="Max price" value={formatPaise(project.priceMaxPaise)} />
+            <Fact label="Starting price" value={formatPriceBand(project.priceMinPaise)} accent />
             <div>
               <div className="flex items-center gap-1">
                 <p className="text-[10px] uppercase tracking-wide text-muted">Payment Plan</p>

@@ -173,12 +173,6 @@ export function extractGodrejSkyShoreFacts(html: string): SourceFactsMap {
     const mapsFact = fact(neighbourhood?.google_map_api, "High");
     if (mapsFact) facts.googleMapsUrl = mapsFact;
 
-    const coords = neighbourhood?.geolocation_coordinates as Record<string, unknown> | undefined;
-    const latFact = fact(coords?.latitude, "High");
-    if (latFact) facts.latitude = latFact;
-    const lngFact = fact(coords?.longitude, "High");
-    if (lngFact) facts.longitude = lngFact;
-
     const nearbyPlaces = Array.isArray(neighbourhood?.nearByPlaces) ? (neighbourhood!.nearByPlaces as Record<string, unknown>[]) : [];
     const nearbyNames = nearbyPlaces.map((p) => p?.name).filter((n): n is string => typeof n === "string" && n.length > 0);
     const amenityBodyText = plainTextFromRichText(item.amenity_body);
@@ -200,19 +194,11 @@ export function extractGodrejSkyShoreFacts(html: string): SourceFactsMap {
   try {
     const configs = Array.isArray(item.starting_prices) ? (item.starting_prices as Record<string, unknown>[]) : [];
     const mins = configs.map((c) => c.minimum_price).filter((n): n is number => typeof n === "number");
-    const maxes = configs.map((c) => c.maximum_price).filter((n): n is number => typeof n === "number");
     if (mins.length) {
       facts.priceMin = {
         value: formatPaise(Math.min(...mins) * 100),
         confidence: "High",
         note: "Lowest configuration's minimum_price across item.starting_prices.",
-      };
-    }
-    if (maxes.length) {
-      facts.priceMax = {
-        value: formatPaise(Math.max(...maxes) * 100),
-        confidence: "High",
-        note: "Highest configuration's maximum_price across item.starting_prices -- a real structured price point, not marketing copy.",
       };
     }
   } catch {
@@ -323,16 +309,6 @@ export function extractGodrejSkyShoreFacts(html: string): SourceFactsMap {
     /* ignore */
   }
 
-  try {
-    const reraStatusFact = fact(item.rera_details, "Medium", {
-      ambiguous: true,
-      note: "The official page cites a Letter of Intent (LOI) reference, not an explicit RERA registration number or status label -- needs human confirmation before treating as the project's RERA status.",
-    });
-    if (reraStatusFact) facts.reraStatus = reraStatusFact;
-  } catch {
-    /* ignore */
-  }
-
   // Deliberately NOT populated -- confirmed genuinely absent from this page
   // during Phase 30's inspection (no field/section exists for them, not a
   // parsing failure): reraNumber, reraCertificateUrl, paymentPlanType,
@@ -340,6 +316,9 @@ export function extractGodrejSkyShoreFacts(html: string): SourceFactsMap {
   // landAreaAcres, totalUnits, totalTowers, specifications, faqs, tour360Url,
   // ogImageUrl, builder. classifyProjectEnrichment() correctly reports these
   // MISSING rather than this adapter guessing or borrowing a fixture value.
+  // (item.rera_details, the source's only RERA-adjacent field, was previously
+  // surfaced as a reraStatus fact -- removed with that field in Phase 67; the
+  // LOI reference it carries was never a real RERA number or status anyway.)
 
   return facts;
 }

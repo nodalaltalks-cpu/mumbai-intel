@@ -71,7 +71,7 @@ export async function applyMlScoring(phase1Items: ScoredProject[], interest: Use
   const projectIds = phase1Items.map((i) => i.project.id);
   const projectDetails = await prisma.project.findMany({
     where: { id: { in: projectIds } },
-    select: { id: true, localityId: true, priceMinPaise: true, priceMaxPaise: true, createdAt: true, configurations: { select: { bedrooms: true } } },
+    select: { id: true, localityId: true, priceMinPaise: true, createdAt: true, configurations: { select: { bedrooms: true } } },
   });
   const detailById = new Map(projectDetails.map((p) => [p.id, p]));
 
@@ -83,7 +83,6 @@ export async function applyMlScoring(phase1Items: ScoredProject[], interest: Use
       id: detail.id,
       localityId: detail.localityId,
       priceMinPaise: detail.priceMinPaise !== null ? Number(detail.priceMinPaise) : null,
-      priceMaxPaise: detail.priceMaxPaise !== null ? Number(detail.priceMaxPaise) : null,
       configurationBedrooms: detail.configurations.map((c) => Number(c.bedrooms)),
       createdAt: detail.createdAt,
     };

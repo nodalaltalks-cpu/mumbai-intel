@@ -227,14 +227,12 @@ Conventions used in the Fields tables:
 | status | ProjectStatus (enum) | Yes | one of 7 values | — | Admin form / Import | Stored |
 | category | PropertyCategory (enum) | Yes | one of 4 values | RESIDENTIAL | Admin form / Import | Stored |
 | address | String? | No | — | null | Admin form | Stored |
-| latitude / longitude | Float? | No | — | null | Admin form | Stored |
 | launchDate / promisedPossession / actualPossession | DateTime? | No | valid date | null | Admin form | Stored |
 | constructionPercent | Int? | No | 0..100 | null | Admin form | Stored |
 | reraNumber | String? | Yes-unique when present | globally unique | null | Admin form / Import | Stored |
-| reraStatus | String? | No | freeform | null | Admin form | Stored |
 | totalUnits / totalTowers | Int? | No | ≥0 | null | Admin form | Stored |
 | landAreaAcres | Decimal(8,2)? | No | ≥0 | null | Admin form | Stored |
-| priceMinPaise / priceMaxPaise | BigInt? | No | ≥0 (rupees × 100) | null | Admin form / Import | Stored |
+| priceMinPaise | BigInt? | No | ≥0 (rupees × 100); starting price only — no project-level maximum (Phase 67: misleading, varies by configuration) | null | Admin form / Import | Stored |
 | dataSource | DataSource | Yes | enum | MANUALLY_VERIFIED | Admin form / Import | Stored |
 | confidence | Confidence | Yes | enum | HIGH | Admin form / Import | Stored |
 | sourceRef | String? | No | freeform lineage tag | null | Admin form / Import | Stored |
@@ -250,7 +248,7 @@ Conventions used in the Fields tables:
 
 **Relationships**: belongs to `Builder?`, `City`, `Locality`, `MicroMarket?`; has many `ProjectImage`, `Configuration`, `ProjectAmenity`, `Transaction`, `PriceHistoryPoint`, `ProjectInfra`, `ProjectMetric`, `InvestmentNote`, `ProjectSpecification`, `ProjectDocument`, `ProjectTimelineEvent`, `ProjectFaq`, `ProjectSection`, `SavedProject`.
 **Source of Data**: admin form (`MANUALLY_VERIFIED`) or CSV/JSON bulk import (any `DataSource`, always lands in `IngestStagingRecord` first — never writes directly).
-**Used By**: Pages: `/projects`, `/projects/[slug]`, `/`, `/map`, `/reports/projects/[slug]`, every admin Project page, Review Queue. Actions: `lib/actions/projects.ts`, `lib/actions/ingestion.ts`. Charts: price distribution, status breakdown, locality/builder breakdown (`getDashboardCharts`). Reports: Project Report, Market Report. AI: `InvestmentNote` (AI-generated summary/pros/cons) references this table; `ProjectMetric` (demand/health scores) is deterministic analytics today, tagged `AI_GENERATED` as a placeholder for when it becomes model-driven.
+**Used By**: Pages: `/projects`, `/projects/[slug]`, `/`, `/reports/projects/[slug]`, every admin Project page, Review Queue. Actions: `lib/actions/projects.ts`, `lib/actions/ingestion.ts`. Charts: price distribution, status breakdown, locality/builder breakdown (`getDashboardCharts`). Reports: Project Report, Market Report. AI: `InvestmentNote` (AI-generated summary/pros/cons) references this table; `ProjectMetric` (demand/health scores) is deterministic analytics today, tagged `AI_GENERATED` as a placeholder for when it becomes model-driven. (`/map` no longer plots individual projects/developers — Phase 67 removed `Project.latitude/longitude` with no replacement geo field; `/map` now shows only Locality and InfraAsset markers.)
 **Future Expansion Notes**: `sourceRef` + `ingestBatchId` are the exact fields a live RERA/IGR connector would populate — no schema change needed to go from manual to automated for this table's core facts.
 
 ### `ProjectSpecification` / `ProjectDocument` / `ProjectTimelineEvent` / `ProjectFaq` / `ProjectSection` / `ProjectImage` / `Configuration` / `ProjectAmenity`

@@ -37,7 +37,6 @@ export interface ProjectCardData {
   status: ProjectStatus;
   configurationSummary?: string | null;
   priceMinPaise?: number | null;
-  priceMaxPaise?: number | null;
   pricePerSqftPaise?: number | null;
   /** Legacy fallback only — real records created before possessionMonth/possessionYear existed. Never rendered as a quarter or a raw date, only ever reduced to month+year (see formatPossessionMonthYear). */
   possessionDate?: Date | string | null;
@@ -150,7 +149,7 @@ export default function ProjectCard({ project, onNavigate }: { project: ProjectC
             <div className="mt-auto border-t border-border pt-2.5">
               <p className="text-[10px] uppercase tracking-wide text-muted">Price From</p>
               <p className="font-mono text-sm font-semibold text-foreground">
-                {formatPriceFrom(project.priceMinPaise) ?? formatPriceBand(project.priceMinPaise, project.priceMaxPaise)}
+                {formatPriceFrom(project.priceMinPaise) ?? formatPriceBand(project.priceMinPaise)}
               </p>
               {project.pricePerSqftPaise ? (
                 <p className="font-mono text-[10px] text-muted">{formatPricePerSqft(project.pricePerSqftPaise)}</p>
@@ -301,8 +300,8 @@ function QuickViewModal({ project, onClose }: { project: ProjectCardData; onClos
 
           <div className="grid grid-cols-2 gap-3 border-t border-border pt-3">
             <div>
-              <p className="text-[10px] uppercase tracking-wide text-muted">Price band</p>
-              <p className="font-mono text-sm text-foreground">{formatPriceBand(project.priceMinPaise, project.priceMaxPaise)}</p>
+              <p className="text-[10px] uppercase tracking-wide text-muted">Starting price</p>
+              <p className="font-mono text-sm text-foreground">{formatPriceBand(project.priceMinPaise)}</p>
             </div>
             {project.pricePerSqftPaise ? (
               <div>

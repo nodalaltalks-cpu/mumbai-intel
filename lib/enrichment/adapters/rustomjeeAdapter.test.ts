@@ -67,11 +67,10 @@ describe("extractRustomjeeFacts (Phase 49 -- tenth developer, Next.js Script-inj
     expect(extractRustomjeeFacts(html).locality?.value).toBe("Versova");
   });
 
-  it("4. price extraction from the meta description's 'Starting ₹NN Cr' pattern (minimum only, never a maximum)", () => {
+  it("4. price extraction from the meta description's 'Starting ₹NN Cr' pattern", () => {
     const html = buildRichPageHtml({ title: "X", metaDescription: "Endless blue horizons. Starting ₹27 Cr by Rustomjee." });
     const facts = extractRustomjeeFacts(html);
     expect(facts.priceMin?.value).toBe("₹27 Cr");
-    expect(facts.priceMax).toBeUndefined();
   });
 
   it("5. RERA extraction: the structured @graph additionalProperty value takes priority over the raw-HTML fallback pattern", () => {

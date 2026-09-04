@@ -9,7 +9,7 @@ function normalizeForCompare(value: string): string {
 
 /**
  * Classifies one source's facts against the CURRENT staging payload for
- * every one of the existing 44 Project fields -- reusing
+ * every one of the existing Project fields -- reusing
  * buildProjectReviewCompleteness() UNCHANGED for the field list, labels,
  * grouping, and "is this field currently received or missing" question, so
  * enrichment and the Review Queue's own completeness count can never
@@ -22,15 +22,10 @@ function normalizeForCompare(value: string): string {
  *  4. existing value + different source value      -> CONFLICT (never auto-applied)
  *  5. no source value                              -> MISSING
  *
- * One narrow, explicitly-documented exception: `priceMax` when the current
- * payload's priceMin === priceMax is a known artifact (Phase 11's
- * SINGLE_LISTING_PRICE case -- a single observed listing, not a confirmed
- * project-wide ceiling). A HIGHER new value there widens a genuinely
- * unconfirmed single data point rather than contradicting a settled fact --
- * this was worked through explicitly with the founder in Phases 26/27 for
- * this exact Godrej Sky Shore case (current ₹8.40 Cr min=max -> ₹11.89 Cr
- * proposed max, classified GREEN_NEW, not CONFLICT). No other field gets
- * this exception.
+ * Phase 67 removed the `priceMax` field (and its single-listing-artifact
+ * exception below) along with `latitude`/`longitude`/`reraStatus` — a
+ * project-level maximum price is misleading (varies by configuration/unit),
+ * and none of the other three were ever maintained.
  */
 export function classifyProjectEnrichment(
   currentPayload: ProjectImportPayload,
@@ -40,10 +35,6 @@ export function classifyProjectEnrichment(
 ): EnrichmentField[] {
   const completeness = buildProjectReviewCompleteness(currentPayload, context);
   const results: EnrichmentField[] = [];
-
-  const isSingleListingPriceArtifact =
-    currentPayload.priceMinRupees !== undefined &&
-    currentPayload.priceMinRupees === currentPayload.priceMaxRupees;
 
   for (const group of completeness.groups) {
     for (const field of group.fields) {
@@ -74,12 +65,7 @@ export function classifyProjectEnrichment(
       let classification: EnrichmentField["classification"];
       let reason: string;
 
-      if (field.key === "priceMax" && isSingleListingPriceArtifact && !sameValue) {
-        // Documented exception -- see this function's doc comment.
-        classification = "GREEN_NEW";
-        reason =
-          "Current price max is a single-listing artifact (price min === price max); a higher, distinct value from a higher-trust source widens a genuinely unconfirmed figure rather than contradicting a settled one.";
-      } else if (currentValue === null) {
+      if (currentValue === null) {
         if (fact.ambiguous || fact.confidence === "Low") {
           classification = "YELLOW";
           reason = fact.note ?? "A new value was found but needs human confirmation before it's treated as final.";

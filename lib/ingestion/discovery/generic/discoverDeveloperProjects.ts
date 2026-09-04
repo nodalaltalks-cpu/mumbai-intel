@@ -1,4 +1,4 @@
-import type { EnrichmentConfidence } from "@/lib/enrichment/types";
+import type { EnrichmentConfidence, SourceTier } from "@/lib/enrichment/types";
 import { fetchDeveloperUrlUniverse } from "./robotsAndSitemap";
 import { classifyCandidateUrl } from "./projectUrlHeuristics";
 import { extractGenericProjectFacts, type AreaEvidenceItem } from "./extractGenericFacts";
@@ -19,6 +19,8 @@ export interface CandidatePageResult {
   statusBucket: GenericStatusBucket;
   statusEvidence: string;
   confidence: EnrichmentConfidence;
+  /** Phase 67 — set only by a multi-developer secondary-discovery source (Housiey) whose candidates don't all share one developer the way a single developer's own sitemap crawl does. When present, overrides the batch-level developerName for THIS candidate only (see stageMumbaiDiscoveryCandidates.ts). Undefined for every existing developer-sitemap candidate. */
+  developerNameGuess?: string | null;
 }
 
 /** Part N's five-way developer classification. */
@@ -70,6 +72,8 @@ export interface DeveloperDiscoveryResult {
   candidates: CandidatePageResult[];
   classification: DeveloperGenericClassification;
   durationMs: number;
+  /** Phase 67 — omitted (defaults to OFFICIAL_DEVELOPER) for every real developer-sitemap discovery result; set explicitly by a non-developer secondary-discovery source (e.g. Housiey) so its STAGE outputs land at the correct, lower trust tier instead of silently inheriting the developer default. */
+  sourceType?: SourceTier;
 }
 
 export interface DiscoverDeveloperProjectsOptions {

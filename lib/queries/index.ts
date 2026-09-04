@@ -207,7 +207,6 @@ export async function getFeaturedProjects(limit = 6) {
       configurationSummary,
       pricePerSqftPaise,
       priceMinPaise: project.priceMinPaise !== null ? Number(project.priceMinPaise) : null,
-      priceMaxPaise: project.priceMaxPaise !== null ? Number(project.priceMaxPaise) : null,
       possessionDate: project.promisedPossession,
       constructionPercent: project.constructionPercent,
       possessionMonth: project.possessionMonth,
@@ -245,7 +244,6 @@ export async function getSavedProjectsForUser(publicUserId: string) {
           status: true,
           category: true,
           priceMinPaise: true,
-          priceMaxPaise: true,
           promisedPossession: true,
           constructionPercent: true,
           possessionMonth: true,
@@ -284,7 +282,6 @@ export async function getSavedProjectsForUser(publicUserId: string) {
       configurationSummary,
       pricePerSqftPaise,
       priceMinPaise: project.priceMinPaise !== null ? Number(project.priceMinPaise) : null,
-      priceMaxPaise: project.priceMaxPaise !== null ? Number(project.priceMaxPaise) : null,
       possessionDate: project.promisedPossession,
       constructionPercent: project.constructionPercent,
       totalUnits: project.totalUnits,
@@ -333,7 +330,6 @@ export async function getLatestLaunches(limit = 6) {
       configurationSummary,
       pricePerSqftPaise,
       priceMinPaise: project.priceMinPaise !== null ? Number(project.priceMinPaise) : null,
-      priceMaxPaise: project.priceMaxPaise !== null ? Number(project.priceMaxPaise) : null,
       possessionDate: project.promisedPossession,
       constructionPercent: project.constructionPercent,
       possessionMonth: project.possessionMonth,
@@ -614,7 +610,7 @@ function publicProjectOrderBy(sortBy: string | undefined): Prisma.ProjectOrderBy
     case "price_asc":
       return { priceMinPaise: "asc" };
     case "price_desc":
-      return { priceMaxPaise: "desc" };
+      return { priceMinPaise: "desc" };
     case "name_asc":
       return { name: "asc" };
     case "launch_desc":
@@ -709,8 +705,10 @@ export async function getPublicProjectsPaged(filters: PublicProjectFilters) {
     const n = Number(filters.bedrooms);
     where.configurations = { some: n >= 4 ? { bedrooms: { gte: 4 } } : { bedrooms: { gte: n, lt: n + 1 } } };
   }
+  // Both bounds apply to the single priceMinPaise ("starting price") column —
+  // there is no project-level max to range against any more (Phase 67).
   if (filters.priceMinRupees !== undefined) {
-    where.priceMaxPaise = { gte: BigInt(Math.round(filters.priceMinRupees * 100)) };
+    where.priceMinPaise = { ...(where.priceMinPaise as object), gte: BigInt(Math.round(filters.priceMinRupees * 100)) };
   }
   if (filters.priceMaxRupees !== undefined) {
     where.priceMinPaise = { ...(where.priceMinPaise as object), lte: BigInt(Math.round(filters.priceMaxRupees * 100)) };
@@ -757,7 +755,6 @@ export async function getPublicProjectsPaged(filters: PublicProjectFilters) {
         configurationSummary,
         pricePerSqftPaise,
         priceMinPaise: project.priceMinPaise !== null ? Number(project.priceMinPaise) : null,
-        priceMaxPaise: project.priceMaxPaise !== null ? Number(project.priceMaxPaise) : null,
         possessionDate: project.promisedPossession,
         constructionPercent: project.constructionPercent,
         possessionMonth: project.possessionMonth,
@@ -873,7 +870,6 @@ export async function getRelatedProjects(project: { id: string; localityId: stri
         configurationSummary,
         pricePerSqftPaise,
         priceMinPaise: p.priceMinPaise !== null ? Number(p.priceMinPaise) : null,
-        priceMaxPaise: p.priceMaxPaise !== null ? Number(p.priceMaxPaise) : null,
         possessionDate: p.promisedPossession,
         constructionPercent: p.constructionPercent,
         possessionMonth: p.possessionMonth,
@@ -1084,7 +1080,6 @@ export const getPublicBuilderBySlug = cache(async (slug: string) => {
       configurationSummary,
       pricePerSqftPaise,
       priceMinPaise: p.priceMinPaise !== null ? Number(p.priceMinPaise) : null,
-      priceMaxPaise: p.priceMaxPaise !== null ? Number(p.priceMaxPaise) : null,
       possessionDate: p.promisedPossession,
       launchDate: p.launchDate,
       constructionPercent: p.constructionPercent,
@@ -1307,7 +1302,6 @@ export const getPublicLocalityBySlug = cache(async (slug: string) => {
         configurationSummary,
         pricePerSqftPaise,
         priceMinPaise: p.priceMinPaise !== null ? Number(p.priceMinPaise) : null,
-        priceMaxPaise: p.priceMaxPaise !== null ? Number(p.priceMaxPaise) : null,
         possessionDate: p.promisedPossession,
         constructionPercent: p.constructionPercent,
         possessionMonth: p.possessionMonth,

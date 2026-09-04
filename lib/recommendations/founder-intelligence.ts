@@ -146,7 +146,7 @@ export async function getTopRecommendedAttributes(period: AnalyticsPeriod, limit
 
   const projects = await prisma.project.findMany({
     where: { id: { in: projectIds } },
-    select: { id: true, priceMinPaise: true, priceMaxPaise: true, locality: { select: { name: true } }, configurations: { select: { bedrooms: true } } },
+    select: { id: true, priceMinPaise: true, locality: { select: { name: true } }, configurations: { select: { bedrooms: true } } },
   });
 
   const localityCounts = new Map<string, number>();

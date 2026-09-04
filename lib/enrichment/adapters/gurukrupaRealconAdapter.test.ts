@@ -127,19 +127,15 @@ describe("extractGurukrupaEkamFacts (Phase 40 — fourth developer, first discov
   it("7. never fabricates a price -- this page publishes none", () => {
     const facts = extractGurukrupaEkamFacts(buildRealShapedHtml());
     expect(facts.priceMin).toBeUndefined();
-    expect(facts.priceMax).toBeUndefined();
   });
 
-  it("8. extracts the real RERA number and infers Registered status", () => {
+  it("8. extracts the real RERA number", () => {
     const facts = extractGurukrupaEkamFacts(buildRealShapedHtml());
     expect(facts.reraNumber?.value).toBe("PM1180002501525");
-    expect(facts.reraStatus?.value).toBe("Registered");
   });
 
-  it("9. extracts real latitude/longitude parsed from the embedded Google Maps URL", () => {
+  it("9. extracts the embedded Google Maps URL", () => {
     const facts = extractGurukrupaEkamFacts(buildRealShapedHtml());
-    expect(facts.latitude?.value).toBe("19.143178");
-    expect(facts.longitude?.value).toBe("72.83165");
     expect(facts.googleMapsUrl?.value).toContain("maps/embed");
   });
 
@@ -181,7 +177,7 @@ describe("extractGurukrupaEkamFacts (Phase 40 — fourth developer, first discov
       buildRealShapedHtml({ attrs: { rerasec: null, locationAdvantage: null, advantageItems: null, projectGallery: null, banner: null } })
     );
     expect(facts.reraNumber).toBeUndefined();
-    expect(facts.latitude).toBeUndefined();
+    expect(facts.googleMapsUrl).toBeUndefined();
     expect(facts.highlights).toBeUndefined();
     expect(facts.images).toBeUndefined();
     expect(facts.coverImage).toBeUndefined();
@@ -221,7 +217,6 @@ describe("extractGurukrupaEkamFacts (Phase 40 — fourth developer, first discov
       reraNumber: "PM1180002501525",
       developerGroup: "Gurukrupa Realcon",
       priceMinRupees: 32600000,
-      priceMaxRupees: 32600000,
       possessionDateIso: "2029-04-01T00:00:00.000Z",
     };
     const result = classifyProjectEnrichment(GURUKRUPA_PAYLOAD, { localityName: "Andheri West" }, facts, {
@@ -231,10 +226,9 @@ describe("extractGurukrupaEkamFacts (Phase 40 — fourth developer, first discov
     const byKey = (k: string) => result.find((f) => f.key === k)!;
     expect(byKey("reraNumber").classification).toBe("CONFIRMED"); // real RERA number matches exactly
     expect(byKey("status").classification).toBe("CONFIRMED"); // "Under Construction" matches the existing staged value
-    expect(byKey("latitude").classification).toBe("GREEN_NEW"); // was blank, real value found
+    expect(byKey("googleMapsUrl").classification).toBe("GREEN_NEW"); // was blank, real value found
     expect(byKey("locality").classification).toBe("CONFLICT"); // staged "Andheri West" vs the page's own plainer "Andheri" -- never silently overwritten
-    expect(byKey("priceMax").classification).toBe("MISSING"); // no price published on the real page at all
-    expect(result).toHaveLength(44);
+    expect(result).toHaveLength(40);
   });
 
   it("19. never leaks Godrej fixture content into a Gurukrupa extraction run", () => {

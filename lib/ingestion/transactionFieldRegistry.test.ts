@@ -134,7 +134,7 @@ describe("buildTransactionReviewCompleteness — Phase 19: possible-duplicate NE
 });
 
 describe("Project Review remains unaffected by the new Transaction registry", () => {
-  it("buildProjectReviewCompleteness still returns the full 44-field Project registry, untouched", () => {
+  it("buildProjectReviewCompleteness still returns the full 40-field Project registry, untouched", () => {
     const projectPayload: ProjectImportPayload = {
       name: "Test Project",
       status: "UNDER_CONSTRUCTION",
@@ -144,6 +144,6 @@ describe("Project Review remains unaffected by the new Transaction registry", ()
       sourceRef: "test:1",
     };
     const result = buildProjectReviewCompleteness(projectPayload);
-    expect(result.totalFields).toBe(44);
+    expect(result.totalFields).toBe(40);
   });
 });

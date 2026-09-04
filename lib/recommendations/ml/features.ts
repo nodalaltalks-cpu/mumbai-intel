@@ -15,13 +15,20 @@ import type { CandidateSource } from "../types";
  * budget buckets, counts, recency weights, one-hot source flags. Never a raw email,
  * phone, name, or any other directly-identifying value.
  */
-export const FEATURE_VERSION = "v1";
+// Phase 67 bumped v1 -> v2: Project.priceMaxPaise was removed from the data
+// model (a project-level max price is misleading; only priceMinPaise/
+// "starting price" remains), which changes what budgetMatchScore and
+// project_price_known actually compute below -- an encoding change per this
+// file's own versioning rule, even though the vector's length/FEATURE_NAMES
+// are unchanged. Any model trained under "v1" is intentionally excluded from
+// scoring (lib/recommendations/ml/score.ts filters on featureVersion) rather
+// than silently re-scored with a different meaning for the same weights.
+export const FEATURE_VERSION = "v2";
 
 export interface ProjectFeatureInput {
   id: string;
   localityId: string;
   priceMinPaise: number | null;
-  priceMaxPaise: number | null;
   configurationBedrooms: number[]; // e.g. [2, 3] for a project offering 2 & 3 BHK
   createdAt: Date;
 }
@@ -37,7 +44,7 @@ const ALL_SOURCES: CandidateSource[] = ["PROFILE_MATCH", "RECENT_BEHAVIOR", "SIM
 
 export const FEATURE_NAMES: string[] = [
   "bias_placeholder", // kept out of the weight vector itself (model.ts adds a real bias term) — index 0 reserved for readability in metricsJson dumps only.
-  "user_budget_match", // 1 if project price band overlaps explicit budget, 0.5 if unknown, 0 if outside
+  "user_budget_match", // 1 if project's starting price falls within explicit budget, 0.5 if unknown, 0 if outside
   "user_locality_weight", // interest-model recency-weighted locality score for this project's locality, normalized 0-1
   "user_configuration_weight", // recency-weighted configuration-interest score, normalized 0-1
   "user_has_explicit_profile", // 1 if UserPreferences exists with any field set
@@ -55,11 +62,10 @@ function clamp01(n: number): number {
 function budgetMatchScore(project: ProjectFeatureInput, interest: UserInterestSnapshot): number {
   const { budgetMinRupees, budgetMaxRupees } = interest.explicit;
   if (budgetMinRupees === null && budgetMaxRupees === null) return 0.5; // unknown — neutral, not penalized
-  if (project.priceMinPaise === null && project.priceMaxPaise === null) return 0.5;
-  const projMinRupees = project.priceMinPaise !== null ? project.priceMinPaise / 100 : null;
-  const projMaxRupees = project.priceMaxPaise !== null ? project.priceMaxPaise / 100 : null;
-  const withinMax = budgetMaxRupees === null || projMinRupees === null || projMinRupees <= budgetMaxRupees;
-  const withinMin = budgetMinRupees === null || projMaxRupees === null || projMaxRupees >= budgetMinRupees;
+  if (project.priceMinPaise === null) return 0.5;
+  const projMinRupees = project.priceMinPaise / 100;
+  const withinMax = budgetMaxRupees === null || projMinRupees <= budgetMaxRupees;
+  const withinMin = budgetMinRupees === null || projMinRupees >= budgetMinRupees;
   return withinMax && withinMin ? 1 : 0;
 }
 
@@ -96,7 +102,7 @@ export function buildFeatureVector(project: ProjectFeatureInput, interest: UserI
     hasExplicitProfile ? 1 : 0,
     clamp01(interest.inferred.engagedProjectIds.length / 10),
     1 / (1 + freshnessDays),
-    project.priceMinPaise !== null || project.priceMaxPaise !== null ? 1 : 0,
+    project.priceMinPaise !== null ? 1 : 0,
     context.totalCandidates > 0 ? clamp01(1 - context.position / context.totalCandidates) : 0.5,
     ...sourceOneHot,
   ];

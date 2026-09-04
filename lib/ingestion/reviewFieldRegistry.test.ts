@@ -22,7 +22,6 @@ const ADANI_PAYLOAD: ProjectImportPayload = {
   reraNumber: "P51800047539",
   description: "3 BHK, Multistorey Apartment is available for Sale in Andheri West, Mumbai for 6.9 Crore(s)",
   developerGroup: "Adani Realty & RC Group",
-  priceMaxRupees: 69900000,
   priceMinRupees: 44608000,
   possessionDateIso: "2028-10-01T00:00:00.000Z",
 };
@@ -74,7 +73,6 @@ describe("buildProjectReviewCompleteness — CASE 2: partial real payload (Adani
     expect(byKey.get("locality")?.value).toBe("Andheri West");
     expect(byKey.get("reraNumber")?.status).toBe("RECEIVED");
     expect(byKey.get("priceMin")?.status).toBe("RECEIVED");
-    expect(byKey.get("priceMax")?.status).toBe("RECEIVED");
     expect(byKey.get("possessionMonth")?.status).toBe("RECEIVED");
     expect(byKey.get("possessionMonth")?.value).toBe("October");
     expect(byKey.get("possessionYear")?.value).toBe("2028");
@@ -87,9 +85,6 @@ describe("buildProjectReviewCompleteness — CASE 2: partial real payload (Adani
   it("marks fields genuinely absent from this payload as MISSING, never invented", () => {
     const byKey = new Map(result.groups.flatMap((g) => g.fields).map((f) => [f.key, f]));
     expect(byKey.get("address")?.status).toBe("MISSING");
-    expect(byKey.get("latitude")?.status).toBe("MISSING");
-    expect(byKey.get("longitude")?.status).toBe("MISSING");
-    expect(byKey.get("reraStatus")?.status).toBe("MISSING");
     expect(byKey.get("totalUnits")?.status).toBe("MISSING");
     expect(byKey.get("totalTowers")?.status).toBe("MISSING");
     expect(byKey.get("launchDate")?.status).toBe("MISSING");
@@ -144,9 +139,6 @@ describe("buildProjectReviewCompleteness — CASE 1: fully populated payload", (
   const fullPayload = {
     ...ADANI_PAYLOAD,
     address: "123 Link Road",
-    latitude: 19.1364,
-    longitude: 72.8296,
-    reraStatus: "Registered",
     totalUnits: 240,
     totalTowers: 3,
     launchDateIso: "2024-01-01T00:00:00.000Z",

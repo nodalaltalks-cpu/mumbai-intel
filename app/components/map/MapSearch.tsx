@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import type { DeveloperMapMarker, LocalityMapMarker, MapMarker, ProjectMapMarker } from "@/lib/map/types";
+import type { LocalityMapMarker, MapMarker } from "@/lib/map/types";
 
 interface SearchResult {
   key: string;
@@ -11,17 +11,7 @@ interface SearchResult {
 }
 
 /** Client-side search over the already-loaded marker datasets — instant, no network round-trip. */
-export default function MapSearch({
-  projects,
-  localities,
-  developers,
-  onSelect,
-}: {
-  projects: ProjectMapMarker[];
-  localities: LocalityMapMarker[];
-  developers: DeveloperMapMarker[];
-  onSelect: (marker: MapMarker) => void;
-}) {
+export default function MapSearch({ localities, onSelect }: { localities: LocalityMapMarker[]; onSelect: (marker: MapMarker) => void }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -30,23 +20,13 @@ export default function MapSearch({
     const trimmed = query.trim().toLowerCase();
     if (!trimmed) return [];
     const out: SearchResult[] = [];
-    for (const p of projects) {
-      if (p.name.toLowerCase().includes(trimmed) || p.builderName?.toLowerCase().includes(trimmed)) {
-        out.push({ key: `project-${p.id}`, label: p.name, sublabel: `Project · ${p.localityName}`, marker: p });
-      }
-    }
     for (const l of localities) {
       if (l.name.toLowerCase().includes(trimmed)) {
         out.push({ key: `locality-${l.id}`, label: l.name, sublabel: "Locality", marker: l });
       }
     }
-    for (const d of developers) {
-      if (d.name.toLowerCase().includes(trimmed)) {
-        out.push({ key: `developer-${d.id}`, label: d.name, sublabel: "Developer", marker: d });
-      }
-    }
     return out.slice(0, 8);
-  }, [query, projects, localities, developers]);
+  }, [query, localities]);
 
   function handleSelect(result: SearchResult) {
     setQuery(result.label);
@@ -64,7 +44,7 @@ export default function MapSearch({
         }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder="Search project, developer or locality…"
+        placeholder="Search locality…"
         className="w-full rounded-sm border border-border bg-surface px-3 py-2 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
       />
       {open && results.length > 0 ? (

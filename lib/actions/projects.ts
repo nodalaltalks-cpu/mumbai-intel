@@ -13,7 +13,6 @@ import { ensureUniqueSlug, slugify } from "@/lib/slug";
 import { deleteDocumentByPublicId, deleteImageByPublicId, documentPublicIdFromUrl, publicIdFromUrl } from "@/lib/cloudinary";
 import { logAudit } from "@/lib/audit";
 import { emit } from "@/lib/events";
-import { syncProjectNearbyInfra } from "@/lib/infra-linking";
 import { buildProjectData, parseProjectForm } from "@/lib/project-data";
 import { completionInputFromSchema, computeProjectCompletionPercent } from "@/lib/project-completion";
 import { uploadBrochureForProject } from "./brochure";
@@ -136,7 +135,6 @@ export async function createProjectAction(
   }
 
   if (amenityIds.length > 0) await syncProjectAmenities(projectId, amenityIds);
-  await syncProjectNearbyInfra(projectId);
 
   // Optional cover image attached directly on the New Project form — the
   // project row now exists, so it can be uploaded exactly like a normal
@@ -236,7 +234,6 @@ export async function updateProjectAction(
   }
 
   await syncProjectAmenities(projectId, amenityIds);
-  await syncProjectNearbyInfra(projectId);
 
   await emit("ProjectUpdated", { projectId, slug, actorId: session.userId, before: existing, after: nextData });
   redirect(`/admin/projects/${projectId}/edit?saved=1`);
@@ -414,8 +411,6 @@ export async function duplicateProjectAction(projectId: string): Promise<{ error
         category: source.category,
         address: source.address,
         famousLandmark: source.famousLandmark,
-        latitude: source.latitude,
-        longitude: source.longitude,
         googleMapsUrl: source.googleMapsUrl,
         launchDate: source.launchDate,
         promisedPossession: source.promisedPossession,
@@ -426,7 +421,6 @@ export async function duplicateProjectAction(projectId: string): Promise<{ error
         totalTowers: source.totalTowers,
         landAreaAcres: source.landAreaAcres,
         priceMinPaise: source.priceMinPaise,
-        priceMaxPaise: source.priceMaxPaise,
         paymentPlanType: source.paymentPlanType,
         paymentPlanDescription: source.paymentPlanDescription,
         dataSource: source.dataSource,

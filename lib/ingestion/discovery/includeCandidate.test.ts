@@ -30,11 +30,8 @@ describe("mapDiscoveryCandidateToProjectPayload (Phase 40 Part D)", () => {
     expect(payload.dataSource).toBe("EXTERNAL_OPEN_DATA");
     expect(payload.reraNumber).toBeUndefined();
     expect(payload.priceMinRupees).toBeUndefined();
-    expect(payload.priceMaxRupees).toBeUndefined();
     expect(payload.possessionDateIso).toBeUndefined();
     expect(payload.address).toBeUndefined();
-    expect(payload.latitude).toBeUndefined();
-    expect(payload.longitude).toBeUndefined();
   });
 
   it("2. uses the minimal, literally-true status/category defaults, never a fabricated construction stage", () => {

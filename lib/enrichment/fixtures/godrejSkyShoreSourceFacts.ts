@@ -24,7 +24,6 @@ export const GODREJ_SKY_SHORE_SOURCE_FACTS: SourceFactsMap = {
   status: { value: "Under Construction", confidence: "Low", note: "Implied only from a future possession date, not an explicit label on the page." },
   locality: { value: "Andheri West", confidence: "High" },
   priceMin: { value: "₹8.40 Cr", confidence: "High" },
-  priceMax: { value: "₹11.89 Cr", confidence: "High" },
   possessionMonth: { value: "February", confidence: "High" },
   possessionYear: { value: "2030", confidence: "High" },
   address: {
@@ -85,9 +84,9 @@ export const GODREJ_SKY_SHORE_SOURCE_FACTS: SourceFactsMap = {
     confidence: "High",
   },
   // Deliberately NOT included (no fact provided → correctly classifies MISSING):
-  // reraNumber, reraStatus, reraCertificateUrl, brochure, documents, videoUrl,
+  // reraNumber, reraCertificateUrl, brochure, documents, videoUrl,
   // tour360Url, specifications, totalUnits, totalTowers, launchDate,
-  // actualPossession, constructionPercent, googleMapsUrl, latitude, longitude,
+  // actualPossession, constructionPercent, googleMapsUrl,
   // microMarket, builder, paymentPlanType, paymentPlanDescription, ogImageUrl,
   // description (see this fixture file's own note below on why).
   //

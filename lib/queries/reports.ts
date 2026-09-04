@@ -85,7 +85,6 @@ export async function getTopProjectsByActivity(limit = 6) {
       configurationSummary,
       pricePerSqftPaise,
       priceMinPaise: p.priceMinPaise !== null ? Number(p.priceMinPaise) : null,
-      priceMaxPaise: p.priceMaxPaise !== null ? Number(p.priceMaxPaise) : null,
       possessionDate: p.promisedPossession,
       constructionPercent: p.constructionPercent,
       dataSource: p.dataSource,

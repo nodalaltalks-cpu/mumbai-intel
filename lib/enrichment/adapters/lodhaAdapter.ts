@@ -123,11 +123,6 @@ export function extractLodhaCullinanFacts(html: string): SourceFactsMap {
   const reraNumber = parseReraNumber(html);
   if (reraNumber) {
     facts.reraNumber = { value: reraNumber, confidence: "High", note: 'Page\'s own "Click here for RERA details" slide-out widget.' };
-    facts.reraStatus = {
-      value: "Registered",
-      confidence: "High",
-      note: "Inferred from the page's own structured RERA widget citing a real MahaRERA registration number and a link to the official maharera.maharashtra.gov.in portal, not from marketing prose.",
-    };
   }
 
   const faqs = extractFaqLdJson(html);
@@ -184,12 +179,12 @@ export function extractLodhaCullinanFacts(html: string): SourceFactsMap {
 
   // Deliberately NOT populated -- confirmed genuinely absent from this page
   // during Phase 42's inspection (no field/section exists for them, not a
-  // parsing failure): developerGroup, builder, address, priceMin, priceMax,
+  // parsing failure): developerGroup, builder, address, priceMin,
   // possessionMonth, possessionYear, launchDate, actualPossession,
   // constructionPercent, landAreaAcres, totalUnits, totalTowers,
   // paymentPlanType, paymentPlanDescription, highlights, specifications,
   // videoUrl, tour360Url, brochure, documents, reraCertificateUrl,
-  // googleMapsUrl, latitude, longitude, images.
+  // googleMapsUrl, images.
 
   return facts;
 }

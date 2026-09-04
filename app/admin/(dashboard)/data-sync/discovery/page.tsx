@@ -9,6 +9,7 @@ import type { DiscoveryStatus, ProjectDiscoveryCandidatePayload } from "@/lib/in
 import type { ProjectImportPayload } from "@/lib/ingestion/connectors/fileImport/types";
 import DiscoveryCandidateList, { type DiscoveryCandidateRow } from "@/app/admin/components/DiscoveryCandidateList";
 import MumbaiDiscoveryRunForm from "@/app/admin/components/MumbaiDiscoveryRunForm";
+import HousieyLocalityRunForm from "@/app/admin/components/HousieyLocalityRunForm";
 import EmptyState from "@/app/components/ui/EmptyState";
 
 export const metadata: Metadata = { title: "Project Discovery — NoDalalTalks Admin" };
@@ -87,6 +88,7 @@ export default async function ProjectDiscoveryPage() {
       </div>
 
       <MumbaiDiscoveryRunForm />
+      <HousieyLocalityRunForm />
 
       {rows.length === 0 ? (
         <EmptyState title="No discovery candidates yet" message="Run a discovery batch for an area to populate this list." />

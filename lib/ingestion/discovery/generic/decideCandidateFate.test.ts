@@ -37,6 +37,15 @@ describe("decideCandidateFate", () => {
     }
   });
 
+  it("Phase 67 — an explicit sourceType overrides the OFFICIAL_DEVELOPER default (e.g. Housiey's VERIFIED_THIRD_PARTY)", () => {
+    const fate = decideCandidateFate("Some Developer (via Housiey)", "housiey.com", candidate(), localities, "VERIFIED_THIRD_PARTY");
+    expect(fate.decision).toBe("STAGE");
+    if (fate.decision === "STAGE") {
+      expect(fate.input.sourceType).toBe("VERIFIED_THIRD_PARTY");
+      expect(fate.input.discoverySource).toContain("locality page");
+    }
+  });
+
   it("excludes a candidate with no extractable project name", () => {
     const fate = decideCandidateFate("Test Developer", "https://d.com", candidate({ projectNameGuess: null }), localities);
     expect(fate.decision).toBe("EXCLUDED_NO_NAME");

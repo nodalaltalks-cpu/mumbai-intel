@@ -45,17 +45,13 @@ export async function getDashboardStats() {
         prisma.transaction.count({ where: { deletedAt: null } }),
         prisma.projectImage.count({ where: { project: { deletedAt: null } } }),
         prisma.project.aggregate({
-          _avg: { priceMinPaise: true, priceMaxPaise: true },
-          where: { OR: [{ priceMinPaise: { not: null } }, { priceMaxPaise: { not: null } }], deletedAt: null },
+          _avg: { priceMinPaise: true },
+          where: { priceMinPaise: { not: null }, deletedAt: null },
         }),
       ]);
 
     const avgMin = priceAgg._avg.priceMinPaise;
-    const avgMax = priceAgg._avg.priceMaxPaise;
-    let avgPricePaise: bigint | null = null;
-    if (avgMin !== null && avgMax !== null) avgPricePaise = (BigInt(Math.round(avgMin)) + BigInt(Math.round(avgMax))) / BigInt(2);
-    else if (avgMin !== null) avgPricePaise = BigInt(Math.round(avgMin));
-    else if (avgMax !== null) avgPricePaise = BigInt(Math.round(avgMax));
+    const avgPricePaise: bigint | null = avgMin !== null ? BigInt(Math.round(avgMin)) : null;
 
     return {
       projectCount,
@@ -120,8 +116,8 @@ export async function getDashboardCharts() {
           where: { deletedAt: null },
         }),
         prisma.project.findMany({
-          where: { OR: [{ priceMinPaise: { not: null } }, { priceMaxPaise: { not: null } }], deletedAt: null },
-          select: { priceMinPaise: true, priceMaxPaise: true },
+          where: { priceMinPaise: { not: null }, deletedAt: null },
+          select: { priceMinPaise: true },
         }),
       ]);
 
@@ -146,10 +142,8 @@ export async function getDashboardCharts() {
 
       const priceDistribution: ChartBucket[] = PRICE_BUCKETS_CR.map((bucket) => ({ label: bucket.label, count: 0 }));
       for (const project of projects) {
-        const min = project.priceMinPaise !== null ? Number(project.priceMinPaise) : null;
-        const max = project.priceMaxPaise !== null ? Number(project.priceMaxPaise) : null;
-        const mid = min !== null && max !== null ? (min + max) / 2 : (min ?? max ?? 0);
-        const bucketIndex = PRICE_BUCKETS_CR.findIndex((b) => mid < b.max);
+        const min = project.priceMinPaise !== null ? Number(project.priceMinPaise) : 0;
+        const bucketIndex = PRICE_BUCKETS_CR.findIndex((b) => min < b.max);
         const idx = bucketIndex === -1 ? PRICE_BUCKETS_CR.length - 1 : bucketIndex;
         priceDistribution[idx].count += 1;
       }
@@ -425,7 +419,7 @@ function buildProjectOrderBy(sortBy: string | undefined): Prisma.ProjectOrderByW
     case "price_asc":
       return { priceMinPaise: "asc" };
     case "price_desc":
-      return { priceMaxPaise: "desc" };
+      return { priceMinPaise: "desc" };
     case "name_asc":
       return { name: "asc" };
     case "launch_desc":
@@ -464,8 +458,10 @@ async function fetchProjectsPage(filters: ProjectListFilters) {
     const n = Number(filters.bedrooms);
     where.configurations = { some: n >= 4 ? { bedrooms: { gte: 4 } } : { bedrooms: { gte: n, lt: n + 1 } } };
   }
+  // Both bounds apply to the single priceMinPaise ("starting price") column —
+  // there is no project-level max to range against any more (Phase 67).
   if (filters.priceMinRupees !== undefined) {
-    where.priceMaxPaise = { gte: BigInt(Math.round(filters.priceMinRupees * 100)) };
+    where.priceMinPaise = { ...(where.priceMinPaise as object), gte: BigInt(Math.round(filters.priceMinRupees * 100)) };
   }
   if (filters.priceMaxRupees !== undefined) {
     where.priceMinPaise = { ...(where.priceMinPaise as object), lte: BigInt(Math.round(filters.priceMaxRupees * 100)) };
@@ -487,7 +483,6 @@ async function fetchProjectsPage(filters: ProjectListFilters) {
         name: true,
         status: true,
         priceMinPaise: true,
-        priceMaxPaise: true,
         updatedAt: true,
         isPublished: true,
         isFeatured: true,
@@ -504,14 +499,13 @@ async function fetchProjectsPage(filters: ProjectListFilters) {
     prisma.project.count({ where }),
   ]);
 
-  // priceMinPaise/priceMaxPaise are BigInt columns -- raw BigInt can't cross
-  // the Server->Client boundary into ProjectsTable ("use client"). Same fix
-  // as getProjectForEdit, same reason it was missed until now: no project's
+  // priceMinPaise is a BigInt column -- raw BigInt can't cross the
+  // Server->Client boundary into ProjectsTable ("use client"). Same fix as
+  // getProjectForEdit, same reason it was missed until now: no project's
   // list row had ever carried non-null pricing before.
   const convertedItems = items.map((p) => ({
     ...p,
     priceMinPaise: p.priceMinPaise !== null ? Number(p.priceMinPaise) : null,
-    priceMaxPaise: p.priceMaxPaise !== null ? Number(p.priceMaxPaise) : null,
   }));
 
   return { items: convertedItems, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
@@ -548,8 +542,8 @@ export async function getProjectForEdit(id: string) {
     return {
       ...project,
       landAreaAcres: project.landAreaAcres !== null ? Number(project.landAreaAcres) : null,
-      // priceMinPaise/priceMaxPaise are BigInt columns -- raw BigInt values
-      // can't cross the Server->Client Component boundary (ProjectForm and
+      // priceMinPaise is a BigInt column -- raw BigInt values can't cross the
+      // Server->Client Component boundary (ProjectForm and
       // ConfigurationsManager are both "use client"), the same reason every
       // other BigInt/Decimal field on this object is converted to Number
       // right here rather than passed through raw. This was previously
@@ -557,7 +551,6 @@ export async function getProjectForEdit(id: string) {
       // an individual configuration row until now -- every prior test
       // project left it null, so the crash was never exercised.
       priceMinPaise: project.priceMinPaise !== null ? Number(project.priceMinPaise) : null,
-      priceMaxPaise: project.priceMaxPaise !== null ? Number(project.priceMaxPaise) : null,
       configurations: project.configurations.map((c) => ({
         ...c,
         bedrooms: Number(c.bedrooms),

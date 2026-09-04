@@ -311,6 +311,8 @@ export interface GenericPageFacts {
   /** The raw phrase(s) found on the page that speak to construction/sales status -- evidence for classifyGenericProjectStatus, never itself a status classification. */
   statusEvidenceText: string | null;
   descriptionGuess: string | null;
+  /** JSON-LD `brand.name`, when present -- e.g. a third-party listing page's own structured developer/brand field. Phase 67: exposed for callers (Housiey secondary discovery) that don't already know the developer name the way a per-developer-sitemap crawl does. Never guessed from unstructured text. */
+  developerNameGuess: string | null;
   hasProjectLikeJsonLd: boolean;
   confidence: EnrichmentConfidence;
 }
@@ -443,6 +445,7 @@ export function extractGenericProjectFacts(html: string, pageUrl?: string): Gene
     reraNumber: reraMatch ? reraMatch[0] : null,
     statusEvidenceText: foundPhrase ?? null,
     descriptionGuess: description,
+    developerNameGuess: developerNameHint?.trim() || null,
     hasProjectLikeJsonLd: Boolean(projectNode),
     confidence: projectNameSource === "json_ld" ? "High" : projectNameSource ? "Medium" : "Low",
   };

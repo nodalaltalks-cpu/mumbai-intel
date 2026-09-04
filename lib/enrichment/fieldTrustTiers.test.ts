@@ -4,13 +4,17 @@ import { getFieldTrustTier, PROTECTED_IDENTITY_FIELDS, UNSUPPORTED_FOR_AUTO_ACCE
 describe("fieldTrustTiers", () => {
   it("1. Tier A contains only the narrow, highly-structured v1 fields", () => {
     expect(getFieldTrustTier("reraNumber")).toBe("A");
-    expect(getFieldTrustTier("reraStatus")).toBe("A");
     expect(getFieldTrustTier("priceMin")).toBe("A");
-    expect(getFieldTrustTier("priceMax")).toBe("A");
+  });
+
+  it("1b. reraStatus/priceMax/latitude/longitude have no tier entry — removed in Phase 67", () => {
+    for (const key of ["reraStatus", "priceMax", "latitude", "longitude"]) {
+      expect(getFieldTrustTier(key)).toBeNull();
+    }
   });
 
   it("2. Tier B contains the contextual/structured fields Phase 60 keeps at human review for v1", () => {
-    for (const key of ["locality", "address", "possessionMonth", "possessionYear", "constructionPercent", "landAreaAcres", "latitude", "longitude", "googleMapsUrl", "status", "category"]) {
+    for (const key of ["locality", "address", "possessionMonth", "possessionYear", "constructionPercent", "landAreaAcres", "googleMapsUrl", "status", "category"]) {
       expect(getFieldTrustTier(key)).toBe("B");
     }
   });
@@ -42,8 +46,14 @@ describe("fieldTrustTiers", () => {
   });
 
   it("8. UNSUPPORTED_FOR_AUTO_ACCEPT matches applyAcceptedField's own documented exclusions", () => {
-    for (const key of ["builder", "slug", "locality", "description", "launchDate"]) {
+    for (const key of ["builder", "slug", "locality"]) {
       expect(UNSUPPORTED_FOR_AUTO_ACCEPT.has(key)).toBe(true);
+    }
+  });
+
+  it("9. description/launchDate are no longer unsupported — Phase 67 added founder edit support for both", () => {
+    for (const key of ["description", "launchDate"]) {
+      expect(UNSUPPORTED_FOR_AUTO_ACCEPT.has(key)).toBe(false);
     }
   });
 });

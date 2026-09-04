@@ -194,11 +194,10 @@ export function extractRustomjeeFacts(html: string): SourceFactsMap {
   // Deliberately NOT populated -- confirmed genuinely absent from both real
   // pages inspected during Phase 49 (no field/section exists, not a parsing
   // failure): developerGroup (lives on the organization's own #organization
-  // graph node, not this project's listing), builder, priceMax (only a
-  // "Starting from" minimum is ever published), possessionMonth/
-  // possessionYear, reraStatus, reraCertificateUrl (mentioned in FAQ prose
+  // graph node, not this project's listing), builder, possessionMonth/
+  // possessionYear, reraCertificateUrl (mentioned in FAQ prose
   // as "published on the project's main page" but never as a direct URL),
-  // googleMapsUrl, latitude/longitude, launchDate, actualPossession,
+  // googleMapsUrl, launchDate, actualPossession,
   // constructionPercent, landAreaAcres, totalUnits, totalTowers,
   // paymentPlanType/Description (FAQ prose describes a CLP Pre-EMI plan but
   // not in this codebase's own PAYMENT_PLAN_TYPES vocabulary), specifications,

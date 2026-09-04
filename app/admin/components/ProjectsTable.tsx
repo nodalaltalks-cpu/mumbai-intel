@@ -22,7 +22,6 @@ export interface ProjectRow {
   name: string;
   status: string;
   priceMinPaise: number | null;
-  priceMaxPaise: number | null;
   updatedAt: Date;
   isPublished: boolean;
   isFeatured: boolean;
@@ -129,7 +128,7 @@ export default function ProjectsTable({ projects, isAdmin }: { projects: Project
               <th className="px-3 py-2 font-medium">Project Name</th>
               <th className="px-3 py-2 font-medium">Locality</th>
               <th className="px-3 py-2 font-medium">Status</th>
-              <th className="px-3 py-2 font-medium">Price band</th>
+              <th className="px-3 py-2 font-medium">Starting price</th>
               <th className="px-3 py-2 font-medium">Updated</th>
               <th className="px-3 py-2 font-medium">Completion</th>
               <th className="px-3 py-2 font-medium">Published</th>
@@ -166,10 +165,7 @@ export default function ProjectsTable({ projects, isAdmin }: { projects: Project
                   <StatusSelect projectId={project.id} status={project.status as ProjectStatus} />
                 </td>
                 <td className="px-3 py-2 font-mono text-muted">
-                  {formatPriceBand(
-                    project.priceMinPaise !== null ? Number(project.priceMinPaise) : null,
-                    project.priceMaxPaise !== null ? Number(project.priceMaxPaise) : null
-                  )}
+                  {formatPriceBand(project.priceMinPaise !== null ? Number(project.priceMinPaise) : null)}
                 </td>
                 <td className="px-3 py-2 text-muted">{formatDate(project.updatedAt)}</td>
                 <td className="px-3 py-2 font-mono text-muted">{project.completionPercent ?? 0}%</td>

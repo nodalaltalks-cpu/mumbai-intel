@@ -412,15 +412,12 @@ model Project {
   /// A recognizable nearby landmark ("Near R City Mall", "5 minutes from BKC")
   /// so a buyer can immediately place the project without parsing the address.
   famousLandmark String?
-  latitude       Float?
-  longitude      Float?
   /// Direct link to the project's actual Google Maps location — what the admin
-  /// pastes and what "View on Google Maps" links to everywhere. latitude/
-  /// longitude above are auto-parsed from this URL when the format allows
-  /// (e.g. an "@lat,lng" or "q=lat,lng" pattern) so the OSM MapEmbed preview
-  /// and infra-linking distance calculations keep working without the admin
-  /// ever typing coordinates by hand; they stay null if the pasted link is a
-  /// shortened form (goo.gl/maps/…) that doesn't expose coordinates.
+  /// pastes and what "View on Google Maps" links to everywhere. Phase 67
+  /// removed Project.latitude/longitude entirely (never populated for a real
+  /// project; the public page has only ever shown address + this link, never
+  /// a coordinate map) — this URL and `address` are now the only location
+  /// mechanisms, by design, not a gap.
   googleMapsUrl  String?
 
   // ── Timeline ──
@@ -434,10 +431,11 @@ model Project {
 
   // ── RERA (official when present) ──
   reraNumber         String? @unique
-  reraStatus         String?
   /// Direct link to this project's official MahaRERA (or other state RERA)
   /// registration page on the government portal — the actual government
-  /// commitment record, not our own reraNumber/reraStatus fields.
+  /// commitment record, not our own reraNumber field. Phase 67 removed the
+  /// separate `reraStatus` free-text field entirely — RERA number is the
+  /// single source of truth; a status is never derived from its presence.
   reraCertificateUrl String?
 
   // ── Scale ──
@@ -445,9 +443,13 @@ model Project {
   totalTowers   Int?
   landAreaAcres Decimal? @db.Decimal(8, 2)
 
-  // ── Pricing band (paise) ──
+  // ── Pricing (paise) ──
+  /// Starting price only, deliberately — Phase 67 removed the project-level
+  /// `priceMaxPaise` ceiling entirely: a single project-wide max is
+  /// misleading (it varies by configuration/unit/floor/availability).
+  /// Configuration-specific price bands (see `Configuration.priceMinPaise`/
+  /// `priceMaxPaise` below) remain the correct place for a real max.
   priceMinPaise BigInt?
-  priceMaxPaise BigInt?
 
   // ── Payment plan (India) ──
   paymentPlanType        PaymentPlanType?

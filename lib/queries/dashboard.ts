@@ -109,10 +109,7 @@ export async function getWishlistForUser(publicUserId: string): Promise<Wishlist
       imageUrl: saved.project.images[0]?.url ?? null,
       subtitle: [saved.project.builder?.name, saved.project.locality.name].filter(Boolean).join(" · "),
       status: saved.project.status,
-      priceLabel: formatPriceBand(
-        saved.project.priceMinPaise !== null ? Number(saved.project.priceMinPaise) : null,
-        saved.project.priceMaxPaise !== null ? Number(saved.project.priceMaxPaise) : null
-      ),
+      priceLabel: formatPriceBand(saved.project.priceMinPaise !== null ? Number(saved.project.priceMinPaise) : null),
       href: `/projects/${saved.project.slug}`,
       dateAdded: saved.createdAt,
       brochureUrl: saved.project.brochureUrl,

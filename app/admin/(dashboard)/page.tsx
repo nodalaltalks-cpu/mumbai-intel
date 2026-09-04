@@ -104,7 +104,7 @@ export default async function AdminDashboardPage() {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="rounded-sm border border-border bg-surface p-4">
-          <p className="text-[10px] uppercase tracking-wide text-muted">Average listed price</p>
+          <p className="text-[10px] uppercase tracking-wide text-muted">Average starting price</p>
           <p className="mt-1.5 font-mono text-2xl font-semibold text-foreground">{formatPaise(stats.avgPricePaise)}</p>
         </div>
         <div className="rounded-sm border border-border bg-surface p-4">

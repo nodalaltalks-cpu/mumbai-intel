@@ -10,16 +10,12 @@ import type { Confidence, DataSource, ProjectStatus, PropertyCategory } from "@/
 export interface ProjectImportPayload {
   name: string;
   reraNumber?: string;
-  reraStatus?: string;
   address?: string;
-  latitude?: number;
-  longitude?: number;
   status: ProjectStatus;
   category: PropertyCategory;
   totalUnits?: number;
   totalTowers?: number;
   priceMinRupees?: number;
-  priceMaxRupees?: number;
   possessionDateIso?: string;
   launchDateIso?: string;
   builderId?: string;

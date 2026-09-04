@@ -81,11 +81,10 @@ describe("extractGodrejSkyShoreFacts (Phase 30 — real maximum-extraction contr
     expect(facts.developerGroup?.confidence).toBe("High");
   });
 
-  it("3. extracts real structured price min/max from item.starting_prices (min across configs, max across configs)", () => {
+  it("3. extracts the real structured starting price from item.starting_prices (min across configs)", () => {
     const facts = extractGodrejSkyShoreFacts(buildRealShapedHtml());
     expect(facts.priceMin?.value).toBe("₹8.40 Cr");
-    expect(facts.priceMax?.value).toBe("₹11.89 Cr");
-    expect(facts.priceMax?.confidence).toBe("High");
+    expect(facts.priceMin?.confidence).toBe("High");
   });
 
   it("4. extracts real possession month/year from item.possessionDate (ISO)", () => {
@@ -219,7 +218,6 @@ describe("extractGodrejSkyShoreFacts (Phase 30 — real maximum-extraction contr
       reraNumber: "PM1180002500076",
       description: "3 BHK, Multistorey Apartment is available for Sale in Andheri West, Mumbai for 8.4 Crore(s)",
       developerGroup: "Godrej Properties Ltd.",
-      priceMaxRupees: 84000000,
       priceMinRupees: 84000000,
       possessionDateIso: "2031-12-01T00:00:00.000Z",
     };
@@ -233,7 +231,6 @@ describe("extractGodrejSkyShoreFacts (Phase 30 — real maximum-extraction contr
     expect(byKey("locality").classification).toBe("CONFLICT"); // "Andheri West" vs real "Versova, Andheri (W)"
     expect(byKey("possessionMonth").classification).toBe("CONFLICT");
     expect(byKey("possessionYear").classification).toBe("CONFLICT");
-    expect(byKey("priceMax").classification).toBe("GREEN_NEW"); // single-listing-artifact exception, real structured ₹11.89 Cr
   });
 
   it("20. never leaks fixture-only content into a real extraction run -- fixture-exclusive fields (landAreaAcres, faqs) are absent even though the fixture module exists in this codebase", () => {

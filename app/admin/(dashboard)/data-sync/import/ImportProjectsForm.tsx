@@ -38,8 +38,8 @@ export default function ImportProjectsForm() {
           <span className="text-foreground">Required columns:</span> project name, locality, status.
         </p>
         <p className="mt-1">
-          <span className="text-foreground">Optional:</span> RERA number, address, latitude/longitude, builder, total
-          units/towers, price min/max, possession date, launch date, description.
+          <span className="text-foreground">Optional:</span> RERA number, address, builder, total
+          units/towers, starting price, possession date, launch date, description.
         </p>
         <p className="mt-2">
           Every row is staged for review — nothing is created or published automatically. A row matching an existing

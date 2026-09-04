@@ -13,7 +13,6 @@ const ADANI_PAYLOAD: ProjectImportPayload = {
   reraNumber: "P51800047539",
   description: "3 BHK, Multistorey Apartment is available for Sale in Andheri West, Mumbai for 6.9 Crore(s)",
   developerGroup: "Adani Realty & RC Group",
-  priceMaxRupees: 69900000,
   priceMinRupees: 44608000,
   possessionDateIso: "2028-10-01T00:00:00.000Z",
 };
@@ -24,12 +23,9 @@ const FULLY_FILLED_PAYLOAD: ProjectImportPayload = {
   ...ADANI_PAYLOAD,
   builderId: "bldr-1",
   address: "off, Fun Republic, New Link road, Andheri west",
-  latitude: 19.13,
-  longitude: 72.82,
   launchDateIso: "2027-01-01T00:00:00.000Z",
   totalUnits: 300,
   totalTowers: 2,
-  reraStatus: "Registered",
 };
 
 describe("computeApprovalReadiness (Phase 34 Part B/C — reuses the EXISTING completeness computation, no new calculator)", () => {
@@ -88,14 +84,14 @@ describe("computeApprovalReadiness (Phase 34 Part B/C — reuses the EXISTING co
     expect(computeApprovalReadiness(notReadyCompleteness).status).toBe("NEEDS_ATTENTION");
   });
 
-  it("8. the underlying 44-field total/received/missing counts are untouched -- this function only reads them, never recomputes", () => {
+  it("8. the underlying 40-field total/received/missing counts are untouched -- this function only reads them, never recomputes", () => {
     const completeness = buildProjectReviewCompleteness(ADANI_PAYLOAD, { localityName: "Andheri West" });
     const before = { total: completeness.totalFields, received: completeness.receivedCount, missing: completeness.missingCount };
     computeApprovalReadiness(completeness);
     expect(completeness.totalFields).toBe(before.total);
     expect(completeness.receivedCount).toBe(before.received);
     expect(completeness.missingCount).toBe(before.missing);
-    expect(completeness.totalFields).toBe(44);
+    expect(completeness.totalFields).toBe(40);
   });
 
   it("9. reflects Builder resolution: builderId present + resolved name turns 'Builder' from MISSING to RECEIVED, keeping readiness READY", () => {

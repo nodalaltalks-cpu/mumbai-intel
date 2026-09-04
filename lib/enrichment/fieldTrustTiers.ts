@@ -1,16 +1,17 @@
 /**
  * Phase 60 Part 9 — a pure, single-source-of-truth lookup from each of the
- * existing 44 Project registry field keys (lib/ingestion/reviewFieldRegistry.ts's
+ * existing Project registry field keys (lib/ingestion/reviewFieldRegistry.ts's
  * buildProjectReviewCompleteness) to an automation trust tier. Deliberately
  * just a lookup table, never scattered per-field automation logic — every
  * rule that CONSUMES a tier lives in autoDecideFieldAutomation.ts instead.
  *
  * Tier A — highly structured, objectively verifiable, safe to auto-accept
- *          (Phase 60 v1: RERA number/status, price min/max only — kept
- *          deliberately narrow per the "be conservative for v1" instruction;
- *          fields like status/category that ARE structured enums are still
- *          Tier B this round because getting them wrong has real business
- *          impact and neither was explicitly whitelisted).
+ *          (Phase 60 v1: RERA number/price min only — kept deliberately
+ *          narrow per the "be conservative for v1" instruction; fields like
+ *          status/category that ARE structured enums are still Tier B this
+ *          round because getting them wrong has real business impact and
+ *          neither was explicitly whitelisted). Phase 67 removed reraStatus
+ *          and priceMax from this tier along with the fields entirely.
  * Tier B — structured but contextual; the resolver may understand it, but
  *          v1 always routes it to human review (never auto-applies).
  * Tier C — editorial/semantic; only ever human review in v1, regardless of
@@ -32,32 +33,30 @@ export const PROTECTED_IDENTITY_FIELDS: ReadonlySet<string> = new Set(["name", "
  * Fields the existing write path (lib/enrichment/applyAcceptedField.ts) can
  * never accept directly, by its own explicit design (see that file's doc
  * comment) — builder/locality are foreign keys resolved via the separate
- * entity-match mechanism, slug is always auto-derived, description is a
- * documented better-prose exception, launchDate has no adapter-produced
- * parser yet. Never AUTO_ACCEPT any of these regardless of tier; the
- * decision function also cross-checks this at runtime via
- * applyAcceptedField's own ok/error result rather than trusting this list
- * alone, since that list is the actual runtime authority.
+ * entity-match mechanism, slug is always auto-derived. Never AUTO_ACCEPT any
+ * of these regardless of tier; the decision function also cross-checks this
+ * at runtime via applyAcceptedField's own ok/error result rather than
+ * trusting this list alone, since that list is the actual runtime authority.
+ * Phase 67 moved `description` and `launchDate` OUT of this set —
+ * applyAcceptedField now supports both (a founder can type either directly);
+ * this changes nothing about automation itself, since description (Tier C)
+ * and launchDate (Tier B) already always route to HUMAN_REVIEW on their own.
  */
 export const UNSUPPORTED_FOR_AUTO_ACCEPT: ReadonlySet<string> = new Set([
   "builder",
   "slug",
   "locality",
-  "description",
-  "launchDate",
   "dataSource",
   "sourceRef",
 ]);
 
-const TIER_A_FIELDS: readonly string[] = ["reraNumber", "reraStatus", "priceMin", "priceMax"];
+const TIER_A_FIELDS: readonly string[] = ["reraNumber", "priceMin"];
 
 const TIER_B_FIELDS: readonly string[] = [
   "locality",
   "microMarket",
   "address",
   "googleMapsUrl",
-  "latitude",
-  "longitude",
   "status",
   "category",
   "launchDate",

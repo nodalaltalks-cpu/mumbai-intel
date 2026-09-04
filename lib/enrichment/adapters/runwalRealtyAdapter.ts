@@ -91,11 +91,11 @@ export function extractRunwalRealtyFacts(html: string): SourceFactsMap {
   // Deliberately NOT populated -- confirmed genuinely absent from the real
   // page inspected during Phase 48 (no field/section exists, not a parsing
   // failure): developerGroup (lives on the organization JSON-LD, not this
-  // project's own listing), builder, priceMin/priceMax (this developer does
+  // project's own listing), builder, priceMin (this developer does
   // not publish pricing publicly -- "discuss possession timelines directly"
   // is the closest text found, and it names no actual date), possessionMonth/
-  // possessionYear, reraStatus, reraCertificateUrl, googleMapsUrl,
-  // latitude/longitude, launchDate, actualPossession, constructionPercent,
+  // possessionYear, reraCertificateUrl, googleMapsUrl,
+  // launchDate, actualPossession, constructionPercent,
   // landAreaAcres, totalUnits, totalTowers, amenities (no discrete named
   // list on this page, only a numeric "40+ lifestyle amenities" claim inside
   // the description prose), status, paymentPlanType/Description,

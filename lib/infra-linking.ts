@@ -5,12 +5,15 @@ import { getLocalityNearbyInfra } from "@/lib/admin-queries";
 
 /**
  * Reusable proximity service — computes which InfraAsset rows (schools,
- * hospitals, metro/rail stations, malls…) are near a given point, and keeps
- * Project.infraLinks (ProjectInfra) populated automatically as new projects
- * are saved or new infra gets synced in. This is the automatic counterpart
- * to the existing manual "Nearby places" admin form (lib/actions/project-infra.ts) —
- * both write to the same ProjectInfra table; this one just never touches a
- * row an admin entered by hand.
+ * hospitals, metro/rail stations, malls…) are near a given point. Used by
+ * Locality's own live-computed nearby infra (lib/admin-queries.ts's
+ * getLocalityNearbyInfra). Phase 67 removed Project.latitude/longitude
+ * entirely, so the auto-linking counterpart that used to populate
+ * Project.infraLinks (ProjectInfra) from a project's own coordinates
+ * (`syncProjectNearbyInfra`) was removed with it — it had never fired for any
+ * real project (none has ever had coordinates). The manual "Nearby places"
+ * admin form (lib/actions/project-infra.ts) remains the only way to populate
+ * ProjectInfra for a project.
  */
 
 const DEFAULT_RADIUS_METERS = 3000;
@@ -49,56 +52,6 @@ export async function findNearbyInfraCandidates(
     .sort((a, b) => a.distanceMeters - b.distanceMeters)
     .slice(0, MAX_CANDIDATES)
     .map((c) => ({ ...c, walkMinutes: Math.max(1, Math.round(c.distanceMeters / WALK_METERS_PER_MINUTE)) }));
-}
-
-/**
- * Populates/refreshes a project's ProjectInfra links from its own lat/lng.
- * Best-effort and idempotent: safe to call on every save, and safe to re-run
- * after a new OSM sync brings in infra that didn't exist yet. Never touches
- * a link an admin entered manually (dataSource !== "AI_GENERATED") — only
- * creates new AI_GENERATED links or refreshes ones this same service made.
- */
-export async function syncProjectNearbyInfra(projectId: string): Promise<void> {
-  try {
-    const project = await prisma.project.findUnique({
-      where: { id: projectId },
-      select: { cityId: true, latitude: true, longitude: true },
-    });
-    if (!project || project.latitude === null || project.longitude === null) return;
-
-    const candidates = await findNearbyInfraCandidates(project.cityId, project.latitude, project.longitude);
-
-    const existingLinks = await prisma.projectInfra.findMany({
-      where: { projectId },
-      select: { id: true, infraId: true, dataSource: true },
-    });
-    const existingByInfraId = new Map(existingLinks.map((l) => [l.infraId, l]));
-
-    for (const candidate of candidates) {
-      const existing = existingByInfraId.get(candidate.infraId);
-      if (existing && existing.dataSource !== "AI_GENERATED") continue; // admin-curated — never overwrite
-
-      if (existing) {
-        await prisma.projectInfra.update({
-          where: { id: existing.id },
-          data: { distanceMeters: candidate.distanceMeters, walkMinutes: candidate.walkMinutes },
-        });
-      } else {
-        await prisma.projectInfra.create({
-          data: {
-            projectId,
-            infraId: candidate.infraId,
-            distanceMeters: candidate.distanceMeters,
-            walkMinutes: candidate.walkMinutes,
-            dataSource: "AI_GENERATED",
-          },
-        });
-      }
-    }
-  } catch (error) {
-    // A proximity refresh failing must never fail the project save it's attached to.
-    console.error("[infra-linking] syncProjectNearbyInfra failed for", projectId, error);
-  }
 }
 
 export interface TransactionNearbyInfraItem {

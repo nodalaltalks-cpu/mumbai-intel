@@ -42,7 +42,6 @@ export async function getProjectsForCompare(slugs: string[]): Promise<ComparePro
       status: true,
       category: true,
       priceMinPaise: true,
-      priceMaxPaise: true,
       totalUnits: true,
       constructionPercent: true,
       possessionMonth: true,
@@ -78,10 +77,7 @@ export async function getProjectsForCompare(slugs: string[]): Promise<ComparePro
         localityName: project.locality.name,
         status: STATUS_LABEL[project.status as ProjectStatus],
         category: CATEGORY_LABEL[project.category as PropertyCategory],
-        priceLabel: formatPriceBand(
-          project.priceMinPaise !== null ? Number(project.priceMinPaise) : null,
-          project.priceMaxPaise !== null ? Number(project.priceMaxPaise) : null
-        ),
+        priceLabel: formatPriceBand(project.priceMinPaise !== null ? Number(project.priceMinPaise) : null),
         pricePerSqftLabel: (() => {
           const bands = project.configurations
             .map((c) => (c.priceMinPaise !== null && c.carpetSqft !== null ? Number(c.priceMinPaise) / Number(c.carpetSqft) : null))

@@ -178,9 +178,9 @@ export function extractSunteckFacts(html: string): SourceFactsMap {
   // Deliberately NOT populated -- confirmed genuinely absent/unstructured
   // across every real page inspected in Phase 52: developerGroup/builder
   // (the Organization node is always the umbrella "Sunteck Realty", not a
-  // per-project fact), priceMin/priceMax (no price ever published on these
-  // pages), possessionMonth/possessionYear, reraStatus, reraCertificateUrl,
-  // googleMapsUrl, latitude/longitude, launchDate, actualPossession,
+  // per-project fact), priceMin (no price ever published on these
+  // pages), possessionMonth/possessionYear, reraCertificateUrl,
+  // googleMapsUrl, launchDate, actualPossession,
   // constructionPercent, landAreaAcres, totalUnits, totalTowers,
   // paymentPlanType/Description, specifications, faqs, videoUrl, tour360Url,
   // brochure, documents, category (never separately declared as

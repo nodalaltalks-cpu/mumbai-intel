@@ -74,10 +74,7 @@ export default function ProjectCardsGrid({ projects, isAdmin }: { projects: Proj
 
             <div className="flex items-center justify-between border-t border-border pt-2">
               <span className="font-mono text-xs text-foreground">
-                {formatPriceBand(
-                  project.priceMinPaise !== null ? Number(project.priceMinPaise) : null,
-                  project.priceMaxPaise !== null ? Number(project.priceMaxPaise) : null
-                )}
+                {formatPriceBand(project.priceMinPaise !== null ? Number(project.priceMinPaise) : null)}
               </span>
               {typeof project.constructionPercent === "number" ? (
                 <span className="font-mono text-[11px] text-muted">{project.constructionPercent}%</span>

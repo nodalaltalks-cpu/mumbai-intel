@@ -48,9 +48,7 @@ export async function profileMatchCandidates(interest: UserInterestSnapshot, exc
   if (explicit.budgetMinRupees !== null || explicit.budgetMaxRupees !== null) {
     where.priceMinPaise = { not: null };
     if (explicit.budgetMaxRupees !== null) where.priceMinPaise.lte = BigInt(Math.round(explicit.budgetMaxRupees * 100));
-    if (explicit.budgetMinRupees !== null) {
-      where.priceMaxPaise = { gte: BigInt(Math.round(explicit.budgetMinRupees * 100)) };
-    }
+    if (explicit.budgetMinRupees !== null) where.priceMinPaise.gte = BigInt(Math.round(explicit.budgetMinRupees * 100));
   }
   if (explicit.categories.length > 0) where.category = { in: explicit.categories as Prisma.ProjectWhereInput["category"] extends { in: infer T } ? T : never };
   if (explicit.localityIds.length > 0) where.localityId = { in: explicit.localityIds };
@@ -99,7 +97,7 @@ export async function similarProjectCandidates(interest: UserInterestSnapshot, e
 
   const seeds = await prisma.project.findMany({
     where: { id: { in: seedIds } },
-    select: { id: true, localityId: true, builderId: true, priceMinPaise: true, priceMaxPaise: true },
+    select: { id: true, localityId: true, builderId: true, priceMinPaise: true },
   });
   if (seeds.length === 0) return [];
 

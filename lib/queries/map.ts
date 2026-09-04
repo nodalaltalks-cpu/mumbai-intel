@@ -1,8 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import { ProjectAnalyticsService, TransactionAnalyticsService } from "@/lib/analytics";
-import type { DeveloperMapMarker, InfraMapMarker, LocalityMapMarker, ProjectMapMarker } from "@/lib/map/types";
+import { TransactionAnalyticsService } from "@/lib/analytics";
+import type { InfraMapMarker, LocalityMapMarker } from "@/lib/map/types";
 import { getPublicSession } from "@/lib/public-auth/session";
-import { pickCardImageUrl } from "@/lib/project-meta";
 import { PRIMARY_CITY_SLUG } from "./shared";
 
 /**
@@ -17,52 +16,16 @@ import { PRIMARY_CITY_SLUG } from "./shared";
  * LocalityCard, BuilderCard) — they must be nulled out here too, server-side,
  * before the marker ever reaches MapExplorer/MapCanvas (a "use client" tree),
  * same contract as lib/premium/mask.ts's maskProjectBrochure.
+ *
+ * Phase 67 removed Project.latitude/longitude entirely (never populated for
+ * any real project; no replacement geo field was introduced) — the Project
+ * and Developer map layers had no other position source (a developer's pin
+ * was derived as the centroid of its own projects' coordinates), so both
+ * getProjectMapMarkers/getDeveloperMapMarkers and their marker kinds were
+ * removed with it, per the founder's explicit call rather than leaving dead
+ * UI/queries behind. Locality and Infra markers are unaffected — they use
+ * their own stored geo fields (Locality.centroidLat/Lng, InfraAsset.lat/lng).
  */
-
-export async function getProjectMapMarkers(): Promise<ProjectMapMarker[]> {
-  const session = await getPublicSession();
-  const locked = session === null;
-  const projects = await prisma.project.findMany({
-    where: {
-      city: { slug: PRIMARY_CITY_SLUG },
-      isPublished: true,
-      isArchived: false,
-      latitude: { not: null },
-      longitude: { not: null },
-    },
-    include: {
-      locality: true,
-      builder: true,
-      images: { orderBy: { sortOrder: "asc" }, take: 8 },
-      configurations: { select: { bedrooms: true, carpetSqft: true, priceMinPaise: true } },
-    },
-  });
-
-  return projects.map((p) => {
-    const { configurationSummary, pricePerSqftPaise } = ProjectAnalyticsService.calculateCardFields(p.configurations);
-    return {
-      kind: "project",
-      id: p.id,
-      slug: p.slug,
-      name: p.name,
-      builderName: p.builder?.name ?? null,
-      builderSlug: p.builder?.slug ?? null,
-      builderId: p.builderId,
-      localityName: p.locality.name,
-      localitySlug: p.locality.slug,
-      localityId: p.localityId,
-      status: p.status,
-      category: p.category,
-      bedroomOptions: Array.from(new Set(p.configurations.map((c) => Number(c.bedrooms)))),
-      startingPricePaise: p.priceMinPaise !== null ? Number(p.priceMinPaise) : null,
-      pricePerSqftPaise: locked ? null : pricePerSqftPaise,
-      configurationSummary,
-      imageUrl: pickCardImageUrl(p.images),
-      position: { lat: p.latitude as number, lng: p.longitude as number },
-      locked,
-    };
-  });
-}
 
 export async function getLocalityMapMarkers(): Promise<LocalityMapMarker[]> {
   const session = await getPublicSession();
@@ -111,40 +74,6 @@ export async function getLocalityMapMarkers(): Promise<LocalityMapMarker[]> {
       locked,
     };
   });
-}
-
-/** Builder has no stored geo field, so a developer's map position is derived as the centroid of its own geolocated published projects — builders with none are omitted (Phase 13 spec: "where applicable"). */
-export async function getDeveloperMapMarkers(): Promise<DeveloperMapMarker[]> {
-  const session = await getPublicSession();
-  const locked = session === null;
-  const builders = await prisma.builder.findMany({
-    where: { isPublished: true, isArchived: false },
-    include: {
-      scoreSnapshots: { orderBy: { asOf: "desc" }, take: 1 },
-      projects: {
-        where: { city: { slug: PRIMARY_CITY_SLUG }, isPublished: true, isArchived: false, latitude: { not: null }, longitude: { not: null } },
-        select: { latitude: true, longitude: true },
-      },
-    },
-  });
-
-  return builders
-    .filter((b) => b.projects.length > 0)
-    .map((b) => {
-      const lat = b.projects.reduce((sum, p) => sum + (p.latitude as number), 0) / b.projects.length;
-      const lng = b.projects.reduce((sum, p) => sum + (p.longitude as number), 0) / b.projects.length;
-      return {
-        kind: "developer",
-        id: b.id,
-        slug: b.slug,
-        name: b.name,
-        logoUrl: b.logoUrl,
-        projectCount: b.projects.length,
-        overallScore: locked ? null : b.scoreSnapshots[0] ? Number(b.scoreSnapshots[0].overallScore) : null,
-        position: { lat, lng },
-        locked,
-      };
-    });
 }
 
 /** Not editorial content (no isPublished flag on InfraAsset — it's reference infrastructure, not curated catalog). */

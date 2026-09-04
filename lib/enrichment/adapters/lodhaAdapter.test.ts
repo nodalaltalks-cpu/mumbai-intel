@@ -85,10 +85,9 @@ describe("extractLodhaCullinanFacts (Phase 42 — sixth developer, a sixth disti
     expect(facts.category?.value).toBe("Residential");
   });
 
-  it("4. extracts the real RERA number from the slide-out widget and infers Registered status", () => {
+  it("4. extracts the real RERA number from the slide-out widget", () => {
     const facts = extractLodhaCullinanFacts(buildRealShapedHtml());
     expect(facts.reraNumber?.value).toBe("P51800054551");
-    expect(facts.reraStatus?.value).toBe("Registered");
   });
 
   it("5. extracts the real FAQPage structured data as faqs", () => {
@@ -125,7 +124,6 @@ describe("extractLodhaCullinanFacts (Phase 42 — sixth developer, a sixth disti
   it("10. never fabricates a price, possession date, or developerGroup -- this page publishes none", () => {
     const facts = extractLodhaCullinanFacts(buildRealShapedHtml());
     expect(facts.priceMin).toBeUndefined();
-    expect(facts.priceMax).toBeUndefined();
     expect(facts.possessionMonth).toBeUndefined();
     expect(facts.developerGroup).toBeUndefined();
   });
@@ -133,7 +131,6 @@ describe("extractLodhaCullinanFacts (Phase 42 — sixth developer, a sixth disti
   it("11. missing optional sections -> those fields simply absent, not fabricated (partial page failure tolerance)", () => {
     const facts = extractLodhaCullinanFacts(buildRealShapedHtml({ omit: ["rera", "banner"] }));
     expect(facts.reraNumber).toBeUndefined();
-    expect(facts.reraStatus).toBeUndefined();
     expect(facts.coverImage).toBeUndefined();
     expect(facts.name?.value).toBe("Lodha Cullinan"); // unrelated fields still extracted
   });
@@ -167,7 +164,7 @@ describe("extractLodhaCullinanFacts (Phase 42 — sixth developer, a sixth disti
     expect(byKey("reraNumber").classification).toBe("GREEN_NEW");
     expect(byKey("locality").classification).toBe("YELLOW"); // ambiguous, blank current -> YELLOW
     expect(byKey("priceMin").classification).toBe("MISSING");
-    expect(result).toHaveLength(44);
+    expect(result).toHaveLength(40);
   });
 
   it("15. never leaks Godrej fixture content into a Lodha extraction run", () => {

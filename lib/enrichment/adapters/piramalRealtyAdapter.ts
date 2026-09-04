@@ -199,13 +199,13 @@ export function extractPiramalRealtyFacts(html: string): SourceFactsMap {
   // across all 3 real pages inspected in Phase 54: developerGroup/builder
   // (the Organization/Brand node is always the umbrella "Piramal Realty",
   // not a per-project fact, same discipline as every other curated
-  // developer here), priceMin/priceMax (no offers/price field anywhere in
+  // developer here), priceMin (no offers/price field anywhere in
   // any of the 3 pages' real JSON-LD -- this developer's pages simply never
   // publish a price), possessionMonth/possessionYear (only ever prose
   // inside an FAQ answer per-tower, e.g. "possession expected by November
   // 2028" for one tower and "July 2030" for another on the SAME project --
   // too tower-specific and free-form to collapse into one project-level
-  // month/year without guessing which tower), reraStatus,
+  // month/year without guessing which tower),
   // reraCertificateUrl, googleMapsUrl, launchDate, actualPossession,
   // constructionPercent, landAreaAcres, totalUnits, totalTowers (stated only
   // as narrative prose, e.g. "three high-rise towers", never a clean

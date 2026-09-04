@@ -42,10 +42,7 @@ export interface FieldAutomationResult {
 
 const TRUSTED_SOURCE_TIERS: ReadonlySet<SourceTier> = new Set(["GOVERNMENT", "OFFICIAL_DEVELOPER"]);
 
-/** Small, explicit whitelist — Tier A demands "objectively verifiable"; applyAcceptedField accepts ANY non-empty string for reraStatus (it's a plain DIRECT_STRING_FIELDS passthrough with no format check), so this module adds its own narrow check rather than loosening that shared validator for every other caller. */
-const KNOWN_RERA_STATUS_VALUES = new Set(["registered", "not registered", "expired", "renewed", "extended", "lapsed", "new registration"]);
-
-/** Real examples seen across the 13 live adapters: "P51800080217", "PR1180002600863", "PM1180002501525". Same reasoning as KNOWN_RERA_STATUS_VALUES — applyAcceptedField's DIRECT_STRING_FIELDS passthrough doesn't check RERA number shape at all. */
+/** Real examples seen across the 13 live adapters: "P51800080217", "PR1180002600863", "PM1180002501525". applyAcceptedField's DIRECT_STRING_FIELDS passthrough doesn't check RERA number shape at all, so this module adds its own narrow check rather than loosening that shared validator for every other caller. */
 const RERA_NUMBER_PATTERN = /^[A-Za-z]{1,4}[A-Za-z0-9]{6,}$/;
 
 const MEDIA_FIELD_EXPECTED_EXTENSIONS: Record<string, RegExp> = {
@@ -185,9 +182,6 @@ export function decideFieldAutomation(field: EnrichmentField, context: FieldAuto
   }
 
   if (tier === "A") {
-    if (field.key === "reraStatus" && !KNOWN_RERA_STATUS_VALUES.has(field.proposedValue.trim().toLowerCase())) {
-      return { ...base, decision: "HUMAN_REVIEW", reason: `"${field.proposedValue}" is not a recognized RERA status value — needs a human look.`, tier, tag: "UNRECOGNIZED_VALUE_FORMAT" };
-    }
     if (field.key === "reraNumber" && !RERA_NUMBER_PATTERN.test(field.proposedValue.trim())) {
       return { ...base, decision: "HUMAN_REVIEW", reason: `"${field.proposedValue}" does not match the expected RERA number shape — needs a human look.`, tier, tag: "UNRECOGNIZED_VALUE_FORMAT" };
     }

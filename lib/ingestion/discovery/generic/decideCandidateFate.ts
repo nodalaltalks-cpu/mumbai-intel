@@ -82,7 +82,9 @@ export function decideCandidateFate(
   developerName: string,
   domain: string,
   candidate: CandidatePageResult,
-  localities: ExistingLocalityWithAliases[]
+  localities: ExistingLocalityWithAliases[],
+  /** Phase 67 — lets a non-developer-site caller (e.g. Housiey's secondary-discovery source) tag its own STAGE outputs at the correct, lower trust tier instead of the default. Every existing call site is unaffected (all developer-sitemap discovery genuinely is OFFICIAL_DEVELOPER). */
+  sourceType: SourceTier = "OFFICIAL_DEVELOPER"
 ): CandidateFate {
   if (!candidate.projectNameGuess) {
     return { decision: "EXCLUDED_NO_NAME", reason: "No project name could be extracted from the page (no JSON-LD name, no usable title)." };
@@ -155,8 +157,8 @@ export function decideCandidateFate(
       developerName,
       areaName: best.evidence.text,
       sourceUrl: candidate.url,
-      sourceType: "OFFICIAL_DEVELOPER",
-      discoverySource: `${domain} sitemap — generic discovery (Phase 56, locality evidence: ${best.evidence.source})${reviewNote}`,
+      sourceType,
+      discoverySource: `${domain} ${sourceType === "OFFICIAL_DEVELOPER" ? "sitemap" : "locality page"} — generic discovery (Phase 56, locality evidence: ${best.evidence.source})${reviewNote}`,
       confidence: candidate.confidence,
       reraNumber: candidate.reraNumber ?? undefined,
     },

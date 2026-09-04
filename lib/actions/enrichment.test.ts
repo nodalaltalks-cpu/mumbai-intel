@@ -66,7 +66,6 @@ const GODREJ_PAYLOAD = {
   reraNumber: "PM1180002500076",
   description: "3 BHK, Multistorey Apartment is available for Sale in Andheri West, Mumbai for 8.4 Crore(s)",
   developerGroup: "Godrej Properties Ltd.",
-  priceMaxRupees: 84000000,
   priceMinRupees: 84000000,
   possessionDateIso: "2031-12-01T00:00:00.000Z",
 };
@@ -152,7 +151,7 @@ describe("enrichProjectAction (Phase 29 Part J/K — no writes, no approval, pro
     stagingFindUniqueMock.mockResolvedValue(stagingRecord());
     fetchProjectFactsMock.mockResolvedValue({
       name: { value: "Godrej Skyshore", confidence: "High" },
-      priceMax: { value: "₹11.89 Cr", confidence: "High" },
+      tagline: { value: "A shoreline sanctuary", confidence: "High" },
     });
 
     const result = await enrichProjectAction("stage-1");
@@ -161,8 +160,8 @@ describe("enrichProjectAction (Phase 29 Part J/K — no writes, no approval, pro
     const nameField = result.fields!.find((f) => f.key === "name")!;
     expect(nameField.classification).toBe("CONFLICT");
     expect(nameField.sourceUrl).toBe("https://www.godrejproperties.com/mumbai/residential/godrej-skyshore");
-    const priceMaxField = result.fields!.find((f) => f.key === "priceMax")!;
-    expect(priceMaxField.classification).toBe("GREEN_NEW");
+    const taglineField = result.fields!.find((f) => f.key === "tagline")!;
+    expect(taglineField.classification).toBe("GREEN_NEW");
   });
 
   it("6. adapter throws (network failure / non-OK status) -> SOURCE_UNAVAILABLE, distinct from NO_SOURCE/NO_NEW_INFO", async () => {
@@ -306,7 +305,7 @@ describe("enrichProjectAction persists a compact enrichmentSummary (Phase 46 Par
     stagingFindUniqueMock.mockResolvedValue(stagingRecord());
     fetchProjectFactsMock.mockResolvedValue({
       name: { value: "Godrej Skyshore", confidence: "High" }, // GREEN_NEW/CONFLICT depending on current value
-      priceMax: { value: "₹11.89 Cr", confidence: "High" }, // GREEN_NEW
+      tagline: { value: "A shoreline sanctuary", confidence: "High" }, // GREEN_NEW
     });
     await enrichProjectAction("stage-1");
     const summary = updatedPayload(0).enrichmentSummary as { status: string; outstanding: Record<string, string> };
@@ -665,7 +664,7 @@ describe("acceptEnrichmentFieldAction (Phase 32 — persists ONE accepted field 
 
   it("6. a field never explicitly accepted is not present in the update call -- only the one accepted key changes", async () => {
     stagingFindUniqueMock.mockResolvedValue(stagingRecord());
-    await acceptEnrichmentFieldAction("stage-1", "reraStatus", "Registered");
+    await acceptEnrichmentFieldAction("stage-1", "googleMapsUrl", "https://maps.app.goo.gl/example");
     const payload = updatedPayload();
     expect(payload.reraNumber).toBe(GODREJ_PAYLOAD.reraNumber); // untouched
     expect(payload.priceMinRupees).toBe(GODREJ_PAYLOAD.priceMinRupees); // untouched

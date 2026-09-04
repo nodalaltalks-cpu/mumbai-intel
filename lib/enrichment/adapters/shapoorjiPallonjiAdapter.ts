@@ -203,10 +203,10 @@ export function extractShapoorjiPallonjiFacts(html: string): SourceFactsMap {
   // Deliberately NOT populated -- confirmed genuinely absent/unstructured
   // across every real page inspected in Phase 53: developerGroup/builder (the
   // Brand node is always the umbrella "Shapoorji Pallonji Real Estate", not a
-  // per-project fact), priceMax, possessionMonth/possessionYear (only ever
+  // per-project fact), possessionMonth/possessionYear (only ever
   // prose inside an FAQ answer, e.g. "possession expected by Oct 2030" -- too
   // free-form to parse into a reliable month/year without guessing),
-  // reraStatus, reraCertificateUrl, googleMapsUrl, latitude/longitude,
+  // reraCertificateUrl, googleMapsUrl,
   // launchDate, actualPossession, constructionPercent, landAreaAcres,
   // totalUnits, totalTowers, paymentPlanType (Codename NP 1.2's own "20 X 5
   // Yearly Payment Plan" text doesn't match this codebase's

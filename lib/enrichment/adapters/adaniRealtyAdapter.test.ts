@@ -134,10 +134,9 @@ describe("extractAdaniLinkbayFacts (Phase 31 — second-developer generalization
     expect(facts.microMarket).toBeUndefined();
   });
 
-  it("4. does NOT fabricate priceMin/priceMax -- this page states prices are available on request, no structured price exists", () => {
+  it("4. does NOT fabricate priceMin -- this page states prices are available on request, no structured price exists", () => {
     const facts = extractAdaniLinkbayFacts(buildRealShapedHtml());
     expect(facts.priceMin).toBeUndefined();
-    expect(facts.priceMax).toBeUndefined();
   });
 
   it("5. extracts real possession month/year from the DD/MM/YYYY gallery-icon string, not from the mismapped 'possession' field", () => {
@@ -146,12 +145,10 @@ describe("extractAdaniLinkbayFacts (Phase 31 — second-developer generalization
     expect(facts.possessionYear).toEqual({ value: "2028", confidence: "High" });
   });
 
-  it("6. extracts the real RERA number and certificate URL, and infers 'Registered' status from that structured evidence (not prose)", () => {
+  it("6. extracts the real RERA number and certificate URL", () => {
     const facts = extractAdaniLinkbayFacts(buildRealShapedHtml());
     expect(facts.reraNumber?.value).toBe("P51800047539");
     expect(facts.reraCertificateUrl?.value).toContain("linkbay-residences-rera.ashx");
-    expect(facts.reraStatus?.value).toBe("Registered");
-    expect(facts.reraStatus?.ambiguous).toBeFalsy();
   });
 
   it("7. never extracts a description fact -- same documented exception as Godrej, unchanged", () => {
@@ -237,7 +234,6 @@ describe("extractAdaniLinkbayFacts (Phase 31 — second-developer generalization
       reraNumber: "P51800047539",
       description: "3 BHK, Multistorey Apartment is available for Sale in Andheri West, Mumbai for 6.9 Crore(s)",
       developerGroup: "Adani Realty & RC Group",
-      priceMaxRupees: 69900000,
       priceMinRupees: 44608000,
       possessionDateIso: "2028-10-01T00:00:00.000Z",
     };
@@ -253,8 +249,7 @@ describe("extractAdaniLinkbayFacts (Phase 31 — second-developer generalization
     expect(byKey("developerGroup").classification).toBe("CONFLICT"); // "& RC Group" JV suffix vs real "Adani Realty" alone
     expect(byKey("address").classification).toBe("GREEN_NEW"); // was blank, real value found
     expect(byKey("reraCertificateUrl").classification).toBe("GREEN_NEW");
-    expect(byKey("priceMax").classification).toBe("MISSING"); // real page has no price at all -- correctly not fabricated
-    expect(result).toHaveLength(44);
+    expect(result).toHaveLength(40);
   });
 
   it("16. never leaks Godrej fixture content into an Adani extraction run", () => {

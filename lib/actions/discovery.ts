@@ -23,6 +23,7 @@ import { resolveDeveloperDomain } from "@/lib/enrichment/developerDomainRegistry
 import { discoverDeveloperProjects, type DeveloperDiscoveryResult } from "@/lib/ingestion/discovery/generic/discoverDeveloperProjects";
 import { stageMumbaiDiscoveryCandidates, type DeveloperStagingTally } from "@/lib/ingestion/discovery/generic/stageMumbaiDiscoveryCandidates";
 import { runWithConcurrency } from "@/lib/ingestion/discovery/generic/runWithConcurrency";
+import { discoverHousieyLocalityProjects } from "@/lib/ingestion/discovery/housiey/discoverHousieyLocality";
 
 /**
  * Phase 39 Part H/K — stages a batch of discovery candidates for ONE already-
@@ -499,6 +500,102 @@ export async function runMumbaiDiscoveryBatch(
   };
 }
 
+export interface RunHousieyLocalityResult {
+  batchId: string;
+  localitySlug: string;
+  localityPageFetched: boolean;
+  projectLinksFound: number;
+  pagesFetched: number;
+  pagesFailed: number;
+  totals: DeveloperStagingTally;
+  durationMs: number;
+}
+
+/**
+ * Phase 67 Part 14 — the Housiey secondary-discovery trigger. Deliberately as
+ * narrow as runMumbaiDiscoveryBatch's own "discovery only" scope (Part K):
+ * never approves, never enriches, never creates a real Project, never
+ * overwrites official-developer data. Reuses the EXACT same
+ * stageMumbaiDiscoveryCandidates staging path every other discovery source
+ * already uses -- a Housiey candidate lands in the same Discovery Queue,
+ * subject to the same duplicate-matching against existing candidates AND
+ * existing real projects, for the same founder INCLUDE/EXCLUDE review. Its
+ * only difference from a developer-sitemap batch is `sourceType:
+ * "VERIFIED_THIRD_PARTY"` (Part 12's explicit source-hierarchy placement) and
+ * a per-candidate developerName guess (Housiey lists many developers' own
+ * projects, unlike a single developer's own sitemap).
+ */
+export async function runHousieyLocalityDiscovery(localitySlug: string): Promise<RunHousieyLocalityResult> {
+  const start = Date.now();
+  const session = await requireMutateSession();
+
+  const city = await prisma.city.findUnique({ where: { slug: PRIMARY_CITY_SLUG }, select: { id: true } });
+  if (!city) throw new Error(`Primary city "${PRIMARY_CITY_SLUG}" is not seeded`);
+
+  const housieyResult = await discoverHousieyLocalityProjects(localitySlug, { fetchImpl: fetch, userAgent: DISCOVERY_USER_AGENT });
+
+  const developerResult: DeveloperDiscoveryResult = {
+    developerName: "Unknown (via Housiey)",
+    domain: "housiey.com",
+    robotsFetched: true,
+    disallowsEverythingForAllAgents: false,
+    sitemapsFetched: 0,
+    sitemapsFailed: 0,
+    sitemapPageUrlsFound: housieyResult.projectLinksFound,
+    candidateUrlsIdentified: housieyResult.projectLinksFound,
+    pagesFetched: housieyResult.pagesFetched,
+    pagesFailed: housieyResult.pagesFailed,
+    candidates: housieyResult.candidates,
+    classification: housieyResult.candidates.length > 0 ? "GENERIC_SUCCESS" : "NO_CURRENT_PROJECTS",
+    durationMs: Date.now() - start,
+    sourceType: "VERIFIED_THIRD_PARTY",
+  };
+
+  const batchLabel = `Housiey — ${localitySlug} — ${new Date().toISOString().slice(0, 10)}`;
+  const stageOutcome = await stageMumbaiDiscoveryCandidates({
+    prisma,
+    cityId: city.id,
+    batchLabel,
+    sourceKey: `housiey-locality:${localitySlug}:${Date.now()}`,
+    triggeredByUserId: session.userId,
+    developerResults: [developerResult],
+  });
+
+  const durationMs = Date.now() - start;
+
+  await logAudit(session.userId, "discovery.housiey_locality_run", "IngestBatch", stageOutcome.batchId, {
+    after: {
+      batchLabel,
+      localitySlug,
+      localityPageFetched: housieyResult.localityPageFetched,
+      projectLinksFound: housieyResult.projectLinksFound,
+      pagesFetched: housieyResult.pagesFetched,
+      pagesFailed: housieyResult.pagesFailed,
+      staged: stageOutcome.totals.staged,
+      needsReview: stageOutcome.totals.needsReview,
+      rejectedDuplicate: stageOutcome.totals.rejectedDuplicate,
+      excludedStatus: stageOutcome.totals.excludedStatus,
+      excludedNoName: stageOutcome.totals.excludedNoName,
+      excludedNoLocationText: stageOutcome.totals.excludedNoLocationText,
+      excludedLocationUnresolved: stageOutcome.totals.excludedLocationUnresolved,
+      excludedMmrLocation: stageOutcome.totals.excludedMmrLocation,
+      ambiguousLocation: stageOutcome.totals.ambiguousLocation,
+      durationMs,
+    },
+  });
+
+  return {
+    batchId: stageOutcome.batchId,
+    localitySlug,
+    localityPageFetched: housieyResult.localityPageFetched,
+    projectLinksFound: housieyResult.projectLinksFound,
+    pagesFetched: housieyResult.pagesFetched,
+    pagesFailed: housieyResult.pagesFailed,
+    totals: stageOutcome.totals,
+    durationMs,
+  };
+}
+
 export interface RunMumbaiDiscoveryFormState {
   error?: string;
   result?: RunMumbaiDiscoveryResult;
@@ -516,6 +613,32 @@ export async function runMumbaiDiscoveryFormAction(
   }
   try {
     const result = await runMumbaiDiscoveryBatch(developerNames);
+    return { result };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export interface RunHousieyLocalityFormState {
+  error?: string;
+  result?: RunHousieyLocalityResult;
+}
+
+/** Thin `useActionState`-compatible wrapper around runHousieyLocalityDiscovery — one locality slug per run (Phase 67's "smallest useful POC", per-locality rather than a bulk multi-locality crawl). */
+export async function runHousieyLocalityFormAction(
+  _prev: RunHousieyLocalityFormState,
+  formData: FormData
+): Promise<RunHousieyLocalityFormState> {
+  const raw = String(formData.get("localitySlug") ?? "").trim();
+  const localitySlug = raw
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "");
+  if (!localitySlug) {
+    return { error: "Enter a Housiey locality slug (e.g. \"worli\", \"lower-parel\")." };
+  }
+  try {
+    const result = await runHousieyLocalityDiscovery(localitySlug);
     return { result };
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };

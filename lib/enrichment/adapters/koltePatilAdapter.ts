@@ -99,9 +99,9 @@ export function extractKoltePatilFacts(html: string): SourceFactsMap {
 
   // Deliberately NOT populated -- confirmed genuinely absent from the real
   // page inspected during Phase 47 (no field/section exists, not a parsing
-  // failure): developerGroup, builder, priceMin/priceMax (this page is
-  // "pre-register for offers", no public price shown), reraStatus,
-  // reraCertificateUrl, googleMapsUrl, latitude/longitude, launchDate,
+  // failure): developerGroup, builder, priceMin (this page is
+  // "pre-register for offers", no public price shown),
+  // reraCertificateUrl, googleMapsUrl, launchDate,
   // actualPossession, constructionPercent, landAreaAcres, totalUnits,
   // totalTowers, amenities (no discrete named list on this page), status,
   // paymentPlanType/Description, specifications, faqs, videoUrl, tour360Url,

@@ -31,7 +31,6 @@ import { CheckboxField, Field, FieldGroup, FormError, SelectField, TextareaField
 import RichTextEditor from "./RichTextEditor";
 import SubmitButton from "./SubmitButton";
 import FormTabs, { type FormTab } from "./FormTabs";
-import MapEmbed from "./MapEmbed";
 import AmenitiesPicker, { type AmenityOption } from "./AmenitiesPicker";
 import InlineEntityCreate from "./InlineEntityCreate";
 import ProjectReviewModal, { type ReviewSection } from "./ProjectReviewModal";
@@ -68,8 +67,6 @@ export interface ProjectFormData {
   category: string;
   address: string | null;
   famousLandmark: string | null;
-  latitude: number | null;
-  longitude: number | null;
   googleMapsUrl: string | null;
   launchDate: Date | null;
   promisedPossession: Date | null;
@@ -78,13 +75,11 @@ export interface ProjectFormData {
   possessionYear: number | null;
   constructionPercent: number | null;
   reraNumber: string | null;
-  reraStatus: string | null;
   reraCertificateUrl: string | null;
   totalUnits: number | null;
   totalTowers: number | null;
   landAreaAcres: number | null;
   priceMinPaise: number | null;
-  priceMaxPaise: number | null;
   paymentPlanType: string | null;
   paymentPlanDescription: string | null;
   dataSource: string;
@@ -162,23 +157,6 @@ function toDateInputValue(date: Date | null): string {
   return date ? date.toISOString().slice(0, 10) : "";
 }
 
-/**
- * Extracts lat/lng from a pasted Google Maps link so the OSM MapEmbed preview
- * and infra-linking distance calculations keep working without the admin
- * ever typing coordinates by hand. Tries the common share-link shapes in
- * order; returns null (not thrown) for shortened links (goo.gl/maps/…) that
- * don't expose coordinates — the admin just won't get a map preview for those.
- */
-function parseLatLngFromGoogleMapsUrl(url: string): { lat: number; lng: number } | null {
-  const patterns = [/@(-?\d+\.\d+),(-?\d+\.\d+)/, /[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/, /[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)/, /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/];
-  for (const pattern of patterns) {
-    const match = url.match(pattern);
-    if (match) return { lat: Number(match[1]), lng: Number(match[2]) };
-  }
-  return null;
-}
-
-
 export default function ProjectForm({
   project,
   localities,
@@ -210,19 +188,7 @@ export default function ProjectForm({
   const [isPublishing, startPublishTransition] = useTransition();
   const [publishResult, setPublishResult] = useState<{ success?: string; error?: string } | null>(null);
   const router = useRouter();
-  const [lat, setLat] = useState<number | null>(project?.latitude ?? null);
-  const [lng, setLng] = useState<number | null>(project?.longitude ?? null);
   const [googleMapsUrl, setGoogleMapsUrl] = useState(project?.googleMapsUrl ?? "");
-  // Only updates lat/lng when the pasted link actually parses — never clears
-  // previously-detected coordinates just because a mid-edit link is momentarily unparseable.
-  function handleGoogleMapsUrlChange(value: string) {
-    setGoogleMapsUrl(value);
-    const coords = parseLatLngFromGoogleMapsUrl(value);
-    if (coords) {
-      setLat(coords.lat);
-      setLng(coords.lng);
-    }
-  }
   const [localityOptions, setLocalityOptions] = useState(localities);
   const [builderOptions, setBuilderOptions] = useState(builders);
   const [nameValue, setNameValue] = useState(project?.name ?? "");
@@ -261,11 +227,8 @@ export default function ProjectForm({
   const [paymentPlanType, setPaymentPlanType] = useState(project?.paymentPlanType ?? "");
   const [paymentPlanDescription, setPaymentPlanDescription] = useState(project?.paymentPlanDescription ?? "");
   const initialPriceMin = rupeesToAmountUnit(project?.priceMinPaise !== null && project?.priceMinPaise !== undefined ? Number(project.priceMinPaise) / 100 : null);
-  const initialPriceMax = rupeesToAmountUnit(project?.priceMaxPaise !== null && project?.priceMaxPaise !== undefined ? Number(project.priceMaxPaise) / 100 : null);
   const [priceMinAmount, setPriceMinAmount] = useState(initialPriceMin.amount);
   const [priceMinUnit, setPriceMinUnit] = useState<PriceUnit>(initialPriceMin.unit);
-  const [priceMaxAmount, setPriceMaxAmount] = useState(initialPriceMax.amount);
-  const [priceMaxUnit, setPriceMaxUnit] = useState<PriceUnit>(initialPriceMax.unit);
   const [brochureFileName, setBrochureFileName] = useState<string | null>(null);
   const [brochureCompressing, setBrochureCompressing] = useState(false);
   const [brochureCompressionNote, setBrochureCompressionNote] = useState<string | null>(null);
@@ -323,7 +286,6 @@ export default function ProjectForm({
     const amenityCount = data.getAll("amenityIds").length;
     const highlightsCount = g("highlights").split("\n").map((s) => s.trim()).filter(Boolean).length;
     const priceMin = g("priceMinRupees");
-    const priceMax = g("priceMaxRupees");
 
     setReviewSections([
       {
@@ -353,9 +315,7 @@ export default function ProjectForm({
         title: "Pricing",
         rows: [
           { label: "Price min", value: priceMin ? formatPaise(Number(priceMin) * 100) : "", important: true },
-          { label: "Price max", value: priceMax ? formatPaise(Number(priceMax) * 100) : "" },
           { label: "RERA number", value: g("reraNumber"), important: true },
-          { label: "RERA status", value: g("reraStatus") },
           { label: "RERA certificate link", value: g("reraCertificateUrl") ? "Provided" : "" },
           {
             label: "Payment plan",
@@ -730,23 +690,16 @@ export default function ProjectForm({
           name="googleMapsUrl"
           type="url"
           value={googleMapsUrl}
-          onChange={(e) => handleGoogleMapsUrlChange(e.target.value)}
+          onChange={(e) => setGoogleMapsUrl(e.target.value)}
           placeholder="Open the site in Google Maps → Share → Copy link, then paste it here"
-          hint={
-            lat !== null && lng !== null
-              ? `Coordinates detected: ${lat.toFixed(5)}, ${lng.toFixed(5)}`
-              : "Shown as a direct \"View on Google Maps\" link for users — coordinates for the map preview below are picked up automatically when the link contains them"
-          }
+          hint='Shown as a direct "View on Google Maps" link for users'
         />
-        <input type="hidden" name="latitude" value={lat ?? ""} />
-        <input type="hidden" name="longitude" value={lng ?? ""} />
-        <MapEmbed latitude={lat} longitude={lng} />
       </div>
 
       <div className={activeTab === "pricing" ? "flex flex-col gap-4" : "hidden"}>
         <FieldGroup>
           <PriceAmountField
-            label="Price min"
+            label="Starting price"
             name="priceMinRupees"
             important
             amount={priceMinAmount}
@@ -755,19 +708,9 @@ export default function ProjectForm({
             onUnitChange={setPriceMinUnit}
             rupees={amountUnitToRupees(priceMinAmount, priceMinUnit)}
           />
-          <PriceAmountField
-            label="Price max"
-            name="priceMaxRupees"
-            amount={priceMaxAmount}
-            unit={priceMaxUnit}
-            onAmountChange={setPriceMaxAmount}
-            onUnitChange={setPriceMaxUnit}
-            rupees={amountUnitToRupees(priceMaxAmount, priceMaxUnit)}
-          />
         </FieldGroup>
         <FieldGroup>
           <Field label="RERA number" name="reraNumber" important defaultValue={project?.reraNumber ?? ""} />
-          <Field label="RERA status" name="reraStatus" defaultValue={project?.reraStatus ?? ""} />
         </FieldGroup>
         <Field
           label="RERA Certificate Link"

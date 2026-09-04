@@ -149,8 +149,6 @@ export function buildProjectReviewCompleteness(payload: ProjectImportPayload, co
       field("microMarket", "Micro market", raw.microMarketId, typeof raw.microMarketId === "string" ? raw.microMarketId : null),
       field("address", "Address", payload.address, payload.address ?? null),
       field("googleMapsUrl", "Google Maps link", raw.googleMapsUrl, typeof raw.googleMapsUrl === "string" ? raw.googleMapsUrl : null),
-      field("latitude", "Latitude", payload.latitude, payload.latitude !== undefined ? String(payload.latitude) : null),
-      field("longitude", "Longitude", payload.longitude, payload.longitude !== undefined ? String(payload.longitude) : null),
     ],
   };
 
@@ -160,18 +158,11 @@ export function buildProjectReviewCompleteness(payload: ProjectImportPayload, co
     fields: [
       field(
         "priceMin",
-        "Price min",
+        "Starting price",
         payload.priceMinRupees,
         payload.priceMinRupees !== undefined ? formatPaise(payload.priceMinRupees * 100) : null
       ),
-      field(
-        "priceMax",
-        "Price max",
-        payload.priceMaxRupees,
-        payload.priceMaxRupees !== undefined ? formatPaise(payload.priceMaxRupees * 100) : null
-      ),
       field("reraNumber", "RERA number", payload.reraNumber, payload.reraNumber ?? null, reraReview),
-      field("reraStatus", "RERA status", payload.reraStatus, payload.reraStatus ?? null),
       field(
         "reraCertificateUrl",
         "RERA certificate link",

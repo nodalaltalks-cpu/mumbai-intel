@@ -107,10 +107,9 @@ describe("extractPurvaEstrellaFacts (Phase 42 — fifth developer, first selecte
     expect(facts.microMarket?.value).toBe("Lokhandwala, Andheri (W)");
   });
 
-  it("7. extracts priceMin ONLY from a 'starting from' figure -- never fabricates priceMax", () => {
+  it("7. extracts priceMin from a 'starting from' figure", () => {
     const facts = extractPurvaEstrellaFacts(buildRealShapedHtml());
     expect(facts.priceMin?.value).toBe("₹3.52 Cr");
-    expect(facts.priceMax).toBeUndefined();
   });
 
   it("8. extracts totalTowers from the structured ProjectHighlights.item array", () => {
@@ -137,13 +136,10 @@ describe("extractPurvaEstrellaFacts (Phase 42 — fifth developer, first selecte
   it("12. never fabricates a RERA number -- this page publishes none (confirmed absent, not a parsing failure)", () => {
     const facts = extractPurvaEstrellaFacts(buildRealShapedHtml());
     expect(facts.reraNumber).toBeUndefined();
-    expect(facts.reraStatus).toBeUndefined();
   });
 
   it("13. never fabricates fields genuinely absent from this page (coordinates/gallery/brochure/faqs/video)", () => {
     const facts = extractPurvaEstrellaFacts(buildRealShapedHtml());
-    expect(facts.latitude).toBeUndefined();
-    expect(facts.longitude).toBeUndefined();
     expect(facts.googleMapsUrl).toBeUndefined();
     expect(facts.images).toBeUndefined();
     expect(facts.brochure).toBeUndefined();
@@ -192,9 +188,8 @@ describe("extractPurvaEstrellaFacts (Phase 42 — fifth developer, first selecte
     const byKey = (k: string) => result.find((f) => f.key === k)!;
     expect(byKey("name").classification).toBe("GREEN_NEW");
     expect(byKey("priceMin").classification).toBe("GREEN_NEW");
-    expect(byKey("priceMax").classification).toBe("MISSING");
     expect(byKey("reraNumber").classification).toBe("MISSING");
-    expect(result).toHaveLength(44);
+    expect(result).toHaveLength(40);
   });
 
   it("18. never leaks Godrej fixture content into a Puravankara extraction run", () => {

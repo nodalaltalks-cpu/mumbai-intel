@@ -75,7 +75,7 @@ export async function buildTrainingDataset(periodStart: Date, periodEnd: Date): 
   const projectIds = [...new Set(impressions.map((i) => i.entityId).filter((id): id is string => id !== null))];
   const projects = await prisma.project.findMany({
     where: { id: { in: projectIds } },
-    select: { id: true, localityId: true, priceMinPaise: true, priceMaxPaise: true, createdAt: true, configurations: { select: { bedrooms: true } } },
+    select: { id: true, localityId: true, priceMinPaise: true, createdAt: true, configurations: { select: { bedrooms: true } } },
   });
   const projectById = new Map(projects.map((p) => [p.id, p]));
 
@@ -142,7 +142,6 @@ export async function buildTrainingDataset(periodStart: Date, periodEnd: Date): 
       id: project.id,
       localityId: project.localityId,
       priceMinPaise: project.priceMinPaise !== null ? Number(project.priceMinPaise) : null,
-      priceMaxPaise: project.priceMaxPaise !== null ? Number(project.priceMaxPaise) : null,
       configurationBedrooms: project.configurations.map((c) => Number(c.bedrooms)),
       createdAt: project.createdAt,
     };

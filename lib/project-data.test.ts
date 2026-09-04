@@ -30,14 +30,13 @@ const BASE_PAYLOAD: ProjectImportPayload = {
   reraNumber: "P51800047539",
   description: "3 BHK, Multistorey Apartment is available for Sale in Andheri West, Mumbai for 6.9 Crore(s)",
   developerGroup: "Adani Realty & RC Group",
-  priceMaxRupees: 69900000,
   priceMinRupees: 44608000,
   possessionDateIso: "2028-10-01T00:00:00.000Z",
 };
 
 describe("toProjectSchemaInput — fields already working before Phase 35 (must not regress)", () => {
-  it("maps name, description, localityId, status, category, address, lat/long, RERA number/status, units/towers, price, dataSource, sourceRef", () => {
-    const payload: ProjectImportPayload = { ...BASE_PAYLOAD, builderId: "bldr-1", address: "off New Link Rd", latitude: 19.13, longitude: 72.82, totalUnits: 300, totalTowers: 2, reraStatus: "Registered" };
+  it("maps name, description, localityId, status, category, address, RERA number, units/towers, price, dataSource, sourceRef", () => {
+    const payload: ProjectImportPayload = { ...BASE_PAYLOAD, builderId: "bldr-1", address: "off New Link Rd", totalUnits: 300, totalTowers: 2 };
     const result = toProjectSchemaInput(payload);
     expect(result.name).toBe(payload.name);
     expect(result.description).toBe(payload.description);
@@ -47,14 +46,10 @@ describe("toProjectSchemaInput — fields already working before Phase 35 (must 
     expect(result.status).toBe("UNDER_CONSTRUCTION");
     expect(result.category).toBe("RESIDENTIAL");
     expect(result.address).toBe("off New Link Rd");
-    expect(result.latitude).toBe(19.13);
-    expect(result.longitude).toBe(72.82);
     expect(result.reraNumber).toBe(payload.reraNumber);
-    expect(result.reraStatus).toBe("Registered");
     expect(result.totalUnits).toBe(300);
     expect(result.totalTowers).toBe(2);
     expect(result.priceMinRupees).toBe(payload.priceMinRupees);
-    expect(result.priceMaxRupees).toBe(payload.priceMaxRupees);
     expect(result.dataSource).toBe(payload.dataSource);
     expect(result.sourceRef).toBe(payload.sourceRef);
   });
