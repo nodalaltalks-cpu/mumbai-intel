@@ -33,14 +33,14 @@ import EmptyState from "@/app/components/ui/EmptyState";
  *   NEW           still open, locality resolves fine, not flagged for review
  *                 (DISCOVERED/SOURCE_FOUND -- a genuinely fresh candidate)
  */
-type TriageBucket = "NEEDS_REVIEW" | "NEW" | "INCLUDED" | "EXCLUDED" | "DUPLICATE" | "UNRESOLVED";
+export type TriageBucket = "NEEDS_REVIEW" | "NEW" | "INCLUDED" | "EXCLUDED" | "DUPLICATE" | "UNRESOLVED";
 type StatusFilter = TriageBucket | "ALL";
 type SourceBucket = "DEVELOPER_WEBSITE" | "HOUSIEY" | "OTHER_THIRD_PARTY";
 type SourceFilter = SourceBucket | "ALL";
 
 const INCLUDED_STATUSES: ReadonlySet<DiscoveryStatus> = new Set(["PROJECT_STAGED", "READY_FOR_ENRICHMENT", "ENRICHED"]);
 
-function getTriageBucket(row: DiscoveryCandidateRow): TriageBucket {
+export function getTriageBucket(row: DiscoveryCandidateRow): TriageBucket {
   if (row.status === "EXCLUDED") return "EXCLUDED";
   if (row.status === "REJECTED_DUPLICATE") return "DUPLICATE";
   if (INCLUDED_STATUSES.has(row.status)) return "INCLUDED";

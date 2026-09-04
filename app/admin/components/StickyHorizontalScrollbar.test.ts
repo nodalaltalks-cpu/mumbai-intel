@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shouldShowFloatingScrollbar } from "./StickyHorizontalScrollbar";
+import { shouldShowFloatingScrollbar, isNativeScrollbarReachable } from "./StickyHorizontalScrollbar";
 
 /**
  * Phase 68 — jsdom never computes real layout (scrollWidth/clientWidth are
@@ -30,5 +30,33 @@ describe("shouldShowFloatingScrollbar", () => {
 
   it("shows it once the difference exceeds the sub-pixel tolerance", () => {
     expect(shouldShowFloatingScrollbar(902, 900)).toBe(true);
+  });
+});
+
+/**
+ * Phase 70 — the duplicate-scrollbar fix: the floating bar must not render
+ * whenever the real table wrapper's own native horizontal scrollbar (at its
+ * bottom edge) is already reachable within the viewport, since both would
+ * otherwise be visible at once.
+ */
+describe("isNativeScrollbarReachable", () => {
+  it("is NOT reachable when the wrapper's bottom edge sits below the viewport (the original 'scrollbar out of reach' problem)", () => {
+    expect(isNativeScrollbarReachable(920, 800)).toBe(false);
+  });
+
+  it("is reachable once the wrapper's bottom edge is within the viewport", () => {
+    expect(isNativeScrollbarReachable(600, 800)).toBe(true);
+  });
+
+  it("is reachable exactly at the viewport boundary", () => {
+    expect(isNativeScrollbarReachable(800, 800)).toBe(true);
+  });
+
+  it("tolerates a few pixels of sub-pixel/rounding overshoot as still reachable", () => {
+    expect(isNativeScrollbarReachable(802, 800)).toBe(true);
+  });
+
+  it("is not reachable once it clearly exceeds the tolerance", () => {
+    expect(isNativeScrollbarReachable(810, 800)).toBe(false);
   });
 });

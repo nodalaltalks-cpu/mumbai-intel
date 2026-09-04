@@ -436,6 +436,55 @@ describe("updateDiscoveryCandidateDetails (Phase 59 Part 1 -- founder-editable s
   });
 });
 
+/**
+ * Phase 70 -- regression coverage for the reported "false already-exists
+ * error, then the candidate disappears (i.e. Include actually succeeded)"
+ * bug. Root cause was entirely client-side (DiscoveryCandidateList.tsx never
+ * cleared a PRIOR Include/Exclude/Review error banner when a later edit was
+ * saved, so a stale error from an earlier failed attempt stayed visible
+ * through a subsequent, genuinely successful Include) -- these tests prove
+ * the SERVER side of the sequence was already correct (Include always
+ * re-reads the record fresh from the database by id, never from anything
+ * the client passes in), which is what makes the client-side fix safe: nothing
+ * server-side needed to change to stop weakening duplicate protection.
+ */
+describe("Phase 70 -- edit-then-Include uses the latest saved state, never stale pre-edit data", () => {
+  it("1/4. a candidate renamed away from a real collision succeeds on Include with NO error, using the freshly SAVED name -- not the stale pre-edit one", async () => {
+    // Starts out genuinely colliding with a live Project under its ORIGINAL name.
+    stagingFindUniqueMock.mockResolvedValueOnce(discoveryCandidateRecord({ payload: { projectName: "Godrej Sky Shore" } }) as never);
+    projectFindManyMock.mockResolvedValue([{ id: "proj-1", name: "Godrej Sky Shore", localityId: "loc-andheri-west", reraNumber: null }] as never);
+
+    const editResult = await updateDiscoveryCandidateDetails("cand-1", { projectName: "Godrej Skyline Residences Phase II" });
+    expect(editResult.ok).toBe(true);
+
+    // Simulate the database now reflecting the saved edit, exactly what Include's own fresh read sees.
+    const savedPayload = stagingUpdateMock.mock.calls[0][0].data.payload as Partial<ProjectDiscoveryCandidatePayload>;
+    expect(savedPayload.projectName).toBe("Godrej Skyline Residences Phase II");
+    stagingFindUniqueMock.mockResolvedValueOnce(discoveryCandidateRecord({ payload: savedPayload }) as never);
+
+    const includeResult = await applyDiscoveryFounderAction("cand-1", "INCLUDE");
+    expect(includeResult.ok).toBe(true);
+    expect(includeResult.error).toBeUndefined();
+    expect(stagingCreateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("2. a genuine duplicate is still correctly refused even immediately after an unrelated edit -- duplicate protection is not weakened by this fix", async () => {
+    stagingFindUniqueMock.mockResolvedValueOnce(discoveryCandidateRecord({ payload: { projectName: "Godrej Sky Shore", founderStatusNote: null } }) as never);
+    projectFindManyMock.mockResolvedValue([{ id: "proj-1", name: "Godrej Sky Shore", localityId: "loc-andheri-west", reraNumber: null }] as never);
+
+    // An edit that does NOT resolve the collision (only adds a status note).
+    const editResult = await updateDiscoveryCandidateDetails("cand-1", { founderStatusNote: "Confirmed via site visit" });
+    expect(editResult.ok).toBe(true);
+    const savedPayload = stagingUpdateMock.mock.calls[0][0].data.payload as Partial<ProjectDiscoveryCandidatePayload>;
+    stagingFindUniqueMock.mockResolvedValueOnce(discoveryCandidateRecord({ payload: savedPayload }) as never);
+
+    const includeResult = await applyDiscoveryFounderAction("cand-1", "INCLUDE");
+    expect(includeResult.ok).toBe(false);
+    expect(includeResult.error).toContain("already exists");
+    expect(stagingCreateMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("Phase 59 Part 2 -- a founder decision is never a one-way door", () => {
   it("EXCLUDE -> INCLUDE: a previously-excluded candidate can be included later, once new information appears", async () => {
     stagingFindUniqueMock.mockResolvedValue(discoveryCandidateRecord({ status: "EXCLUDED" }) as never);

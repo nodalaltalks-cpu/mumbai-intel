@@ -136,7 +136,6 @@ interface EditDraft {
   projectName: string;
   developerName: string;
   areaName: string;
-  sourceUrl: string;
   officialDeveloperUrl: string;
   founderStatusNote: string;
   founderDecisionNote: string;
@@ -147,7 +146,6 @@ function draftFromPayload(p: ProjectDiscoveryCandidatePayload): EditDraft {
     projectName: p.projectName,
     developerName: p.developerName,
     areaName: p.areaName,
-    sourceUrl: p.sourceUrl,
     officialDeveloperUrl: p.officialDeveloperUrl ?? "",
     founderStatusNote: p.founderStatusNote ?? "",
     founderDecisionNote: p.founderDecisionNote ?? "",
@@ -246,7 +244,6 @@ export default function DiscoveryCandidateList({
     if (draft.projectName !== original.projectName) edits.projectName = draft.projectName;
     if (draft.developerName !== original.developerName) edits.developerName = draft.developerName;
     if (draft.areaName !== original.areaName) edits.areaName = draft.areaName;
-    if (draft.sourceUrl !== original.sourceUrl) edits.sourceUrl = draft.sourceUrl;
     if (draft.officialDeveloperUrl !== original.officialDeveloperUrl) edits.officialDeveloperUrl = draft.officialDeveloperUrl;
     if (draft.founderStatusNote !== original.founderStatusNote) edits.founderStatusNote = draft.founderStatusNote;
     if (draft.founderDecisionNote !== original.founderDecisionNote) edits.founderDecisionNote = draft.founderDecisionNote;
@@ -261,6 +258,13 @@ export default function DiscoveryCandidateList({
     setEditSaving(null);
     if (result.ok) {
       setEditErrors((prev) => ({ ...prev, [row.id]: "" }));
+      // Phase 70 — a saved edit can change exactly what would make an
+      // earlier Include/Exclude/Review attempt's error message accurate
+      // (e.g. renaming away from a real duplicate). Leaving that stale
+      // error visible made a genuinely successful Include right afterward
+      // look like it had just failed, even though the error predates this
+      // save and has nothing to do with the click that follows it.
+      setErrors((prev) => ({ ...prev, [row.id]: "" }));
       closeEdit();
       router.refresh();
     } else {
@@ -308,7 +312,6 @@ export default function DiscoveryCandidateList({
             <th className="px-3 py-2 text-left">Project</th>
             <th className="px-3 py-2 text-left">Developer</th>
             <th className="px-3 py-2 text-left">Area</th>
-            <th className="px-3 py-2 text-left">Project page (B)</th>
             <th className="px-3 py-2 text-left">Discovery source</th>
             <th className="px-3 py-2 text-left">Developer website (A)</th>
             <th className="px-3 py-2 text-left">Confidence</th>
@@ -342,11 +345,6 @@ export default function DiscoveryCandidateList({
                   <td className="px-3 py-2 align-top text-foreground">{p.projectName}</td>
                   <td className="px-3 py-2 align-top text-foreground">{p.developerName}</td>
                   <td className="px-3 py-2 align-top text-muted">{p.areaName}</td>
-                  <td className="px-3 py-2 align-top">
-                    <a href={p.sourceUrl} target="_blank" rel="noreferrer" className="break-all text-accent hover:underline">
-                      {p.sourceUrl}
-                    </a>
-                  </td>
                   <td className="px-3 py-2 align-top text-muted">
                     {p.discoverySource}
                     <br />
@@ -398,16 +396,23 @@ export default function DiscoveryCandidateList({
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"
-                          disabled={busy || status === "PROJECT_STAGED" || status === "REJECTED_DUPLICATE" || duplicateInfo.blocksInclude}
+                          disabled={busy || isEditing || status === "PROJECT_STAGED" || status === "REJECTED_DUPLICATE" || duplicateInfo.blocksInclude}
                           onClick={() => handleAction(row, "INCLUDE")}
-                          title={duplicateInfo.blocksInclude ? duplicateInfo.explanation ?? undefined : undefined}
+                          title={
+                            isEditing
+                              ? "Save or cancel your edits first — Include always acts on the saved record, never an in-progress edit."
+                              : duplicateInfo.blocksInclude
+                                ? (duplicateInfo.explanation ?? undefined)
+                                : undefined
+                          }
                           className="rounded-sm border border-positive/40 px-2 py-0.5 text-[10px] font-mono uppercase text-positive hover:bg-positive/10 disabled:opacity-50"
                         >
                           ✓ Include
                         </button>
                         <button
                           type="button"
-                          disabled={busy}
+                          disabled={busy || isEditing}
+                          title={isEditing ? "Save or cancel your edits first." : undefined}
                           onClick={() => handleAction(row, "EXCLUDE")}
                           className="rounded-sm border border-negative/40 px-2 py-0.5 text-[10px] font-mono uppercase text-negative hover:bg-negative/10 disabled:opacity-50"
                         >
@@ -415,7 +420,8 @@ export default function DiscoveryCandidateList({
                         </button>
                         <button
                           type="button"
-                          disabled={busy}
+                          disabled={busy || isEditing}
+                          title={isEditing ? "Save or cancel your edits first." : undefined}
                           onClick={() => handleAction(row, "REVIEW")}
                           className="rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-accent hover:text-accent disabled:opacity-50"
                         >
@@ -441,7 +447,7 @@ export default function DiscoveryCandidateList({
                 </tr>
                 {isEditing && draft ? (
                   <tr key={`${row.id}-edit`} className="border-b border-border bg-surface-raised last:border-b-0">
-                    <td colSpan={10} className="px-3 py-3">
+                    <td colSpan={9} className="px-3 py-3">
                       <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
                         <label className="flex flex-col gap-1">
                           <span className="text-[10px] uppercase tracking-wide text-muted">Project name</span>
@@ -464,18 +470,6 @@ export default function DiscoveryCandidateList({
                           <input className={inputClass} value={draft.areaName} onChange={(e) => updateDraft(row.id, { areaName: e.target.value })} />
                         </label>
                         <label className="flex flex-col gap-1 md:col-span-2">
-                          <span className="text-[10px] uppercase tracking-wide text-muted">
-                            Project page URL (B) — the project&rsquo;s own page, e.g. https://gurukruparealcon.com/projects/gurukrupa-darshanam
-                          </span>
-                          <input
-                            className={inputClass}
-                            type="url"
-                            placeholder="https://…"
-                            value={draft.sourceUrl}
-                            onChange={(e) => updateDraft(row.id, { sourceUrl: e.target.value })}
-                          />
-                        </label>
-                        <label className="flex flex-col gap-1">
                           <span className="text-[10px] uppercase tracking-wide text-muted">
                             Developer website (A) — the developer&rsquo;s homepage, e.g. https://gurukruparealcon.com/
                           </span>

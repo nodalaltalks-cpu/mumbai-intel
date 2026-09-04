@@ -21,6 +21,20 @@ import { useEffect, useRef, useState, type RefObject } from "react";
  * still on screen, then scrolls away normally once the founder scrolls past
  * the table entirely — never a permanent overlay on top of real content.
  *
+ * Phase 70 — the real table wrapper's OWN native horizontal scrollbar was
+ * never hidden, so whenever its bottom edge (where that native scrollbar
+ * lives) was ALSO already visible in the viewport at the same time as this
+ * bar — a short filtered row set, a tall/zoomed-out browser window, or after
+ * scrolling far enough down the page — both were on screen at once: two
+ * visible horizontal scrollbar tracks stacked on top of each other. Rather
+ * than hiding the native scrollbar with browser-specific CSS (no per-axis
+ * `scrollbar-width`, and `overflow-x: hidden` would also silently disable
+ * the founder's own trackpad/shift-wheel horizontal scroll gestures on the
+ * table itself — Requirement: preserve native horizontal scrolling), this
+ * bar now tracks the wrapper's own on-screen position and simply doesn't
+ * render itself whenever the real native scrollbar is already reachable —
+ * the two controls are mutually exclusive, never both visible at once.
+ *
  * Bidirectional sync: scrolling either the real table or this strip updates
  * the other's `scrollLeft`. A one-directional "which side is driving" guard
  * (`syncSourceRef`) avoids feedback ping-pong between the two scroll
@@ -31,6 +45,11 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 /** Pure — extracted so the show/hide threshold is unit-testable without a real DOM (jsdom never computes real layout metrics). The +1 tolerance absorbs sub-pixel rounding some browsers introduce between scrollWidth and clientWidth for content that otherwise exactly fits. */
 export function shouldShowFloatingScrollbar(scrollWidth: number, clientWidth: number): boolean {
   return scrollWidth > clientWidth + 1;
+}
+
+/** Pure — true once the wrapper's own bottom edge (where its native horizontal scrollbar sits) is already within the visible viewport, i.e. the founder could reach it without any further scrolling. A few pixels of tolerance absorb sub-pixel layout rounding. */
+export function isNativeScrollbarReachable(wrapperBottom: number, viewportHeight: number, tolerance = 4): boolean {
+  return wrapperBottom <= viewportHeight + tolerance;
 }
 
 export default function StickyHorizontalScrollbar({
@@ -56,6 +75,7 @@ export default function StickyHorizontalScrollbar({
   const [visible, setVisible] = useState(false);
   /** Which side is currently driving a sync, so the other side's own scroll listener doesn't immediately bounce the update back and forth. */
   const syncSourceRef = useRef<"table" | "bar" | null>(null);
+  const measureRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     const target = targetRef.current;
@@ -63,16 +83,26 @@ export default function StickyHorizontalScrollbar({
 
     function measure() {
       if (!target) return;
+      const overflows = shouldShowFloatingScrollbar(target.scrollWidth, target.clientWidth);
+      const nativeReachable = isNativeScrollbarReachable(target.getBoundingClientRect().bottom, window.innerHeight);
       setScrollWidth(target.scrollWidth);
-      setVisible(shouldShowFloatingScrollbar(target.scrollWidth, target.clientWidth));
+      setVisible(overflows && !nativeReachable);
     }
+    measureRef.current = measure;
     measure();
 
-    // Requirement 7 — window/container resizes.
+    // Requirement 7 — window/container resizes; also affects whether the native
+    // scrollbar's own position is now on- or off-screen.
     const resizeObserver = new ResizeObserver(measure);
     resizeObserver.observe(target);
     const inner = target.firstElementChild;
     if (inner) resizeObserver.observe(inner);
+
+    // The wrapper's on-screen position changes as the PAGE scrolls (its internal
+    // vertical scroll never moves the box itself) — window scroll/resize are the
+    // only signals for that, neither of which ResizeObserver covers.
+    window.addEventListener("scroll", measure, { passive: true });
+    window.addEventListener("resize", measure);
 
     function onTargetScroll() {
       if (syncSourceRef.current === "bar") return;
@@ -84,6 +114,8 @@ export default function StickyHorizontalScrollbar({
 
     return () => {
       resizeObserver.disconnect();
+      window.removeEventListener("scroll", measure);
+      window.removeEventListener("resize", measure);
       target.removeEventListener("scroll", onTargetScroll);
     };
   }, [targetRef]);
@@ -91,10 +123,7 @@ export default function StickyHorizontalScrollbar({
   // Requirement 7 — filter/row-set changes: re-measure explicitly rather than relying solely on
   // ResizeObserver, which doesn't reliably fire for a table's content-only width changes.
   useEffect(() => {
-    const target = targetRef.current;
-    if (!target) return;
-    setScrollWidth(target.scrollWidth);
-    setVisible(shouldShowFloatingScrollbar(target.scrollWidth, target.clientWidth));
+    measureRef.current();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watch]);
 
