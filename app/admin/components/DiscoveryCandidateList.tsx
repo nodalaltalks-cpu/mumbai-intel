@@ -1,8 +1,9 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Badge, { type BadgeTone } from "@/app/components/ui/Badge";
+import StickyHorizontalScrollbar from "./StickyHorizontalScrollbar";
 import { formatDate } from "@/lib/format";
 import type { DiscoveryFounderAction } from "@/lib/ingestion/discovery/statusTransitions";
 import type {
@@ -178,6 +179,7 @@ export default function DiscoveryCandidateList({
   onEdit: (id: string, edits: DiscoveryCandidateEditInput) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const router = useRouter();
+  const tableScrollRef = useRef<HTMLDivElement>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [localStatus, setLocalStatus] = useState<Record<string, DiscoveryStatus>>({});
@@ -260,7 +262,8 @@ export default function DiscoveryCandidateList({
   }
 
   return (
-    <div className="max-h-[70vh] overflow-auto rounded-sm border border-border">
+    <>
+    <div ref={tableScrollRef} className="max-h-[70vh] overflow-auto rounded-sm border border-border">
       <table className="w-full min-w-[1200px] border-collapse text-xs">
         <thead className="sticky top-0 z-10 bg-surface-raised">
           <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted">
@@ -492,5 +495,7 @@ export default function DiscoveryCandidateList({
         </tbody>
       </table>
     </div>
+    <StickyHorizontalScrollbar targetRef={tableScrollRef} watch={rows.map((r) => r.id).join(",")} />
+    </>
   );
 }
