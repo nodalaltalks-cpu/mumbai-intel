@@ -7,7 +7,8 @@ import { applyDiscoveryFounderAction, updateDiscoveryCandidateDetails } from "@/
 import { computeLiveDuplicateStatuses } from "@/lib/ingestion/discovery/liveDuplicateStatus";
 import type { DiscoveryStatus, ProjectDiscoveryCandidatePayload } from "@/lib/ingestion/discovery/types";
 import type { ProjectImportPayload } from "@/lib/ingestion/connectors/fileImport/types";
-import DiscoveryCandidateList, { type DiscoveryCandidateRow } from "@/app/admin/components/DiscoveryCandidateList";
+import { type DiscoveryCandidateRow } from "@/app/admin/components/DiscoveryCandidateList";
+import DiscoveryTriagePanel from "@/app/admin/components/DiscoveryTriagePanel";
 import MumbaiDiscoveryRunForm from "@/app/admin/components/MumbaiDiscoveryRunForm";
 import HousieyLocalityRunForm from "@/app/admin/components/HousieyLocalityRunForm";
 import EmptyState from "@/app/components/ui/EmptyState";
@@ -93,7 +94,7 @@ export default async function ProjectDiscoveryPage() {
       {rows.length === 0 ? (
         <EmptyState title="No discovery candidates yet" message="Run a discovery batch for an area to populate this list." />
       ) : (
-        <DiscoveryCandidateList rows={rows} onAction={applyDiscoveryFounderAction} onEdit={updateDiscoveryCandidateDetails} />
+        <DiscoveryTriagePanel rows={rows} onAction={applyDiscoveryFounderAction} onEdit={updateDiscoveryCandidateDetails} />
       )}
     </div>
   );
