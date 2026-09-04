@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { PRIMARY_CITY_SLUG } from "@/lib/queries";
 import { applyDiscoveryFounderAction, updateDiscoveryCandidateDetails } from "@/lib/actions/discovery";
 import { computeLiveDuplicateStatuses } from "@/lib/ingestion/discovery/liveDuplicateStatus";
+import { resolveSavedDeveloperWebsite, type BuilderForWebsiteLookup } from "@/lib/enrichment/developerWebsite";
 import type { DiscoveryStatus, ProjectDiscoveryCandidatePayload } from "@/lib/ingestion/discovery/types";
 import type { ProjectImportPayload } from "@/lib/ingestion/connectors/fileImport/types";
 import { type DiscoveryCandidateRow } from "@/app/admin/components/DiscoveryCandidateList";
@@ -60,18 +61,29 @@ export default async function ProjectDiscoveryPage() {
   const city = await prisma.city.findUnique({ where: { slug: PRIMARY_CITY_SLUG }, select: { id: true } });
   const liveDuplicateByCandidateId = city ? await computeLiveDuplicateStatuses(prisma, city.id, openCandidates) : new Map();
 
+  // Phase 69 — the canonical developer website already lives on the existing
+  // Builder model (websiteUrl); resolve each row's free-text developerName
+  // against it (exact match only, same discipline Include's own builder
+  // resolution already uses) so the edit panel can offer "Use saved website"
+  // instead of the founder re-pasting the same URL on every project.
+  const builders: BuilderForWebsiteLookup[] = await prisma.builder.findMany({
+    select: { id: true, name: true, legalNames: true, reraNumber: true, websiteUrl: true },
+  });
+
   const rows: DiscoveryCandidateRow[] = records.map((r) => {
     const live = liveDuplicateByCandidateId.get(r.id) ?? null;
+    const payload = r.payload as unknown as ProjectDiscoveryCandidatePayload;
     return {
       id: r.id,
       status: r.status as DiscoveryStatus,
-      payload: r.payload as unknown as ProjectDiscoveryCandidatePayload,
+      payload,
       matchedExistingName: r.matchedExistingId ? (matchedNameById.get(r.matchedExistingId) ?? null) : null,
       liveDuplicateStatus: live?.duplicateStatus ?? null,
       liveDuplicateMatch: live?.match ?? null,
       createdAt: r.createdAt.toISOString(),
       /** Phase 59 — non-null once a founder has made ANY Include/Exclude/Review decision on this row, used to decide whether changing it now needs a confirmation. */
       reviewedAt: r.reviewedAt ? r.reviewedAt.toISOString() : null,
+      savedDeveloperWebsite: resolveSavedDeveloperWebsite(payload.developerName, builders),
     };
   });
 

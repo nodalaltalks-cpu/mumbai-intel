@@ -12,6 +12,7 @@ import { ensureUniqueSlug, slugify } from "@/lib/slug";
 import { deleteImageByPublicId, publicIdFromUrl } from "@/lib/cloudinary";
 import { logAudit } from "@/lib/audit";
 import { emit } from "@/lib/events";
+import { normalizeWebsiteUrl } from "@/lib/enrichment/developerWebsite";
 import { friendlyPrismaError, updateManyByRow } from "./errors";
 
 const emptyToUndefined = (v: unknown) => (v === "" || v === null || v === undefined ? undefined : v);
@@ -297,6 +298,54 @@ export async function updateBuilderAction(
 
   await emit("BuilderUpdated", { builderId, slug, actorId: session.userId, before: existing, after: nextData });
   redirect("/admin/builders?saved=1");
+}
+
+export interface SaveDeveloperWebsiteResult {
+  ok: boolean;
+  error?: string;
+  websiteUrl?: string;
+}
+
+/**
+ * Phase 69 — the narrow, purpose-built write behind the Discovery Queue's
+ * "Save to Developer" / "Update Developer Website" action. Deliberately NOT
+ * a call into updateBuilderAction above (that action requires a full form
+ * submit — every Builder field plus a redirect to /admin/builders — which is
+ * the wrong shape for a single-field inline save from another page). Updates
+ * ONLY Builder.websiteUrl, the SAME canonical field the full Builder edit
+ * form already writes, via the same emit("BuilderUpdated", ...) path that
+ * form's own updateBuilderAction uses — its subscribers (audit + cache) are
+ * what actually log the AuditLog row and revalidate the builder's pages, so
+ * this action deliberately does NOT call logAudit/revalidateBuilder directly
+ * itself (that would double them).
+ */
+export async function saveDeveloperWebsiteAction(builderId: string, rawUrl: string): Promise<SaveDeveloperWebsiteResult> {
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { ok: false, error: "You don't have permission to do this." };
+  }
+
+  const normalized = normalizeWebsiteUrl(rawUrl);
+  if (!normalized) return { ok: false, error: "Enter a valid http(s) website URL." };
+
+  const existing = await prisma.builder.findUnique({ where: { id: builderId }, select: { slug: true, websiteUrl: true } });
+  if (!existing) return { ok: false, error: "Builder not found." };
+
+  try {
+    await prisma.builder.update({ where: { id: builderId }, data: { websiteUrl: normalized } });
+  } catch (error) {
+    return { ok: false, error: friendlyPrismaError(error) };
+  }
+
+  await emit("BuilderUpdated", {
+    builderId,
+    slug: existing.slug,
+    actorId: session.userId,
+    before: { websiteUrl: existing.websiteUrl },
+    after: { websiteUrl: normalized },
+  });
+
+  return { ok: true, websiteUrl: normalized };
 }
 
 /** Moves a builder to Trash — forces unpublished+archived so every existing public query already excludes it. ADMIN-only. */

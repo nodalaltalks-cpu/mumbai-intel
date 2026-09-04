@@ -13,6 +13,8 @@ import type {
   ProjectDiscoveryCandidatePayload,
 } from "@/lib/ingestion/discovery/types";
 import type { DiscoveryCandidateEditInput } from "@/lib/actions/discovery";
+import { saveDeveloperWebsiteAction } from "@/lib/actions/builders";
+import type { SavedDeveloperWebsite } from "@/lib/enrichment/developerWebsite";
 
 export interface DiscoveryCandidateRow {
   id: string;
@@ -25,6 +27,8 @@ export interface DiscoveryCandidateRow {
   createdAt: string;
   /** Phase 59 — non-null once a founder has made ANY Include/Exclude/Review decision on this row — used to decide whether changing the decision now needs a confirmation. */
   reviewedAt: string | null;
+  /** Phase 69 — this row's developerName resolved (EXACT match only) against the existing Builder registry's own websiteUrl. Null means either no matching Builder exists yet, or one exists with no saved website — see `builderId` presence to distinguish (the edit panel checks this directly). */
+  savedDeveloperWebsite: SavedDeveloperWebsite | null;
 }
 
 const STATUS_TONE: Record<DiscoveryStatus, BadgeTone> = {
@@ -190,6 +194,9 @@ export default function DiscoveryCandidateList({
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [editSaving, setEditSaving] = useState<string | null>(null);
 
+  const [savingWebsiteId, setSavingWebsiteId] = useState<string | null>(null);
+  const [websiteErrors, setWebsiteErrors] = useState<Record<string, string>>({});
+
   async function handleAction(row: DiscoveryCandidateRow, action: DiscoveryFounderAction) {
     const currentDecision = decisionForStatus(localStatus[row.id] ?? row.status).label;
     const targetDecision = ACTION_DECISION_LABEL[action];
@@ -258,6 +265,37 @@ export default function DiscoveryCandidateList({
       router.refresh();
     } else {
       setEditErrors((prev) => ({ ...prev, [row.id]: result.error ?? "Could not save these changes." }));
+    }
+  }
+
+  /**
+   * Phase 69 — writes the current draft's officialDeveloperUrl to the
+   * developer's CANONICAL Builder.websiteUrl (Requirement 3/6), a genuinely
+   * separate write from `saveEdit` above (that one persists only THIS
+   * candidate's own field via the existing per-candidate edit path,
+   * Requirement 7). Requires explicit confirmation when overwriting an
+   * already-saved, different value — never a silent overwrite (Requirement 6).
+   */
+  async function saveDeveloperWebsite(row: DiscoveryCandidateRow) {
+    const draft = drafts[row.id];
+    const saved = row.savedDeveloperWebsite;
+    if (!draft || !saved) return;
+
+    if (saved.websiteUrl && saved.websiteUrl !== draft.officialDeveloperUrl) {
+      const confirmed = window.confirm(
+        `${saved.builderName} already has a saved website (${saved.websiteUrl}). Update it to "${draft.officialDeveloperUrl}" for every project by this developer?`
+      );
+      if (!confirmed) return;
+    }
+
+    setSavingWebsiteId(row.id);
+    const result = await saveDeveloperWebsiteAction(saved.builderId, draft.officialDeveloperUrl);
+    setSavingWebsiteId(null);
+    if (result.ok) {
+      setWebsiteErrors((prev) => ({ ...prev, [row.id]: "" }));
+      router.refresh();
+    } else {
+      setWebsiteErrors((prev) => ({ ...prev, [row.id]: result.error ?? "Could not save the developer website." }));
     }
   }
 
@@ -441,6 +479,28 @@ export default function DiscoveryCandidateList({
                           <span className="text-[10px] uppercase tracking-wide text-muted">
                             Developer website (A) — the developer&rsquo;s homepage, e.g. https://gurukruparealcon.com/
                           </span>
+                          {row.savedDeveloperWebsite ? (
+                            row.savedDeveloperWebsite.websiteUrl ? (
+                              <select
+                                className={inputClass}
+                                value={draft.officialDeveloperUrl === row.savedDeveloperWebsite.websiteUrl ? "saved" : "custom"}
+                                onChange={(e) => {
+                                  if (e.target.value === "saved" && row.savedDeveloperWebsite?.websiteUrl) {
+                                    updateDraft(row.id, { officialDeveloperUrl: row.savedDeveloperWebsite.websiteUrl });
+                                  }
+                                }}
+                              >
+                                <option value="custom">Enter a different URL below…</option>
+                                <option value="saved">Use saved website — {row.savedDeveloperWebsite.websiteUrl}</option>
+                              </select>
+                            ) : (
+                              <p className="text-[10px] text-muted">No saved website for {row.savedDeveloperWebsite.builderName} yet.</p>
+                            )
+                          ) : (
+                            <p className="text-[10px] text-muted">
+                              No matching Builder record for &ldquo;{draft.developerName}&rdquo; — this website will only apply to this candidate.
+                            </p>
+                          )}
                           <input
                             className={inputClass}
                             type="url"
@@ -448,6 +508,27 @@ export default function DiscoveryCandidateList({
                             value={draft.officialDeveloperUrl}
                             onChange={(e) => updateDraft(row.id, { officialDeveloperUrl: e.target.value })}
                           />
+                          {row.savedDeveloperWebsite ? (
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={
+                                  savingWebsiteId === row.id ||
+                                  !draft.officialDeveloperUrl ||
+                                  draft.officialDeveloperUrl === row.savedDeveloperWebsite.websiteUrl
+                                }
+                                onClick={() => saveDeveloperWebsite(row)}
+                                className="w-fit rounded-sm border border-accent/40 px-2 py-0.5 text-[10px] font-mono uppercase text-accent hover:bg-accent/10 disabled:opacity-50"
+                              >
+                                {savingWebsiteId === row.id
+                                  ? "Saving…"
+                                  : row.savedDeveloperWebsite.websiteUrl
+                                    ? "Update Developer Website"
+                                    : "Save to Developer"}
+                              </button>
+                              {websiteErrors[row.id] ? <span className="text-[10px] text-negative">{websiteErrors[row.id]}</span> : null}
+                            </div>
+                          ) : null}
                         </label>
                         <label className="flex flex-col gap-1 md:col-span-3">
                           <span className="text-[10px] uppercase tracking-wide text-muted">Status note (optional) — what you found about its real-world status</span>
