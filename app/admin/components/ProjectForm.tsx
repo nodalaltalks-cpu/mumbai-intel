@@ -15,15 +15,12 @@ import {
   CATEGORY_LABEL,
   CONFIDENCE_LEVELS,
   DATA_SOURCES,
-  PAYMENT_PLAN_TYPES,
-  PAYMENT_PLAN_TYPE_DEFAULT_DESCRIPTION,
   PAYMENT_PLAN_TYPE_LABEL,
   POSSESSION_MONTH_LABEL,
   PROJECT_STATUSES,
   PROPERTY_CATEGORIES,
   SOURCE_LABEL,
   STATUS_LABEL,
-  type PaymentPlanType,
 } from "@/lib/project-meta";
 import { formatBytes, formatPaise } from "@/lib/format";
 import { compressPdfFile } from "@/lib/pdf-compress";
@@ -34,7 +31,7 @@ import FormTabs, { type FormTab } from "./FormTabs";
 import AmenitiesPicker, { type AmenityOption } from "./AmenitiesPicker";
 import InlineEntityCreate from "./InlineEntityCreate";
 import ProjectReviewModal, { type ReviewSection } from "./ProjectReviewModal";
-import { createBuilderInlineAction } from "@/lib/actions/builders";
+import { createBuilderInlineAction, saveDeveloperSpokespersonAction, saveDeveloperWebsiteAction } from "@/lib/actions/builders";
 import { createLocalityInlineAction } from "@/lib/actions/localities";
 import { createMicroMarketInlineAction } from "@/lib/actions/micromarkets";
 import type { ConfigurationRow } from "./ConfigurationsManager";
@@ -46,7 +43,6 @@ import type { FaqRow } from "./ProjectFaqsManager";
 import type { SectionRow } from "./ProjectSectionsManager";
 import type { ProjectDocumentRow } from "./DocumentsManager";
 import ProgressIndicator from "./ProgressIndicator";
-import CoverImageUploader from "./CoverImageUploader";
 import type { ProjectImageItem } from "./ImageUploader";
 import PriceAmountField from "./PriceAmountField";
 import { rupeesToAmountUnit, amountUnitToRupees, type PriceUnit } from "@/lib/price-units";
@@ -117,39 +113,58 @@ export interface LocalityOption extends SelectOption {
   microMarkets: SelectOption[];
 }
 
+/** Phase 68 — the canonical developer website/spokesperson travel with the select list itself (see getBuildersForSelect) so the Developer tab can show/reuse them the instant a builder is picked. */
+export interface BuilderOption extends SelectOption {
+  websiteUrl: string | null;
+  spokespersonName: string | null;
+  spokespersonDesignation: string | null;
+}
+
 const initialState: ProjectFormState = {};
 
+/**
+ * Phase 68 — simplified from 9 tabs to 7 groups matching the founder-facing
+ * field model (PROJECT / PRICING & CONFIGURATION / REGULATORY / INTELLIGENCE
+ * / MEDIA / DEVELOPER / a slim PUBLISHING). Every field this phase moved out
+ * of the visible UI (tagline, Google Maps URL, payment plan, launch date,
+ * actual possession, construction %, land area, total units/towers, video/360
+ * URLs, SEO meta, trending/luxury/affordable, data source/confidence/source
+ * ref) still round-trips through the form as a hidden input carrying its
+ * EXISTING value unchanged — buildProjectData()/prisma.project.update writes
+ * every one of these keys unconditionally on every save, so simply removing
+ * a field from the DOM would silently null out real historical data. Nothing
+ * is deleted from the database; it just stops being editable from this form.
+ */
 const TABS: FormTab[] = [
-  { id: "general", label: "General" },
-  { id: "location", label: "Location" },
-  { id: "pricing", label: "Pricing" },
-  { id: "construction", label: "Construction" },
-  { id: "amenities", label: "Amenities" },
-  { id: "description", label: "Description" },
+  { id: "project", label: "Project" },
+  { id: "pricing", label: "Pricing & Configuration" },
+  { id: "regulatory", label: "Regulatory" },
+  { id: "intelligence", label: "Intelligence" },
   { id: "media", label: "Media" },
-  { id: "seo", label: "SEO" },
+  { id: "developer", label: "Developer" },
   { id: "publishing", label: "Publishing" },
 ];
 
 /**
- * Client-side mirror of lib/project-completion.ts's section list — kept in
- * sync by hand (the server module is server-only and can't be imported from
- * a Client Component) so the live indicator never drifts from what actually
- * gets persisted. Status/Category are deliberately NOT part of this list:
- * both are `<select>`s that always have SOME value once rendered, so
- * counting "has a value" would count their default as user-entered data —
- * exactly the bug that made a brand-new project start at 17% instead of 0%.
+ * Client-side mirror of the server's own completion logic — kept in sync by
+ * hand (server module is server-only) so the live indicator never drifts
+ * from what actually gets persisted. Phase 68 — rebuilt around the NEW
+ * simplified minimum: the "40/40" philosophy is gone; this now checks only
+ * whether the fields that still matter for a genuinely useful public page
+ * are present (Requirement: "determine the exact minimum required fields").
+ * Status/Category are deliberately excluded from any single check the same
+ * way they always were: both are `<select>`s that always have SOME value
+ * once rendered, so counting "has a value" would count their default as
+ * user-entered data.
  */
 type ProgressSection = { key: string; check: (data: FormData, ctx: { amenityCount: number; imageCount: number }) => boolean };
 
 const PROGRESS_SECTIONS: ProgressSection[] = [
-  { key: "general", check: (d) => Boolean(d.get("name")) && Boolean(d.get("description")) },
-  { key: "location", check: (d) => Boolean(d.get("localityId")) && Boolean(d.get("address")) },
-  { key: "pricing", check: (d) => Boolean(d.get("priceMinRupees")) && Boolean(d.get("reraNumber")) },
-  { key: "construction", check: (d) => Boolean(d.get("launchDate")) && Boolean(d.get("totalUnits")) },
-  { key: "amenities", check: (_d, ctx) => ctx.amenityCount > 0 },
-  { key: "media", check: (d, ctx) => ctx.imageCount > 0 || Boolean(d.get("videoUrl")) || Boolean(d.get("tour360Url")) },
-  { key: "seo", check: (d) => Boolean(d.get("metaTitle")) && Boolean(d.get("metaDescription")) },
+  { key: "project", check: (d) => Boolean(d.get("name")) && Boolean(d.get("localityId")) && Boolean(d.get("address")) },
+  { key: "pricing", check: (d) => Boolean(d.get("priceMinRupees")) },
+  { key: "regulatory", check: (d) => Boolean(d.get("reraNumber")) },
+  { key: "intelligence", check: (d) => Boolean(d.get("description")) },
+  { key: "media", check: (_d, ctx) => ctx.imageCount > 0 },
   { key: "publishing", check: (d) => d.get("isPublished") === "on" },
 ];
 
@@ -168,9 +183,9 @@ export default function ProjectForm({
 }: {
   project?: ProjectFormData;
   localities: LocalityOption[];
-  builders: SelectOption[];
+  builders: BuilderOption[];
   amenities: AmenityOption[];
-  /** Images live in a separate table, not this form's own fields — passed in so CoverImageUploader/ImageUploader and the Media section's completion count work correctly. Always empty for a not-yet-created project. */
+  /** Images live in a separate table, not this form's own fields — passed in so the Media section's completion count works correctly. Always empty for a not-yet-created project. */
   images?: ProjectImageItem[];
   imageCount?: number;
   /** Only meaningful (and only ever passed) on the edit page — gates the Publish button below,
@@ -181,14 +196,13 @@ export default function ProjectForm({
   const resolvedImageCount = imageCount ?? images.length;
   const action = project ? updateProjectAction.bind(null, project.id) : createProjectAction;
   const [state, formAction] = useActionState(action, initialState);
-  const [activeTab, setActiveTab] = useState("general");
+  const [activeTab, setActiveTab] = useState("project");
   const [progress, setProgress] = useState(project?.completionPercent ?? 0);
   const [underReview, setUnderReview] = useState(Boolean(project?.submittedForReviewAt));
   const [isReviewPending, startReviewTransition] = useTransition();
   const [isPublishing, startPublishTransition] = useTransition();
   const [publishResult, setPublishResult] = useState<{ success?: string; error?: string } | null>(null);
   const router = useRouter();
-  const [googleMapsUrl, setGoogleMapsUrl] = useState(project?.googleMapsUrl ?? "");
   const [localityOptions, setLocalityOptions] = useState(localities);
   const [builderOptions, setBuilderOptions] = useState(builders);
   const [nameValue, setNameValue] = useState(project?.name ?? "");
@@ -218,14 +232,6 @@ export default function ProjectForm({
         ? String(new Date(project.promisedPossession).getFullYear())
         : ""
   );
-  // Native <input type="date"> pickers make jumping back to an old year painful (repeated
-  // stepper clicks / month-by-month calendar navigation) -- this companion Year select lets
-  // the admin land on e.g. 2005 in one click, updating the same underlying date value.
-  const [launchDate, setLaunchDate] = useState(toDateInputValue(project?.launchDate ?? null));
-  const [actualPossession, setActualPossession] = useState(toDateInputValue(project?.actualPossession ?? null));
-  const launchDateYearOptions = Array.from({ length: new Date().getFullYear() + 2 - 2000 + 1 }, (_, i) => 2000 + i).reverse();
-  const [paymentPlanType, setPaymentPlanType] = useState(project?.paymentPlanType ?? "");
-  const [paymentPlanDescription, setPaymentPlanDescription] = useState(project?.paymentPlanDescription ?? "");
   const initialPriceMin = rupeesToAmountUnit(project?.priceMinPaise !== null && project?.priceMinPaise !== undefined ? Number(project.priceMinPaise) / 100 : null);
   const [priceMinAmount, setPriceMinAmount] = useState(initialPriceMin.amount);
   const [priceMinUnit, setPriceMinUnit] = useState<PriceUnit>(initialPriceMin.unit);
@@ -267,6 +273,77 @@ export default function ProjectForm({
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewSections, setReviewSections] = useState<ReviewSection[]>([]);
 
+  // ── Phase 68 — Developer Website / Spokesperson reuse ──────────────────
+  // Deliberately separate persistence from the main form save (same "explicit
+  // founder approval required to change" discipline as the Discovery Queue's
+  // own developer-website reuse, lib/actions/builders.ts's saveDeveloperWebsiteAction) —
+  // these two mini-forms call their own server actions directly and never
+  // silently overwrite the canonical Builder row as a side effect of saving
+  // unrelated project fields.
+  const selectedBuilder = builderOptions.find((b) => b.id === selectedBuilderId) ?? null;
+  const [developerWebsiteDraft, setDeveloperWebsiteDraft] = useState(selectedBuilder?.websiteUrl ?? "");
+  const [websiteSaving, setWebsiteSaving] = useState(false);
+  const [websiteError, setWebsiteError] = useState<string | null>(null);
+  const [spokespersonNameDraft, setSpokespersonNameDraft] = useState(selectedBuilder?.spokespersonName ?? "");
+  const [spokespersonDesignationDraft, setSpokespersonDesignationDraft] = useState(selectedBuilder?.spokespersonDesignation ?? "");
+  const [spokespersonSaving, setSpokespersonSaving] = useState(false);
+  const [spokespersonError, setSpokespersonError] = useState<string | null>(null);
+  const lastSyncedBuilderIdRef = useRef(selectedBuilderId);
+
+  // Re-sync the drafts whenever the founder switches which developer is selected — never
+  // while they're still editing the SAME developer's draft (that would clobber their typing).
+  if (lastSyncedBuilderIdRef.current !== selectedBuilderId) {
+    lastSyncedBuilderIdRef.current = selectedBuilderId;
+    // eslint-disable-next-line react-hooks/set-state-in-render -- syncing local draft state to a prop-derived value on selection change, not a side effect
+    setDeveloperWebsiteDraft(selectedBuilder?.websiteUrl ?? "");
+    // eslint-disable-next-line react-hooks/set-state-in-render
+    setSpokespersonNameDraft(selectedBuilder?.spokespersonName ?? "");
+    // eslint-disable-next-line react-hooks/set-state-in-render
+    setSpokespersonDesignationDraft(selectedBuilder?.spokespersonDesignation ?? "");
+    setWebsiteError(null);
+    setSpokespersonError(null);
+  }
+
+  async function handleSaveDeveloperWebsite() {
+    if (!selectedBuilder) return;
+    const trimmed = developerWebsiteDraft.trim();
+    if (!trimmed) return;
+    if (selectedBuilder.websiteUrl && selectedBuilder.websiteUrl !== trimmed) {
+      const confirmed = window.confirm(
+        `${selectedBuilder.name} already has a saved website (${selectedBuilder.websiteUrl}). Update it to "${trimmed}" for every project by this developer?`
+      );
+      if (!confirmed) return;
+    }
+    setWebsiteSaving(true);
+    setWebsiteError(null);
+    const result = await saveDeveloperWebsiteAction(selectedBuilder.name, trimmed);
+    setWebsiteSaving(false);
+    if (result.ok && result.websiteUrl) {
+      setBuilderOptions((prev) => prev.map((b) => (b.id === selectedBuilder.id ? { ...b, websiteUrl: result.websiteUrl! } : b)));
+      router.refresh();
+    } else {
+      setWebsiteError(result.error ?? "Could not save the developer website.");
+    }
+  }
+
+  async function handleSaveSpokesperson() {
+    if (!selectedBuilder) return;
+    setSpokespersonSaving(true);
+    setSpokespersonError(null);
+    const result = await saveDeveloperSpokespersonAction(selectedBuilder.id, spokespersonNameDraft, spokespersonDesignationDraft);
+    setSpokespersonSaving(false);
+    if (result.ok) {
+      const nextName = spokespersonNameDraft.trim() || null;
+      const nextDesignation = spokespersonDesignationDraft.trim() || null;
+      setBuilderOptions((prev) =>
+        prev.map((b) => (b.id === selectedBuilder.id ? { ...b, spokespersonName: nextName, spokespersonDesignation: nextDesignation } : b))
+      );
+      router.refresh();
+    } else {
+      setSpokespersonError(result.error ?? "Could not save the spokesperson.");
+    }
+  }
+
   function recomputeProgress() {
     if (!formRef.current) return;
     const data = new FormData(formRef.current);
@@ -289,70 +366,46 @@ export default function ProjectForm({
 
     setReviewSections([
       {
-        title: "General",
+        title: "Project",
         rows: [
           { label: "Project Name", value: g("name"), important: true },
           { label: "Slug", value: g("slug") },
-          { label: "Tagline", value: g("tagline") },
           { label: "Builder", value: builderName || "No builder" },
-          { label: "Developer group", value: g("developerGroup") },
-          { label: "Status", value: g("status") ? label(STATUS_LABEL, g("status")) : "" },
-          { label: "Category", value: g("category") ? label(CATEGORY_LABEL, g("category")) : "" },
-          { label: "Highlights", value: highlightsCount ? `${highlightsCount} listed` : "" },
-        ],
-      },
-      {
-        title: "Location",
-        rows: [
           { label: "Locality", value: localityName, important: true },
           { label: "Micro market", value: microMarketName },
+          { label: "Status", value: g("status") ? label(STATUS_LABEL, g("status")) : "" },
+          { label: "Category", value: g("category") ? label(CATEGORY_LABEL, g("category")) : "" },
           { label: "Address", value: g("address"), important: true },
-          { label: "Famous Landmark", value: g("famousLandmark") },
-          { label: "Google Maps Link", value: g("googleMapsUrl") ? "Provided" : "" },
         ],
       },
       {
-        title: "Pricing",
+        title: "Pricing & Configuration",
         rows: [
-          { label: "Price min", value: priceMin ? formatPaise(Number(priceMin) * 100) : "", important: true },
-          { label: "RERA number", value: g("reraNumber"), important: true },
-          { label: "RERA certificate link", value: g("reraCertificateUrl") ? "Provided" : "" },
-          {
-            label: "Payment plan",
-            value: g("paymentPlanType") ? label(PAYMENT_PLAN_TYPE_LABEL, g("paymentPlanType")) : "",
-          },
+          { label: "Starting price", value: priceMin ? formatPaise(Number(priceMin) * 100) : "", important: true },
           { label: "Unit configurations", value: project?.configurations.length ? `${project.configurations.length} saved` : "" },
-          { label: "Payment milestones", value: project?.paymentMilestones.length ? `${project.paymentMilestones.length} saved` : "" },
         ],
       },
       {
-        title: "Construction",
+        title: "Regulatory",
         rows: [
-          { label: "Launch date", value: g("launchDate"), important: true },
+          { label: "RERA number", value: g("reraNumber"), important: true },
           {
             label: "Possession",
             value: g("possessionMonth") && g("possessionYear") ? `${POSSESSION_MONTH_LABEL[Number(g("possessionMonth"))]} ${g("possessionYear")}` : "",
           },
-          { label: "Actual possession", value: g("actualPossession") },
-          { label: "Construction complete", value: g("constructionPercent") ? `${g("constructionPercent")}%` : "" },
-          { label: "Land area", value: g("landAreaAcres") ? `${g("landAreaAcres")} acres` : "" },
-          { label: "Total units", value: g("totalUnits"), important: true },
-          { label: "Total towers", value: g("totalTowers") },
         ],
       },
       {
-        title: "Amenities",
-        rows: [{ label: "Selected", value: amenityCount ? `${amenityCount} amenities` : "", important: true }],
-      },
-      {
-        title: "Description",
-        rows: [{ label: "Description", value: g("description") ? "Provided" : "", important: true }],
+        title: "Intelligence",
+        rows: [
+          { label: "Description", value: g("description") ? "Provided" : "", important: true },
+          { label: "Highlights", value: highlightsCount ? `${highlightsCount} listed` : "" },
+          { label: "Amenities", value: amenityCount ? `${amenityCount} amenities` : "" },
+        ],
       },
       {
         title: "Media",
         rows: [
-          { label: "Video URL", value: g("videoUrl") },
-          { label: "360° tour URL", value: g("tour360Url") },
           ...(!project
             ? [
                 { label: "Cover image", value: coverImageFileName ?? "", important: true },
@@ -363,11 +416,10 @@ export default function ProjectForm({
         ],
       },
       {
-        title: "SEO",
+        title: "Developer",
         rows: [
-          { label: "Meta title", value: g("metaTitle"), important: true },
-          { label: "Meta description", value: g("metaDescription"), important: true },
-          { label: "OG image URL", value: g("ogImageUrl") },
+          { label: "Website", value: selectedBuilder?.websiteUrl ? "Saved" : "" },
+          { label: "Spokesperson", value: selectedBuilder?.spokespersonName ?? "" },
         ],
       },
       {
@@ -375,12 +427,6 @@ export default function ProjectForm({
         rows: [
           { label: "Published", value: data.get("isPublished") === "on" ? "Yes" : "No", important: true },
           { label: "Featured", value: data.get("isFeatured") === "on" ? "Yes" : "No" },
-          { label: "Trending", value: data.get("isTrending") === "on" ? "Yes" : "No" },
-          { label: "Luxury", value: data.get("isLuxury") === "on" ? "Yes" : "No" },
-          { label: "Affordable", value: data.get("isAffordable") === "on" ? "Yes" : "No" },
-          { label: "Data source", value: g("dataSource") ? label(SOURCE_LABEL, g("dataSource")) : "" },
-          { label: "Confidence", value: g("confidence") },
-          { label: "Source reference", value: g("sourceRef") },
         ],
       },
     ]);
@@ -442,8 +488,8 @@ export default function ProjectForm({
       <FormError message={state.error} />
 
       <p className="rounded-sm border border-accent/30 bg-accent/5 px-3 py-2 text-[11px] text-muted">
-        Fields marked <span className="text-negative">*</span> are important. If the information genuinely isn&apos;t
-        available yet, type <span className="font-mono text-foreground">NA</span> instead of leaving it blank.
+        Fields marked <span className="text-negative">*</span> are important. Everything else is optional — leave it
+        blank if it isn&apos;t available yet.
       </p>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -504,7 +550,8 @@ export default function ProjectForm({
 
       <FormTabs tabs={TABS} active={activeTab} onChange={setActiveTab} />
 
-      <div className={activeTab === "general" ? "flex flex-col gap-4" : "hidden"}>
+      {/* ── PROJECT ── */}
+      <div className={activeTab === "project" ? "flex flex-col gap-4" : "hidden"}>
         <FieldGroup>
           <Field
             label="Project Name"
@@ -543,11 +590,10 @@ export default function ProjectForm({
             ) : null}
           </div>
         </FieldGroup>
-        <Field label="Tagline" name="tagline" defaultValue={project?.tagline ?? ""} placeholder="One-line pitch" />
         <FieldGroup>
           <div>
-            <SelectField label="Builder (optional)" name="builderId" value={selectedBuilderId} onChange={(e) => setSelectedBuilderId(e.target.value)}>
-              <option value="">No builder</option>
+            <SelectField label="Developer (optional)" name="builderId" value={selectedBuilderId} onChange={(e) => setSelectedBuilderId(e.target.value)}>
+              <option value="">No developer</option>
               {builderOptions.map((builder) => (
                 <option key={builder.id} value={builder.id}>
                   {builder.name}
@@ -555,56 +601,17 @@ export default function ProjectForm({
               ))}
             </SelectField>
             <InlineEntityCreate
-              label="Builder"
+              label="Developer"
               action={async (name) => {
                 const result = await createBuilderInlineAction(name);
                 return result;
               }}
               onCreated={({ id, name }) => {
-                setBuilderOptions((prev) => [...prev, { id, name }]);
+                setBuilderOptions((prev) => [...prev, { id, name, websiteUrl: null, spokespersonName: null, spokespersonDesignation: null }]);
                 setSelectedBuilderId(id);
               }}
             />
           </div>
-          <Field label="Developer group (optional)" name="developerGroup" defaultValue={project?.developerGroup ?? ""} placeholder="SPV / holding entity, if different" />
-        </FieldGroup>
-        <FieldGroup>
-          <SelectField label="Status" name="status" important defaultValue={project?.status ?? ""}>
-            {!project ? (
-              <option value="" disabled>
-                Select a status
-              </option>
-            ) : null}
-            {PROJECT_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {STATUS_LABEL[status]}
-              </option>
-            ))}
-          </SelectField>
-          <SelectField label="Category" name="category" important defaultValue={project?.category ?? ""}>
-            {!project ? (
-              <option value="" disabled>
-                Select a category
-              </option>
-            ) : null}
-            {PROPERTY_CATEGORIES.map((category) => (
-              <option key={category} value={category}>
-                {CATEGORY_LABEL[category]}
-              </option>
-            ))}
-          </SelectField>
-        </FieldGroup>
-        <TextareaField
-          label="Highlights (one per line)"
-          name="highlights"
-          defaultValue={project?.highlights.join("\n") ?? ""}
-          placeholder={"5 min walk to metro\nSea-facing corner units\nRERA registered"}
-          hint="Short bullet differentiators shown near the top of the detail page"
-        />
-      </div>
-
-      <div className={activeTab === "location" ? "flex flex-col gap-4" : "hidden"}>
-        <FieldGroup>
           <div>
             <SelectField
               label="Locality"
@@ -638,6 +645,8 @@ export default function ProjectForm({
               }}
             />
           </div>
+        </FieldGroup>
+        <FieldGroup>
           <div>
             <SelectField
               label="Micro market (optional)"
@@ -676,26 +685,44 @@ export default function ProjectForm({
               <p className="mt-1 text-[11px] text-muted">Select a locality first to add a micro market.</p>
             )}
           </div>
+          <div />
+        </FieldGroup>
+        <FieldGroup>
+          <SelectField label="Status" name="status" important defaultValue={project?.status ?? ""}>
+            {!project ? (
+              <option value="" disabled>
+                Select a status
+              </option>
+            ) : null}
+            {PROJECT_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {STATUS_LABEL[status]}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField label="Category" name="category" important defaultValue={project?.category ?? ""}>
+            {!project ? (
+              <option value="" disabled>
+                Select a category
+              </option>
+            ) : null}
+            {PROPERTY_CATEGORIES.map((category) => (
+              <option key={category} value={category}>
+                {CATEGORY_LABEL[category]}
+              </option>
+            ))}
+          </SelectField>
         </FieldGroup>
         <Field label="Address" name="address" important defaultValue={project?.address ?? ""} />
-        <Field
-          label="Famous Landmark"
-          name="famousLandmark"
-          defaultValue={project?.famousLandmark ?? ""}
-          placeholder="e.g. Near R City Mall, 5 minutes from BKC, Opposite Phoenix Marketcity"
-          hint="Optional — helps a buyer instantly place the project without parsing the full address."
-        />
-        <Field
-          label="Google Maps Link"
-          name="googleMapsUrl"
-          type="url"
-          value={googleMapsUrl}
-          onChange={(e) => setGoogleMapsUrl(e.target.value)}
-          placeholder="Open the site in Google Maps → Share → Copy link, then paste it here"
-          hint='Shown as a direct "View on Google Maps" link for users'
-        />
+
+        {/* Deprioritized fields — hidden from the founder form, values preserved unchanged on every save. */}
+        <input type="hidden" name="tagline" defaultValue={project?.tagline ?? ""} />
+        <input type="hidden" name="developerGroup" defaultValue={project?.developerGroup ?? ""} />
+        <input type="hidden" name="famousLandmark" defaultValue={project?.famousLandmark ?? ""} />
+        <input type="hidden" name="googleMapsUrl" defaultValue={project?.googleMapsUrl ?? ""} />
       </div>
 
+      {/* ── PRICING & CONFIGURATION ── */}
       <div className={activeTab === "pricing" ? "flex flex-col gap-4" : "hidden"}>
         <FieldGroup>
           <PriceAmountField
@@ -709,111 +736,23 @@ export default function ProjectForm({
             rupees={amountUnitToRupees(priceMinAmount, priceMinUnit)}
           />
         </FieldGroup>
-        <FieldGroup>
-          <Field label="RERA number" name="reraNumber" important defaultValue={project?.reraNumber ?? ""} />
-        </FieldGroup>
-        <Field
-          label="RERA Certificate Link"
-          name="reraCertificateUrl"
-          type="url"
-          defaultValue={project?.reraCertificateUrl ?? ""}
-          placeholder="Link to this project's registration on the official MahaRERA site"
-          hint="Shown as a direct link on the Project Detail Page — the government record of this project's RERA commitment, not just the number"
-        />
-        <SelectField
-          label="Payment Plan Type"
-          name="paymentPlanType"
-          value={paymentPlanType}
-          onChange={(e) => {
-            const next = e.target.value as PaymentPlanType | "";
-            setPaymentPlanType(next);
-            // Auto-fills the description with a sensible default — still just a starting
-            // value in a normal textarea, so the admin can edit it (e.g. the actual
-            // "10:80:10" split) without it fighting back on every keystroke.
-            if (next && !paymentPlanDescription.trim()) {
-              setPaymentPlanDescription(PAYMENT_PLAN_TYPE_DEFAULT_DESCRIPTION[next]);
-            }
-          }}
-        >
-          <option value="">Not set</option>
-          {PAYMENT_PLAN_TYPES.map((type) => (
-            <option key={type} value={type}>
-              {PAYMENT_PLAN_TYPE_LABEL[type]}
-            </option>
-          ))}
-        </SelectField>
-        <TextareaField
-          label="Payment Plan Description"
-          name="paymentPlanDescription"
-          value={paymentPlanDescription}
-          onChange={(e) => setPaymentPlanDescription(e.target.value)}
-          placeholder="Shown in the Payment Plan info tooltip on the Project Card and detail page"
-          hint="Auto-filled from the selected type — edit freely, e.g. to record the actual split (10:80:10)"
-        />
+        {project ? (
+          <p className="text-xs text-muted">
+            Unit configurations (2 BHK, 3 BHK…) and their own price bands are managed in the Configurations card below
+            this form, after you save.
+          </p>
+        ) : (
+          <p className="text-xs text-muted">Unit configurations can be added once this project is created.</p>
+        )}
+
+        {/* Deprioritized fields — hidden, values preserved unchanged. */}
+        <input type="hidden" name="paymentPlanType" defaultValue={project?.paymentPlanType ?? ""} />
+        <input type="hidden" name="paymentPlanDescription" defaultValue={project?.paymentPlanDescription ?? ""} />
       </div>
 
-      <div className={activeTab === "construction" ? "flex flex-col gap-4" : "hidden"}>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="flex flex-col gap-1.5">
-            <Field
-              label="Launch date"
-              name="launchDate"
-              type="date"
-              important
-              value={launchDate}
-              onChange={(e) => setLaunchDate(e.target.value)}
-            />
-            <label className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-wide text-muted">Jump to year</span>
-              <select
-                value={launchDate ? launchDate.slice(0, 4) : ""}
-                onChange={(e) => {
-                  const year = e.target.value;
-                  if (!year) return;
-                  const [, month, day] = (launchDate || "-01-01").split("-");
-                  setLaunchDate(`${year}-${month || "01"}-${day || "01"}`);
-                }}
-                className="rounded-sm border border-border bg-surface px-2 py-1 text-xs text-foreground focus:border-accent focus:outline-none"
-              >
-                <option value="">Select year…</option>
-                {launchDateYearOptions.map((year) => (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Field
-              label="Actual possession"
-              name="actualPossession"
-              type="date"
-              value={actualPossession}
-              onChange={(e) => setActualPossession(e.target.value)}
-            />
-            <label className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-wide text-muted">Jump to year</span>
-              <select
-                value={actualPossession ? actualPossession.slice(0, 4) : ""}
-                onChange={(e) => {
-                  const year = e.target.value;
-                  if (!year) return;
-                  const [, month, day] = (actualPossession || "-01-01").split("-");
-                  setActualPossession(`${year}-${month || "01"}-${day || "01"}`);
-                }}
-                className="rounded-sm border border-border bg-surface px-2 py-1 text-xs text-foreground focus:border-accent focus:outline-none"
-              >
-                <option value="">Select year…</option>
-                {launchDateYearOptions.map((year) => (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        </div>
+      {/* ── REGULATORY ── */}
+      <div className={activeTab === "regulatory" ? "flex flex-col gap-4" : "hidden"}>
+        <Field label="RERA number" name="reraNumber" important defaultValue={project?.reraNumber ?? ""} />
         <div>
           <span className="text-[11px] uppercase tracking-wide text-muted">Possession</span>
           <div className="mt-1.5 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -846,38 +785,21 @@ export default function ProjectForm({
             <span className="font-mono text-foreground">
               {possessionMonth && possessionYear ? `${POSSESSION_MONTH_LABEL[Number(possessionMonth)]} ${possessionYear}` : "—"}
             </span>
-            {" · "}Shown as-is on the Project Card, Project Detail Page, search results and Featured Projects — no
-            quarters, ever.
           </p>
         </div>
-        <FieldGroup>
-          <Field label="Construction complete (%)" name="constructionPercent" type="number" min={0} max={100} defaultValue={project?.constructionPercent ?? ""} />
-          <Field label="Land area (acres)" name="landAreaAcres" type="number" step="any" defaultValue={project?.landAreaAcres ?? ""} />
-        </FieldGroup>
-        <FieldGroup>
-          <Field label="Total units" name="totalUnits" type="number" min={0} important defaultValue={project?.totalUnits ?? ""} />
-          <Field label="Total towers" name="totalTowers" type="number" min={0} defaultValue={project?.totalTowers ?? ""} />
-        </FieldGroup>
+
+        {/* Deprioritized fields — hidden, values preserved unchanged. */}
+        <input type="hidden" name="reraCertificateUrl" defaultValue={project?.reraCertificateUrl ?? ""} />
+        <input type="hidden" name="launchDate" defaultValue={toDateInputValue(project?.launchDate ?? null)} />
+        <input type="hidden" name="actualPossession" defaultValue={toDateInputValue(project?.actualPossession ?? null)} />
+        <input type="hidden" name="constructionPercent" defaultValue={project?.constructionPercent ?? ""} />
+        <input type="hidden" name="landAreaAcres" defaultValue={project?.landAreaAcres ?? ""} />
+        <input type="hidden" name="totalUnits" defaultValue={project?.totalUnits ?? ""} />
+        <input type="hidden" name="totalTowers" defaultValue={project?.totalTowers ?? ""} />
       </div>
 
-      <div className={activeTab === "amenities" ? "flex flex-col gap-4" : "hidden"}>
-        <p className="text-[11px] text-muted">
-          <span className="text-negative">*</span> Important — select at least one amenity, or add a project-specific
-          one below if it&apos;s not in the list yet.
-        </p>
-        <AmenitiesPicker
-          amenities={amenities}
-          defaultSelectedIds={project?.amenityIds ?? []}
-          isProjectContext
-          projectId={project?.id}
-          onSelectionChange={() => {
-            dirtyRef.current = true;
-            recomputeProgress();
-          }}
-        />
-      </div>
-
-      <div className={activeTab === "description" ? "flex flex-col gap-4" : "hidden"}>
+      {/* ── INTELLIGENCE ── */}
+      <div className={activeTab === "intelligence" ? "flex flex-col gap-4" : "hidden"}>
         <RichTextEditor
           label="Description"
           name="description"
@@ -888,12 +810,31 @@ export default function ProjectForm({
             recomputeProgress();
           }}
         />
+        <TextareaField
+          label="Highlights (one per line)"
+          name="highlights"
+          defaultValue={project?.highlights.join("\n") ?? ""}
+          placeholder={"5 min walk to metro\nSea-facing corner units\nRERA registered"}
+          hint="Short bullet differentiators shown near the top of the detail page"
+        />
+        <div>
+          <p className="text-[11px] uppercase tracking-wide text-muted">Amenities</p>
+          <AmenitiesPicker
+            amenities={amenities}
+            defaultSelectedIds={project?.amenityIds ?? []}
+            isProjectContext
+            projectId={project?.id}
+            onSelectionChange={() => {
+              dirtyRef.current = true;
+              recomputeProgress();
+            }}
+          />
+        </div>
       </div>
 
+      {/* ── MEDIA ── */}
       <div className={activeTab === "media" ? "flex flex-col gap-4" : "hidden"}>
-        {project ? (
-          <CoverImageUploader projectId={project.id} images={images} />
-        ) : (
+        {project ? null : (
           <div className="rounded-sm border border-border bg-surface p-4">
             <h3 className="font-mono text-sm font-semibold text-foreground">
               Cover Image <span className="text-negative">*</span>
@@ -953,13 +894,14 @@ export default function ProjectForm({
           </div>
         )}
 
-        <Field label="Video URL" name="videoUrl" type="url" defaultValue={project?.videoUrl ?? ""} placeholder="YouTube / Vimeo link" />
-        <Field label="360° tour URL" name="tour360Url" type="url" defaultValue={project?.tour360Url ?? ""} />
         {project ? (
           <p className="text-xs text-muted">
-            Gallery, Floor Plans, Master Plan, the Project Brochure and Documents are each managed in their own card
-            below, after this form — every save there is independent of this form. Configurations, specifications,
-            nearby places, custom sections, the construction timeline and FAQs each have their own card too.
+            {/* Phase 68.1 — Cover Image moved out to its own card (below, after this form) alongside
+                Brochure: CoverImageUploader renders its own <form>, which is invalid HTML nested inside
+                this form and was silently breaking this form's own save/autosave (see CoverImageUploader.tsx). */}
+            The Cover Image and Project Brochure are each managed in their own card below, after this form — every
+            save there is independent of this form. Gallery, Floor Plans, Master Plan and Documents each have their
+            own card too.
           </p>
         ) : (
           <>
@@ -997,6 +939,7 @@ export default function ProjectForm({
               ) : (
                 <span className="text-[10px] text-muted">
                   Uploaded when you save this project — no need to come back to the edit page just for the brochure.
+                  Downloadable by every visitor immediately, with no sign-in required.
                 </span>
               )}
             </label>
@@ -1012,63 +955,112 @@ export default function ProjectForm({
             </div>
           </>
         )}
+
+        {/* Deprioritized fields — hidden, values preserved unchanged. */}
+        <input type="hidden" name="videoUrl" defaultValue={project?.videoUrl ?? ""} />
+        <input type="hidden" name="tour360Url" defaultValue={project?.tour360Url ?? ""} />
       </div>
 
-      <div className={activeTab === "seo" ? "flex flex-col gap-4" : "hidden"}>
-        <Field
-          label="Meta title"
-          name="metaTitle"
-          maxLength={70}
-          important
-          defaultValue={project?.metaTitle ?? ""}
-          placeholder="Defaults to the project name"
-          hint="Up to 70 characters — shown as the browser tab / search result title"
-        />
-        <Field
-          label="Meta description"
-          name="metaDescription"
-          maxLength={160}
-          important
-          defaultValue={project?.metaDescription ?? ""}
-          placeholder="Defaults to the tagline"
-          hint="Up to 160 characters — shown as the search result snippet"
-        />
-        <Field
-          label="Social share image URL (og:image)"
-          name="ogImageUrl"
-          type="url"
-          defaultValue={project?.ogImageUrl ?? ""}
-          placeholder="Defaults to the hero image"
-        />
+      {/* ── DEVELOPER ── */}
+      <div className={activeTab === "developer" ? "flex flex-col gap-4" : "hidden"}>
+        {selectedBuilder ? (
+          <>
+            <div className="rounded-sm border border-border bg-surface p-4">
+              <h3 className="font-mono text-sm font-semibold text-foreground">Developer Website</h3>
+              <p className="mt-1 text-xs text-muted">
+                Reused automatically across every project by {selectedBuilder.name} — saved once here, never pasted
+                again.
+              </p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+                <Field
+                  label={selectedBuilder.websiteUrl ? "Current saved website" : "No saved website yet"}
+                  name="developerWebsiteDraft"
+                  type="url"
+                  value={developerWebsiteDraft}
+                  onChange={(e) => setDeveloperWebsiteDraft(e.target.value)}
+                  placeholder="https://www.example.com"
+                  className="flex-1"
+                />
+                <button
+                  type="button"
+                  disabled={
+                    websiteSaving ||
+                    !developerWebsiteDraft.trim() ||
+                    developerWebsiteDraft.trim() === (selectedBuilder.websiteUrl ?? "")
+                  }
+                  onClick={handleSaveDeveloperWebsite}
+                  className="w-fit rounded-sm border border-accent/40 px-3 py-2 text-[10px] font-mono uppercase tracking-wide text-accent hover:bg-accent/10 disabled:opacity-50"
+                >
+                  {websiteSaving ? "Saving…" : selectedBuilder.websiteUrl ? "Update Developer Website" : "Save to Developer"}
+                </button>
+              </div>
+              {websiteError ? <p className="mt-1.5 text-[11px] text-negative">{websiteError}</p> : null}
+            </div>
+
+            <div className="rounded-sm border border-border bg-surface p-4">
+              <h3 className="font-mono text-sm font-semibold text-foreground">
+                Developer Spokesperson <span className="font-normal normal-case text-muted">(optional)</span>
+              </h3>
+              <p className="mt-1 text-xs text-muted">Also reused across every project by {selectedBuilder.name}.</p>
+              <FieldGroup>
+                <Field
+                  label="Name"
+                  name="spokespersonNameDraft"
+                  value={spokespersonNameDraft}
+                  onChange={(e) => setSpokespersonNameDraft(e.target.value)}
+                  placeholder="e.g. Rohan Mehta"
+                />
+                <Field
+                  label="Designation"
+                  name="spokespersonDesignationDraft"
+                  value={spokespersonDesignationDraft}
+                  onChange={(e) => setSpokespersonDesignationDraft(e.target.value)}
+                  placeholder="e.g. Head of Sales"
+                />
+              </FieldGroup>
+              <button
+                type="button"
+                disabled={spokespersonSaving}
+                onClick={handleSaveSpokesperson}
+                className="mt-3 w-fit rounded-sm border border-accent/40 px-3 py-2 text-[10px] font-mono uppercase tracking-wide text-accent hover:bg-accent/10 disabled:opacity-50"
+              >
+                {spokespersonSaving ? "Saving…" : "Save Spokesperson"}
+              </button>
+              {spokespersonError ? <p className="mt-1.5 text-[11px] text-negative">{spokespersonError}</p> : null}
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-muted">Select a developer in the Project tab to manage their website and spokesperson.</p>
+        )}
       </div>
 
+      {/* ── PUBLISHING ── */}
       <div className={activeTab === "publishing" ? "flex flex-col gap-4" : "hidden"}>
         <FieldGroup>
           <CheckboxField label="Published — visible on the public site" name="isPublished" defaultChecked={project?.isPublished ?? false} hint="Leave unchecked to keep this a draft" />
           <CheckboxField label="Featured — spotlighted placement" name="isFeatured" defaultChecked={project?.isFeatured ?? false} />
         </FieldGroup>
-        <FieldGroup>
-          <CheckboxField label="Trending" name="isTrending" defaultChecked={project?.isTrending ?? false} />
-          <CheckboxField label="Luxury" name="isLuxury" defaultChecked={project?.isLuxury ?? false} />
-        </FieldGroup>
-        <CheckboxField label="Affordable" name="isAffordable" defaultChecked={project?.isAffordable ?? false} />
-        <FieldGroup>
-          <SelectField label="Data source" name="dataSource" defaultValue={project?.dataSource ?? "MANUALLY_VERIFIED"}>
-            {DATA_SOURCES.map((source) => (
-              <option key={source} value={source}>
-                {SOURCE_LABEL[source]}
-              </option>
-            ))}
-          </SelectField>
-          <SelectField label="Confidence" name="confidence" defaultValue={project?.confidence ?? "HIGH"}>
-            {CONFIDENCE_LEVELS.map((level) => (
-              <option key={level} value={level}>
-                {level}
-              </option>
-            ))}
-          </SelectField>
-        </FieldGroup>
-        <Field label="Source reference" name="sourceRef" defaultValue={project?.sourceRef ?? ""} />
+
+        {/* Deprioritized / internal fields — hidden, values preserved unchanged. */}
+        {project?.isTrending ? <input type="hidden" name="isTrending" value="on" /> : null}
+        {project?.isLuxury ? <input type="hidden" name="isLuxury" value="on" /> : null}
+        {project?.isAffordable ? <input type="hidden" name="isAffordable" value="on" /> : null}
+        <input type="hidden" name="dataSource" defaultValue={project?.dataSource ?? "MANUALLY_VERIFIED"} />
+        <input type="hidden" name="confidence" defaultValue={project?.confidence ?? "HIGH"} />
+        <input type="hidden" name="sourceRef" defaultValue={project?.sourceRef ?? ""} />
+        {/* Phase 68.1 — clamped to the same limits as lib/project-data.ts's projectSchema
+            (MAX_META_TITLE=70 / MAX_META_DESCRIPTION=160; can't import the constants
+            themselves here, same "server-only" module boundary as PROGRESS_SECTIONS above).
+            A handful of existing projects have a metaTitle/metaDescription longer than these
+            limits (set before this form enforced maxLength, e.g. via enrichment) -- submitting
+            that value unclamped through this now-hidden field made parseProjectForm() reject
+            the WHOLE save with no visible error, silently blocking every other edit on the
+            form (address, developer, publish state, ...) for that project. Clamping here only
+            ever affects that pre-existing-oversized case; every value already within range is
+            unaffected. */}
+        <input type="hidden" name="metaTitle" defaultValue={(project?.metaTitle ?? "").slice(0, 70)} />
+        <input type="hidden" name="metaDescription" defaultValue={(project?.metaDescription ?? "").slice(0, 160)} />
+        <input type="hidden" name="ogImageUrl" defaultValue={project?.ogImageUrl ?? ""} />
       </div>
 
       <div>

@@ -953,7 +953,13 @@ export async function getLocalitiesForSelect() {
 
 export async function getBuildersForSelect() {
   return safeQuery("getBuildersForSelect", [], () =>
-    prisma.builder.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } })
+    prisma.builder.findMany({
+      orderBy: { name: "asc" },
+      // Phase 68 — websiteUrl/spokesperson travel with the select list so the Project
+      // form's Developer tab can show/reuse them the moment a builder is picked, no
+      // second round-trip.
+      select: { id: true, name: true, websiteUrl: true, spokespersonName: true, spokespersonDesignation: true },
+    })
   );
 }
 

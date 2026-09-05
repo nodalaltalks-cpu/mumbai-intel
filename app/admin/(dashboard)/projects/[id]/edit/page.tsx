@@ -8,6 +8,7 @@ import { getProjectBrochureStats } from "@/lib/analytics/brochure-queries";
 import BrochureStatsCard from "@/app/admin/components/BrochureStatsCard";
 import AuditHistory from "@/app/admin/components/AuditHistory";
 import BrochureUploader from "@/app/admin/components/BrochureUploader";
+import CoverImageUploader from "@/app/admin/components/CoverImageUploader";
 import FlashMessage from "@/app/admin/components/FlashMessage";
 import ImageUploader from "@/app/admin/components/ImageUploader";
 import ProjectForm from "@/app/admin/components/ProjectForm";
@@ -90,6 +91,13 @@ export default async function EditProjectPage({
           isAdmin={session.role === "ADMIN"}
         />
       </div>
+
+      {/* Phase 68.1 — lives here, not inside ProjectForm's own <form> above: CoverImageUploader
+          renders its own <form>, and a <form> nested inside another <form> is invalid HTML that
+          was silently corrupting ProjectForm's save/autosave (address/builderId/isPublished edits
+          going missing with no visible error). Same "saves independently of the main form" pattern
+          as every other card below. */}
+      <CoverImageUploader projectId={project.id} images={project.images} />
 
       <ConfigurationsManager projectId={project.id} configurations={project.configurations} />
       <PaymentPlansManager projectId={project.id} milestones={project.paymentMilestones} />

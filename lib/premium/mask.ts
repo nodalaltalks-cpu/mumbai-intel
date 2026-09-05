@@ -31,19 +31,16 @@ export function gated<T>(locked: boolean, real: T, placeholder: T): T {
 }
 
 /**
- * ProjectCard (and BrochureDownloadLink inside it) are Client Components —
- * any prop passed to them is serialized into the page's hydration payload
- * and present in guest-viewable HTML, no matter which internal branch
- * renders. A `locked` boolean alone can't prevent a real brochureUrl (or
- * pricePerSqftPaise — the same "premium intelligence" field masked on the
- * project detail page and LocalityCard) from leaking; the real value must
- * never cross the server→client boundary at all when locked.
- * `brochureAvailable`/`pricePerSqftMasked` are plain booleans (safe to
- * expose) that preserve the card's affordances for guests — only the
- * actionable download URL and the real price/sqft number are nulled out.
- * `brochureThumbnailUrl` is deliberately left as-is: it's a cover image,
- * not the gated asset itself, and showing it is part of the "premium"
- * unlock hook rather than something that needs withholding.
+ * Phase 68 — brochure download is now a deliberately, permanently free and
+ * ungated action (project brief: "no sign-in, no phone number, no OTP, no
+ * lead form... if the brochure exists, it should be directly accessible").
+ * This function keeps its name and shape (every call site across
+ * ProjectCard/Compare/related-projects/etc. still calls it the same way) but
+ * no longer nulls out brochureUrl/brochureFileName for a locked guest —
+ * `pricePerSqftPaise` masking is a SEPARATE, unrelated premium feature and is
+ * deliberately left untouched here; this phase is brochure-only.
+ * `brochureAvailable`/`pricePerSqftMasked` remain plain booleans for the
+ * card's own affordances. `brochureThumbnailUrl` was already always shown.
  */
 export function maskProjectBrochure<
   T extends {
@@ -58,8 +55,6 @@ export function maskProjectBrochure<
   const pricePerSqftMasked = project.pricePerSqftPaise != null;
   return {
     ...project,
-    brochureUrl: null,
-    brochureFileName: null,
     brochureAvailable,
     pricePerSqftPaise: null,
     pricePerSqftMasked,

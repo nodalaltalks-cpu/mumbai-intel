@@ -115,7 +115,9 @@ export default async function RegistrationFunnelPage({ searchParams }: { searchP
           <ul className="flex flex-col gap-2">
             {lockedClicks.map((c) => (
               <li key={c.feature} className="flex items-center gap-2">
-                <span className="w-48 shrink-0 truncate text-xs text-foreground">{c.feature === "unknown" ? "Unknown" : PREMIUM_FEATURE_LABEL[c.feature]}</span>
+                <span className="w-48 shrink-0 truncate text-xs text-foreground">
+                  {c.feature === "unknown" ? "Unknown" : (PREMIUM_FEATURE_LABEL[c.feature] ?? c.feature)}
+                </span>
                 <div className="h-2 flex-1 overflow-hidden rounded-full bg-background">
                   <div className="h-full rounded-full bg-accent" style={{ width: `${(c.count / maxLockedClicks) * 100}%` }} />
                 </div>

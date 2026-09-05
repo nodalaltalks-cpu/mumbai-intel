@@ -388,6 +388,61 @@ export async function saveDeveloperWebsiteAction(developerName: string, rawUrl: 
   return { ok: true, websiteUrl: normalized, builderId: existingBuilder.id, builderName: existingBuilder.name };
 }
 
+export interface SaveDeveloperSpokespersonResult {
+  ok: boolean;
+  error?: string;
+}
+
+/**
+ * Phase 68 — the Project form's "Developer" tab already has a real, selected
+ * `builderId` (unlike the Discovery Queue's free-text developerName, so no
+ * name-resolution/creation is needed here). Deliberately minimal: only
+ * name + designation, both fully optional, no phone/email/contact fields,
+ * no consultation workflow — a plain public credit line reused across every
+ * project by this developer, same reuse model as saveDeveloperWebsiteAction.
+ * Blank values genuinely clear a previously-set spokesperson (not an
+ * accidental-clear risk here — this is a single deliberate save action, not
+ * an omitted form field elsewhere).
+ */
+export async function saveDeveloperSpokespersonAction(
+  builderId: string,
+  name: string,
+  designation: string
+): Promise<SaveDeveloperSpokespersonResult> {
+  const session = await requireMutateSession();
+  if (!(await hasPermission(session, "content.edit"))) {
+    return { ok: false, error: "You don't have permission to do this." };
+  }
+
+  const existing = await prisma.builder.findUnique({
+    where: { id: builderId },
+    select: { slug: true, spokespersonName: true, spokespersonDesignation: true },
+  });
+  if (!existing) return { ok: false, error: "Builder not found." };
+
+  const nextName = name.trim() || null;
+  const nextDesignation = designation.trim() || null;
+
+  try {
+    await prisma.builder.update({
+      where: { id: builderId },
+      data: { spokespersonName: nextName, spokespersonDesignation: nextDesignation },
+    });
+  } catch (error) {
+    return { ok: false, error: friendlyPrismaError(error) };
+  }
+
+  await emit("BuilderUpdated", {
+    builderId,
+    slug: existing.slug,
+    actorId: session.userId,
+    before: { spokespersonName: existing.spokespersonName, spokespersonDesignation: existing.spokespersonDesignation },
+    after: { spokespersonName: nextName, spokespersonDesignation: nextDesignation },
+  });
+
+  return { ok: true };
+}
+
 /** Moves a builder to Trash — forces unpublished+archived so every existing public query already excludes it. ADMIN-only. */
 export async function deleteBuilderAction(builderId: string): Promise<{ error?: string }> {
   const session = await requireAdminSession();

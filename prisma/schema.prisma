@@ -258,6 +258,13 @@ model Builder {
   foundedYear   Int?
   headquarters  String?
   websiteUrl    String?
+  /// Phase 68 — an OPTIONAL, minimal human point of contact for this developer,
+  /// reused across every one of their projects (same "belongs to the developer,
+  /// not the project" reasoning as websiteUrl). Deliberately name + designation
+  /// only — no phone/email/personal contact details, and no consultation/contact
+  /// workflow is built around this; it's a plain, public-if-populated credit line.
+  spokespersonName        String?
+  spokespersonDesignation String?
   reraNumber    String?
   /// Notable awards/recognitions — simple curated strings, not a taxonomy.
   awards        String[]   @default([])

@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getNearbyLocalities, getPublicProjectBySlug, getRelatedProjects, getTopBuildersForLocality } from "@/lib/queries";
-import { formatBytes, formatDate, formatPaise, formatPossessionMonthYear, formatPriceBand } from "@/lib/format";
+import { formatBytes, formatDate, formatPossessionMonthYear, formatPriceBand } from "@/lib/format";
 import InfoTooltip from "@/app/components/ui/InfoTooltip";
 import BrochureDownloadLink from "@/app/components/BrochureDownloadLink";
 import { maskProjectBrochure } from "@/lib/premium/mask";
@@ -40,7 +40,6 @@ import { getPublicSession } from "@/lib/public-auth/session";
 import Breadcrumbs from "@/app/components/Breadcrumbs";
 import JsonLd from "@/app/components/JsonLd";
 import GAPageEvent from "@/app/components/analytics/GAPageEvent";
-import { Fact } from "@/app/components/ui/StatCard";
 import Gallery from "./_components/Gallery";
 import { recordRecentViewAction } from "@/lib/actions/recent-views";
 
@@ -62,19 +61,24 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
+/**
+ * Phase 68 — reordered to match the simplified "Project Intelligence" reading
+ * order (Configurations → Project Intelligence → Brochure → Pricing → ...);
+ * Amenities no longer gets its own nav entry since it's now part of Project
+ * Intelligence, not a separate section.
+ */
 const NAV_SECTIONS = [
-  { id: "overview", label: "Overview" },
   { id: "configurations", label: "Configurations" },
+  { id: "intelligence", label: "Project Intelligence" },
+  { id: "downloads", label: "Downloads" },
   { id: "pricing", label: "Pricing" },
   { id: "plans", label: "Floor Plans" },
-  { id: "amenities", label: "Amenities" },
   { id: "specifications", label: "Specifications" },
   { id: "builder", label: "Builder" },
   { id: "location", label: "Location" },
   { id: "timeline", label: "Timeline" },
   { id: "investment-notes", label: "Investment Snapshot" },
   { id: "related", label: "Related" },
-  { id: "downloads", label: "Downloads" },
   { id: "faqs", label: "FAQs" },
 ];
 
@@ -147,6 +151,10 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     return acc;
   }, {});
 
+  const hasDownloads = Boolean(project.brochureUrl) || Boolean(floorPlanDoc) || otherDocuments.length > 0;
+  const hasPlans = floorPlanImages.length > 0 || masterPlanImages.length > 0;
+  const hasSpokesperson = Boolean(project.builder?.spokespersonName);
+
   return (
     <div className="flex min-h-screen flex-1 flex-col overflow-x-hidden bg-background">
       <JsonLd data={productSchema} />
@@ -194,37 +202,48 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         </p>
         {project.tagline ? <p className="mt-1 text-sm text-foreground">{project.tagline}</p> : null}
 
-        {/* Key facts — a real grid (not flex-wrap) so mobile stacking is predictable, all
-            five given equal visual weight per the "don't make these weak" requirement. */}
-        <div className="mt-4 grid grid-cols-2 gap-4 rounded-sm border border-border bg-surface p-4 sm:grid-cols-3 lg:grid-cols-5">
+        {/* Key Facts — Status/Category/Possession/RERA/Starting Price/Address, the minimum
+            set for a genuinely useful Project Intelligence page (Phase 68). A real grid (not
+            flex-wrap) so mobile stacking is predictable, all given equal visual weight. */}
+        <div className="mt-4 grid grid-cols-2 gap-4 rounded-sm border border-border bg-surface p-4 sm:grid-cols-3 lg:grid-cols-6">
           <div>
-            <p className="text-[10px] uppercase tracking-wide text-muted">Price</p>
-            <p className="font-mono text-lg font-semibold text-accent sm:text-xl">{formatPriceBand(project.priceMinPaise)}</p>
+            <p className="text-[10px] uppercase tracking-wide text-muted">Status</p>
+            <p className="font-mono text-lg font-semibold text-foreground sm:text-xl">{STATUS_LABEL[project.status as ProjectStatus]}</p>
           </div>
-          {project.constructionPercent !== null ? (
-            <div>
-              <p className="text-[10px] uppercase tracking-wide text-muted">Construction</p>
-              <p className="font-mono text-lg font-semibold text-foreground sm:text-xl">{project.constructionPercent}%</p>
-            </div>
-          ) : null}
-          {project.launchDate ? (
-            <div>
-              <p className="text-[10px] uppercase tracking-wide text-muted">Launch year</p>
-              <p className="font-mono text-lg font-semibold text-foreground sm:text-xl">{new Date(project.launchDate).getFullYear()}</p>
-            </div>
-          ) : null}
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-muted">Category</p>
+            <p className="font-mono text-lg font-semibold text-foreground sm:text-xl">{CATEGORY_LABEL[project.category]}</p>
+          </div>
           <div>
             <p className="text-[10px] uppercase tracking-wide text-muted">Possession</p>
             <p className="font-mono text-lg font-semibold text-foreground sm:text-xl">
               {formatPossessionMonthYear(project.possessionMonth, project.possessionYear, project.status, project.promisedPossession)}
             </p>
           </div>
-          {project.builder ? (
-            <div>
-              <p className="text-[10px] uppercase tracking-wide text-muted">Builder</p>
-              <p className="font-mono text-lg font-semibold text-foreground sm:text-xl">{project.builder.name}</p>
-            </div>
-          ) : null}
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-muted">RERA Number</p>
+            <p className="font-mono text-lg font-semibold text-foreground sm:text-xl">{project.reraNumber ?? "--"}</p>
+            {project.reraCertificateUrl ? (
+              <a
+                href={project.reraCertificateUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-[10px] font-semibold text-accent hover:underline"
+              >
+                View Certificate →
+              </a>
+            ) : null}
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-muted">Starting Price</p>
+            <p className="font-mono text-lg font-semibold text-accent sm:text-xl">{formatPriceBand(project.priceMinPaise)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-muted">Address</p>
+            <p className="font-mono text-sm font-semibold leading-snug text-foreground">
+              {project.address ?? `${project.locality.name}, ${project.locality.city.name}`}
+            </p>
+          </div>
         </div>
 
         {/* Actions — full-width, comfortably tappable row on mobile; wraps naturally on desktop. */}
@@ -236,9 +255,9 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           {project.brochureUrl ? (
             <BrochureDownloadLink
               slug={project.slug}
-              brochureUrl={locked ? null : project.brochureUrl}
-              brochureFileName={locked ? null : project.brochureFileName}
-              className="flex items-center gap-1.5 rounded-sm border border-accent/40 bg-accent/10 px-2.5 py-1.5 text-[11px] font-mono uppercase tracking-wide text-accent transition-colors hover:bg-accent/20"
+              brochureUrl={project.brochureUrl}
+              brochureFileName={project.brochureFileName}
+              className="flex items-center gap-1.5 rounded-sm border border-accent bg-accent px-3 py-1.5 text-[11px] font-mono font-semibold uppercase tracking-wide text-white transition-colors hover:bg-accent-dim"
             >
               📄 Download Brochure
             </BrochureDownloadLink>
@@ -262,67 +281,10 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         {/* Gallery */}
         {galleryImages.length > 0 ? <Gallery images={galleryImages} /> : null}
 
-        {/* Overview */}
-        <section id="overview" className="scroll-mt-32">
-          <h2 className="font-mono text-lg font-semibold text-foreground">Overview</h2>
-          {project.highlights.length > 0 ? (
-            <ul className="mt-3 flex flex-wrap gap-2">
-              {project.highlights.map((h, i) => (
-                <li key={i} className="rounded-sm border border-accent/30 bg-accent/5 px-2.5 py-1 text-xs text-accent">
-                  {h}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {project.description ? (
-            <div
-              className="prose-invert mt-4 text-sm text-foreground [&_a]:text-accent [&_li]:my-0.5 [&_p]:my-2"
-              dangerouslySetInnerHTML={{ __html: project.description }}
-            />
-          ) : (
-            <p className="mt-3 text-sm text-muted">No description added yet.</p>
-          )}
-          <div className="mt-4 grid grid-cols-2 gap-3 rounded-sm border border-border bg-surface p-4 sm:grid-cols-4">
-            <Fact label="Category" value={CATEGORY_LABEL[project.category]} />
-            <Fact label="Total units" value={project.totalUnits ?? "--"} />
-            <Fact label="Total towers" value={project.totalTowers ?? "--"} />
-            <Fact label="Land area" value={project.landAreaAcres !== null ? `${project.landAreaAcres} acres` : "--"} />
-            <Fact label="Launch date" value={formatDate(project.launchDate)} />
-            <Fact
-              label="Possession"
-              value={formatPossessionMonthYear(project.possessionMonth, project.possessionYear, project.status, project.promisedPossession)}
-            />
-            <div>
-              <p className="text-[10px] uppercase tracking-wide text-muted">RERA</p>
-              <p className="font-mono text-sm text-foreground">{project.reraNumber ?? "--"}</p>
-              {project.reraCertificateUrl ? (
-                <a
-                  href={project.reraCertificateUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-mono text-[10px] font-semibold text-accent hover:underline"
-                >
-                  View RERA Certificate →
-                </a>
-              ) : null}
-            </div>
-          </div>
-
-          {project.sections.map((section) => (
-            <div key={section.id} className="mt-4">
-              <h3 className="font-mono text-sm font-semibold text-foreground">{section.title}</h3>
-              <div
-                className="prose-invert mt-1.5 text-sm text-muted [&_a]:text-accent [&_p]:my-1.5"
-                dangerouslySetInnerHTML={{ __html: section.bodyHtml }}
-              />
-            </div>
-          ))}
-        </section>
-
         {/* Configurations */}
-        <section id="configurations" className="scroll-mt-32">
-          <h2 className="font-mono text-lg font-semibold text-foreground">Configurations</h2>
-          {project.configurations.length > 0 ? (
+        {project.configurations.length > 0 ? (
+          <section id="configurations" className="scroll-mt-32">
+            <h2 className="font-mono text-lg font-semibold text-foreground">Configurations</h2>
             <div className="mt-3 overflow-x-auto rounded-sm border border-border">
               <table className="w-full min-w-[560px] border-collapse text-left text-sm">
                 <thead>
@@ -345,353 +307,71 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 </tbody>
               </table>
             </div>
-          ) : (
-            <p className="mt-3 text-sm text-muted">No unit configurations added yet.</p>
-          )}
-        </section>
+          </section>
+        ) : null}
 
-        {/* Pricing */}
-        <section id="pricing" className="scroll-mt-32">
-          <h2 className="font-mono text-lg font-semibold text-foreground">Pricing</h2>
-          <div className="mt-3 grid grid-cols-2 gap-3 rounded-sm border border-border bg-surface p-4 sm:grid-cols-3">
-            <Fact label="Starting price" value={formatPriceBand(project.priceMinPaise)} accent />
-            <div>
-              <div className="flex items-center gap-1">
-                <p className="text-[10px] uppercase tracking-wide text-muted">Payment Plan</p>
-                {project.paymentPlanDescription ? (
-                  <InfoTooltip
-                    label={`${project.paymentPlanType ? PAYMENT_PLAN_TYPE_LABEL[project.paymentPlanType] : "Payment plan"}: payment plan details`}
-                  >
-                    {project.paymentPlanDescription}
-                  </InfoTooltip>
-                ) : null}
-              </div>
-              <p className="font-mono text-sm text-foreground">
-                {project.paymentPlanType ? PAYMENT_PLAN_TYPE_LABEL[project.paymentPlanType] : "No Payment Plan"}
-              </p>
-            </div>
-          </div>
-          {/* Transaction data is a different domain (actual registered transactions, not this
-              project's asking price) and lives entirely on its own page — this is a pointer,
-              not a duplicate of that data here. */}
-          <p className="mt-3 text-xs text-muted">
-            <Link href={`/reports/projects/${project.slug}`} className="font-semibold text-accent hover:underline">
-              View Transaction Intelligence →
-            </Link>{" "}
-            for actual registered transaction data and market trends.
-          </p>
-        </section>
-
-        {/* Floor Plans + Master Plan */}
-        <section id="plans" className="scroll-mt-32 flex flex-col gap-6">
-          <div>
-            <h2 className="font-mono text-lg font-semibold text-foreground">Floor Plans</h2>
-            {floorPlanImages.length > 0 ? (
-              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {floorPlanImages.map((img) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={img.id} src={img.url} alt={img.alt ?? "Floor plan"} className="rounded-sm border border-border object-cover" />
-                ))}
-              </div>
-            ) : (
-              <p className="mt-3 text-sm text-muted">No floor plans uploaded yet.</p>
-            )}
-          </div>
-          <div>
-            <h2 className="font-mono text-lg font-semibold text-foreground">Master Plan</h2>
-            {masterPlanImages.length > 0 ? (
-              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {masterPlanImages.map((img) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={img.id} src={img.url} alt={img.alt ?? "Master plan"} className="rounded-sm border border-border object-cover" />
-                ))}
-              </div>
-            ) : (
-              <p className="mt-3 text-sm text-muted">No master plan uploaded yet.</p>
-            )}
-          </div>
-        </section>
-
-        {/* Amenities */}
-        <section id="amenities" className="scroll-mt-32">
-          <h2 className="font-mono text-lg font-semibold text-foreground">Amenities</h2>
-          {Object.keys(amenitiesByCategory).length > 0 ? (
-            <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {Object.entries(amenitiesByCategory).map(([category, items]) => (
-                <div key={category} className="rounded-sm border border-border bg-surface p-3">
-                  <p className="font-mono text-[11px] uppercase tracking-wide text-accent">{AMENITY_CATEGORY_LABEL[category as AmenityCategoryValue] ?? category}</p>
-                  <ul className="mt-1.5 flex flex-col gap-1">
-                    {items.map((item, i) => (
-                      <li key={i} className="text-xs text-foreground">
-                        {item.name}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="mt-3 text-sm text-muted">No amenities added yet.</p>
-          )}
-        </section>
-
-        {/* Specifications */}
-        <section id="specifications" className="scroll-mt-32">
-          <h2 className="font-mono text-lg font-semibold text-foreground">Specifications</h2>
-          {Object.keys(specsByCategory).length > 0 ? (
-            <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {Object.entries(specsByCategory).map(([category, details]) => (
-                <div key={category} className="rounded-sm border border-border bg-surface p-3">
-                  <p className="font-mono text-[11px] uppercase tracking-wide text-accent">{category}</p>
-                  <ul className="mt-1.5 flex flex-col gap-1">
-                    {details.map((detail, i) => (
-                      <li key={i} className="text-xs text-foreground">
-                        {detail}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="mt-3 text-sm text-muted">No specifications added yet.</p>
-          )}
-        </section>
-
-        {/* Builder */}
-        <section id="builder" className="scroll-mt-32">
-          <h2 className="font-mono text-lg font-semibold text-foreground">Builder</h2>
-          {project.builder ? (
-            <Link
-              href={`/builders/${project.builder.slug}`}
-              className="mt-3 flex flex-wrap items-center justify-between gap-4 rounded-sm border border-border bg-surface p-4 transition-colors hover:border-accent/50 hover:bg-surface-raised"
-            >
-              <div>
-                <p className="font-mono text-sm font-semibold text-foreground">{project.builder.name}</p>
-                {project.builder.headquarters ? <p className="mt-0.5 text-xs text-muted">{project.builder.headquarters}</p> : null}
-                {project.builder.description ? <p className="mt-2 max-w-xl text-xs text-muted">{project.builder.description}</p> : null}
-              </div>
-              {project.builder.overallScore !== null ? (
-                <div className="text-right">
-                  <p className="text-[10px] uppercase tracking-wide text-muted">Trust score</p>
-                  <p className="font-mono text-2xl text-accent">{project.builder.overallScore.toFixed(1)}</p>
-                </div>
-              ) : null}
-            </Link>
-          ) : (
-            <p className="mt-3 text-sm text-muted">Builder not specified.</p>
-          )}
-
-          <h2 className="mt-6 font-mono text-lg font-semibold text-foreground">Locality</h2>
-          <Link
-            href={`/localities/${project.locality.slug}`}
-            className="mt-3 flex flex-wrap items-center justify-between gap-4 rounded-sm border border-border bg-surface p-4 transition-colors hover:border-accent/50 hover:bg-surface-raised"
-          >
-            <div>
-              <p className="font-mono text-sm font-semibold text-foreground">{project.locality.name}</p>
-              <p className="mt-0.5 text-xs text-muted">{project.locality.zone?.name ?? project.locality.city.name} · Area Intelligence →</p>
-            </div>
-            {project.localityInvestmentScore !== null ? (
-              <div className="text-right">
-                <p className="text-[10px] uppercase tracking-wide text-muted">Investment score</p>
-                <p className="font-mono text-2xl text-accent">{project.localityInvestmentScore.toFixed(1)}</p>
-              </div>
-            ) : null}
-          </Link>
-        </section>
-
-        {/* Location + Nearby — no map/coordinates here: this account never asks for or shows
-            latitude/longitude on the public page, only the address and the Google Maps link
-            the admin actually pastes in. */}
-        <section id="location" className="scroll-mt-32">
-          <h2 className="font-mono text-lg font-semibold text-foreground">Location</h2>
-          <div className="mt-3 rounded-sm border border-border bg-surface p-4">
-            <p className="text-sm text-foreground">{project.address ?? `${project.locality.name}, ${project.locality.city.name}`}</p>
-            {project.famousLandmark ? <p className="mt-1.5 text-xs text-accent">{project.famousLandmark}</p> : null}
-            {project.googleMapsUrl ? (
-              <a
-                href={project.googleMapsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-3 inline-flex items-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-xs font-mono font-semibold uppercase tracking-wide text-white hover:bg-accent-dim"
-              >
-                View on Google Maps →
-              </a>
-            ) : null}
-          </div>
-
-          <h3 className="mt-6 font-mono text-sm font-semibold text-foreground">Nearby places</h3>
-          {Object.keys(nearbyByType).length > 0 ? (
-            <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {Object.entries(nearbyByType).map(([type, links]) => (
-                <div key={type} className="rounded-sm border border-border bg-surface p-3">
-                  <p className="font-mono text-[11px] uppercase tracking-wide text-accent">{INFRA_TYPE_LABEL[type as InfraTypeValue]}</p>
-                  <ul className="mt-1.5 flex flex-col gap-1">
-                    {links.map((link) => (
-                      <li key={link.id} className="flex items-center justify-between text-xs text-foreground">
-                        <span>{link.infra.name}</span>
-                        <span className="font-mono text-muted">
-                          {link.distanceMeters < 1000 ? `${link.distanceMeters}m` : `${(link.distanceMeters / 1000).toFixed(1)}km`}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="mt-3 text-sm text-muted">No nearby places catalogued yet.</p>
-          )}
-        </section>
-
-        {/* Timeline */}
-        <section id="timeline" className="scroll-mt-32">
-          <h2 className="font-mono text-lg font-semibold text-foreground">Construction Timeline</h2>
-          {project.timelineEvents.length > 0 ? (
-            <ol className="mt-3 flex flex-col gap-2 border-l border-border pl-4">
-              {project.timelineEvents.map((event) => (
-                <li key={event.id}>
-                  <p className="font-mono text-xs text-foreground">
-                    {event.eventDate ? <span className="text-accent">{formatDate(event.eventDate)}</span> : null} {event.title}
-                  </p>
-                  {event.description ? <p className="text-xs text-muted">{event.description}</p> : null}
+        {/* Project Intelligence — description, highlights and amenities together (Phase 68) */}
+        <section id="intelligence" className="scroll-mt-32">
+          <h2 className="font-mono text-lg font-semibold text-foreground">Project Intelligence</h2>
+          {project.highlights.length > 0 ? (
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {project.highlights.map((h, i) => (
+                <li key={i} className="rounded-sm border border-accent/30 bg-accent/5 px-2.5 py-1 text-xs text-accent">
+                  {h}
                 </li>
               ))}
-            </ol>
-          ) : (
-            <p className="mt-3 text-sm text-muted">No timeline published yet.</p>
-          )}
-        </section>
+            </ul>
+          ) : null}
+          {project.description ? (
+            <div
+              className="prose-invert mt-4 text-sm text-foreground [&_a]:text-accent [&_li]:my-0.5 [&_p]:my-2"
+              dangerouslySetInnerHTML={{ __html: project.description }}
+            />
+          ) : null}
 
-        {/* Investment Notes — summary + pros/cons, each tagged with its data source and confidence */}
-        <section id="investment-notes" className="scroll-mt-32">
-          {project.investmentNotes.length > 0 ? (
-            <>
-              <h2 className="font-mono text-lg font-semibold text-foreground">Investment Snapshot</h2>
-              {summaryNotes.length > 0 ? (
-                <div className="mt-3 flex flex-col gap-3">
-                  {summaryNotes.map((note) => (
-                    <div key={note.id}>
-                      <p className="text-sm leading-relaxed text-foreground">{note.body}</p>
-                      <span
-                        className={`mt-1.5 inline-flex rounded-sm border px-2 py-0.5 text-[10px] font-mono uppercase tracking-wide ${SOURCE_CLASS[note.dataSource]}`}
-                      >
-                        {SOURCE_LABEL[note.dataSource]} &middot; {CONFIDENCE_LABEL[note.confidence]} confidence
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-
-              {proNotes.length > 0 || conNotes.length > 0 ? (
-                <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {proNotes.length > 0 ? (
-                    <div>
-                      <h3 className="font-mono text-xs uppercase tracking-wide text-positive">Pros</h3>
-                      <ul className="mt-2 flex flex-col gap-2">
-                        {proNotes.map((note) => (
-                          <li key={note.id} className="rounded-sm border border-positive/20 bg-positive/5 p-3 text-xs text-foreground">
-                            {note.body}
-                            <span
-                              className={`mt-1.5 block w-fit rounded-sm border px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wide ${SOURCE_CLASS[note.dataSource]}`}
-                            >
-                              {SOURCE_LABEL[note.dataSource]}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                  {conNotes.length > 0 ? (
-                    <div>
-                      <h3 className="font-mono text-xs uppercase tracking-wide text-negative">Cons</h3>
-                      <ul className="mt-2 flex flex-col gap-2">
-                        {conNotes.map((note) => (
-                          <li key={note.id} className="rounded-sm border border-negative/20 bg-negative/5 p-3 text-xs text-foreground">
-                            {note.body}
-                            <span
-                              className={`mt-1.5 block w-fit rounded-sm border px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wide ${SOURCE_CLASS[note.dataSource]}`}
-                            >
-                              {SOURCE_LABEL[note.dataSource]}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <div className="rounded-sm border border-dashed border-info/40 bg-info/5 p-4">
-              <p className="font-mono text-[11px] uppercase tracking-wide text-info">Investment Snapshot: Coming Soon</p>
-              <p className="mt-1 text-xs text-muted">
-                An investment summary for this project will appear here once one has been reviewed and published.
-              </p>
+          {project.sections.map((section) => (
+            <div key={section.id} className="mt-4">
+              <h3 className="font-mono text-sm font-semibold text-foreground">{section.title}</h3>
+              <div
+                className="prose-invert mt-1.5 text-sm text-muted [&_a]:text-accent [&_p]:my-1.5"
+                dangerouslySetInnerHTML={{ __html: section.bodyHtml }}
+              />
             </div>
-          )}
-        </section>
+          ))}
 
-        {/* Related */}
-        <section id="related" className="scroll-mt-32 flex flex-col gap-8">
-          {related.length > 0 ? (
-            <div>
-              <h2 className="font-mono text-lg font-semibold text-foreground">Nearby Projects</h2>
-              <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {related.map((p) => (
-                  <ProjectCard key={p.id} project={maskProjectBrochure(p, locked)} />
+          {Object.keys(amenitiesByCategory).length > 0 ? (
+            <div className="mt-6">
+              <h3 className="font-mono text-sm font-semibold text-foreground">Amenities</h3>
+              <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {Object.entries(amenitiesByCategory).map(([category, items]) => (
+                  <div key={category} className="rounded-sm border border-border bg-surface p-3">
+                    <p className="font-mono text-[11px] uppercase tracking-wide text-accent">
+                      {AMENITY_CATEGORY_LABEL[category as AmenityCategoryValue] ?? category}
+                    </p>
+                    <ul className="mt-1.5 flex flex-col gap-1">
+                      {items.map((item, i) => (
+                        <li key={i} className="text-xs text-foreground">
+                          {item.name}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ))}
               </div>
             </div>
           ) : null}
-
-          <SimilarProjectsRecommended
-            project={{ id: project.id, localityId: project.localityId, builderId: project.builderId }}
-            locked={locked}
-            publicUserId={publicSession?.userId ?? null}
-          />
-
-          <div>
-            <h2 className="font-mono text-lg font-semibold text-foreground">Nearby Builders</h2>
-            {otherNearbyBuilders.length > 0 ? (
-              <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {otherNearbyBuilders.map((b) => (
-                  <BuilderCard
-                    key={b.slug}
-                    builder={{ slug: b.slug, name: b.name, logoUrl: b.logoUrl, overallScore: b.score, projectCount: b.projectCount }}
-                    locked={locked}
-                  />
-                ))}
-              </div>
-            ) : (
-              <p className="mt-3 text-sm text-muted">No other builders active in this locality yet.</p>
-            )}
-          </div>
-
-          <div>
-            <h2 className="font-mono text-lg font-semibold text-foreground">Nearby Localities</h2>
-            {nearbyLocalities.length > 0 ? (
-              <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {nearbyLocalities.map((l) => (
-                  <LocalityCard key={l.id} locality={l} locked={locked} />
-                ))}
-              </div>
-            ) : (
-              <p className="mt-3 text-sm text-muted">No nearby localities published yet.</p>
-            )}
-          </div>
         </section>
 
-        {/* Downloads */}
-        <section id="downloads" className="scroll-mt-32">
-          <h2 className="font-mono text-lg font-semibold text-foreground">Downloads</h2>
-          {project.brochureUrl || floorPlanDoc || otherDocuments.length > 0 ? (
+        {/* Downloads — brochure download is completely free and ungated (Phase 68) */}
+        {hasDownloads ? (
+          <section id="downloads" className="scroll-mt-32">
+            <h2 className="font-mono text-lg font-semibold text-foreground">Downloads</h2>
             <div className="mt-3 flex flex-col gap-3">
               {project.brochureUrl ? (
                 <BrochureDownloadLink
                   slug={project.slug}
-                  brochureUrl={locked ? null : project.brochureUrl}
-                  brochureFileName={locked ? null : project.brochureFileName}
+                  brochureUrl={project.brochureUrl}
+                  brochureFileName={project.brochureFileName}
                   className="flex items-center gap-4 rounded-sm border border-accent/30 bg-accent/5 p-4 transition-colors hover:bg-accent/10"
                 >
                   {project.brochureThumbnailUrl ? (
@@ -752,30 +432,341 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                   </div>
                 </div>
               ) : null}
-              <ul className="flex flex-col gap-1.5">
-              {otherDocuments.map((doc) => (
-                <li key={doc.id}>
-                  <a
-                    href={`/api/brochure-download?url=${encodeURIComponent(doc.url)}&filename=${encodeURIComponent(doc.title || "document.pdf")}&inline=1`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-sm text-accent hover:underline"
+              {otherDocuments.length > 0 ? (
+                <ul className="flex flex-col gap-1.5">
+                  {otherDocuments.map((doc) => (
+                    <li key={doc.id}>
+                      <a
+                        href={`/api/brochure-download?url=${encodeURIComponent(doc.url)}&filename=${encodeURIComponent(doc.title || "document.pdf")}&inline=1`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sm text-accent hover:underline"
+                      >
+                        {doc.title}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
+
+        {/* Pricing — Starting Price already lives in Key Facts above; this section now only
+            surfaces what Key Facts doesn't (an existing Payment Plan) plus the Transaction
+            Intelligence pointer, so it collapses cleanly when neither applies. */}
+        {project.paymentPlanType || project.paymentPlanDescription ? (
+          <section id="pricing" className="scroll-mt-32">
+            <h2 className="font-mono text-lg font-semibold text-foreground">Pricing</h2>
+            <div className="mt-3 rounded-sm border border-border bg-surface p-4">
+              <div className="flex items-center gap-1">
+                <p className="text-[10px] uppercase tracking-wide text-muted">Payment Plan</p>
+                {project.paymentPlanDescription ? (
+                  <InfoTooltip
+                    label={`${project.paymentPlanType ? PAYMENT_PLAN_TYPE_LABEL[project.paymentPlanType] : "Payment plan"}: payment plan details`}
                   >
-                    {doc.title}
-                  </a>
+                    {project.paymentPlanDescription}
+                  </InfoTooltip>
+                ) : null}
+              </div>
+              <p className="font-mono text-sm text-foreground">
+                {project.paymentPlanType ? PAYMENT_PLAN_TYPE_LABEL[project.paymentPlanType] : "--"}
+              </p>
+            </div>
+            <p className="mt-3 text-xs text-muted">
+              <Link href={`/reports/projects/${project.slug}`} className="font-semibold text-accent hover:underline">
+                View Transaction Intelligence →
+              </Link>{" "}
+              for actual registered transaction data and market trends.
+            </p>
+          </section>
+        ) : (
+          <p className="text-xs text-muted">
+            <Link href={`/reports/projects/${project.slug}`} className="font-semibold text-accent hover:underline">
+              View Transaction Intelligence →
+            </Link>{" "}
+            for actual registered transaction data and market trends.
+          </p>
+        )}
+
+        {/* Floor Plans + Master Plan */}
+        {hasPlans ? (
+          <section id="plans" className="scroll-mt-32 flex flex-col gap-6">
+            {floorPlanImages.length > 0 ? (
+              <div>
+                <h2 className="font-mono text-lg font-semibold text-foreground">Floor Plans</h2>
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {floorPlanImages.map((img) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={img.id} src={img.url} alt={img.alt ?? "Floor plan"} className="rounded-sm border border-border object-cover" />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {masterPlanImages.length > 0 ? (
+              <div>
+                <h2 className="font-mono text-lg font-semibold text-foreground">Master Plan</h2>
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {masterPlanImages.map((img) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={img.id} src={img.url} alt={img.alt ?? "Master plan"} className="rounded-sm border border-border object-cover" />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        {/* Specifications */}
+        {Object.keys(specsByCategory).length > 0 ? (
+          <section id="specifications" className="scroll-mt-32">
+            <h2 className="font-mono text-lg font-semibold text-foreground">Specifications</h2>
+            <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {Object.entries(specsByCategory).map(([category, details]) => (
+                <div key={category} className="rounded-sm border border-border bg-surface p-3">
+                  <p className="font-mono text-[11px] uppercase tracking-wide text-accent">{category}</p>
+                  <ul className="mt-1.5 flex flex-col gap-1">
+                    {details.map((detail, i) => (
+                      <li key={i} className="text-xs text-foreground">
+                        {detail}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {/* Builder / Developer */}
+        <section id="builder" className="scroll-mt-32">
+          <h2 className="font-mono text-lg font-semibold text-foreground">Builder</h2>
+          {project.builder ? (
+            <>
+              <Link
+                href={`/builders/${project.builder.slug}`}
+                className="mt-3 flex flex-wrap items-center justify-between gap-4 rounded-sm border border-border bg-surface p-4 transition-colors hover:border-accent/50 hover:bg-surface-raised"
+              >
+                <div>
+                  <p className="font-mono text-sm font-semibold text-foreground">{project.builder.name}</p>
+                  {project.builder.headquarters ? <p className="mt-0.5 text-xs text-muted">{project.builder.headquarters}</p> : null}
+                  {project.builder.description ? <p className="mt-2 max-w-xl text-xs text-muted">{project.builder.description}</p> : null}
+                </div>
+                {project.builder.overallScore !== null ? (
+                  <div className="text-right">
+                    <p className="text-[10px] uppercase tracking-wide text-muted">Trust score</p>
+                    <p className="font-mono text-2xl text-accent">{project.builder.overallScore.toFixed(1)}</p>
+                  </div>
+                ) : null}
+              </Link>
+              {/* Developer Spokesperson — an OPTIONAL credit line reused across every project by
+                  this developer (Builder.spokespersonName/Designation); hidden entirely when not
+                  set, no phone/email/contact workflow attached to it (Phase 68). */}
+              {hasSpokesperson ? (
+                <div className="mt-3 flex items-center gap-3 rounded-sm border border-border bg-surface p-4">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-muted">Developer Spokesperson</p>
+                    <p className="mt-0.5 font-mono text-sm font-semibold text-foreground">{project.builder.spokespersonName}</p>
+                    {project.builder.spokespersonDesignation ? (
+                      <p className="text-xs text-muted">{project.builder.spokespersonDesignation}</p>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <p className="mt-3 text-sm text-muted">Builder not specified.</p>
+          )}
+
+          <h2 className="mt-6 font-mono text-lg font-semibold text-foreground">Locality</h2>
+          <Link
+            href={`/localities/${project.locality.slug}`}
+            className="mt-3 flex flex-wrap items-center justify-between gap-4 rounded-sm border border-border bg-surface p-4 transition-colors hover:border-accent/50 hover:bg-surface-raised"
+          >
+            <div>
+              <p className="font-mono text-sm font-semibold text-foreground">{project.locality.name}</p>
+              <p className="mt-0.5 text-xs text-muted">{project.locality.zone?.name ?? project.locality.city.name} · Area Intelligence →</p>
+            </div>
+            {project.localityInvestmentScore !== null ? (
+              <div className="text-right">
+                <p className="text-[10px] uppercase tracking-wide text-muted">Investment score</p>
+                <p className="font-mono text-2xl text-accent">{project.localityInvestmentScore.toFixed(1)}</p>
+              </div>
+            ) : null}
+          </Link>
+        </section>
+
+        {/* Location + Nearby — no map/coordinates here: this account never asks for or shows
+            latitude/longitude on the public page, only the address and the Google Maps link
+            the admin actually pastes in. */}
+        <section id="location" className="scroll-mt-32">
+          <h2 className="font-mono text-lg font-semibold text-foreground">Location</h2>
+          <div className="mt-3 rounded-sm border border-border bg-surface p-4">
+            <p className="text-sm text-foreground">{project.address ?? `${project.locality.name}, ${project.locality.city.name}`}</p>
+            {project.famousLandmark ? <p className="mt-1.5 text-xs text-accent">{project.famousLandmark}</p> : null}
+            {project.googleMapsUrl ? (
+              <a
+                href={project.googleMapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 inline-flex items-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-xs font-mono font-semibold uppercase tracking-wide text-white hover:bg-accent-dim"
+              >
+                View on Google Maps →
+              </a>
+            ) : null}
+          </div>
+
+          {Object.keys(nearbyByType).length > 0 ? (
+            <>
+              <h3 className="mt-6 font-mono text-sm font-semibold text-foreground">Nearby places</h3>
+              <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {Object.entries(nearbyByType).map(([type, links]) => (
+                  <div key={type} className="rounded-sm border border-border bg-surface p-3">
+                    <p className="font-mono text-[11px] uppercase tracking-wide text-accent">{INFRA_TYPE_LABEL[type as InfraTypeValue]}</p>
+                    <ul className="mt-1.5 flex flex-col gap-1">
+                      {links.map((link) => (
+                        <li key={link.id} className="flex items-center justify-between text-xs text-foreground">
+                          <span>{link.infra.name}</span>
+                          <span className="font-mono text-muted">
+                            {link.distanceMeters < 1000 ? `${link.distanceMeters}m` : `${(link.distanceMeters / 1000).toFixed(1)}km`}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : null}
+        </section>
+
+        {/* Timeline */}
+        {project.timelineEvents.length > 0 ? (
+          <section id="timeline" className="scroll-mt-32">
+            <h2 className="font-mono text-lg font-semibold text-foreground">Construction Timeline</h2>
+            <ol className="mt-3 flex flex-col gap-2 border-l border-border pl-4">
+              {project.timelineEvents.map((event) => (
+                <li key={event.id}>
+                  <p className="font-mono text-xs text-foreground">
+                    {event.eventDate ? <span className="text-accent">{formatDate(event.eventDate)}</span> : null} {event.title}
+                  </p>
+                  {event.description ? <p className="text-xs text-muted">{event.description}</p> : null}
                 </li>
               ))}
-              </ul>
+            </ol>
+          </section>
+        ) : null}
+
+        {/* Investment Notes — summary + pros/cons, each tagged with its data source and confidence */}
+        {project.investmentNotes.length > 0 ? (
+          <section id="investment-notes" className="scroll-mt-32">
+            <h2 className="font-mono text-lg font-semibold text-foreground">Investment Snapshot</h2>
+            {summaryNotes.length > 0 ? (
+              <div className="mt-3 flex flex-col gap-3">
+                {summaryNotes.map((note) => (
+                  <div key={note.id}>
+                    <p className="text-sm leading-relaxed text-foreground">{note.body}</p>
+                    <span
+                      className={`mt-1.5 inline-flex rounded-sm border px-2 py-0.5 text-[10px] font-mono uppercase tracking-wide ${SOURCE_CLASS[note.dataSource]}`}
+                    >
+                      {SOURCE_LABEL[note.dataSource]} &middot; {CONFIDENCE_LABEL[note.confidence]} confidence
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {proNotes.length > 0 || conNotes.length > 0 ? (
+              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {proNotes.length > 0 ? (
+                  <div>
+                    <h3 className="font-mono text-xs uppercase tracking-wide text-positive">Pros</h3>
+                    <ul className="mt-2 flex flex-col gap-2">
+                      {proNotes.map((note) => (
+                        <li key={note.id} className="rounded-sm border border-positive/20 bg-positive/5 p-3 text-xs text-foreground">
+                          {note.body}
+                          <span
+                            className={`mt-1.5 block w-fit rounded-sm border px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wide ${SOURCE_CLASS[note.dataSource]}`}
+                          >
+                            {SOURCE_LABEL[note.dataSource]}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {conNotes.length > 0 ? (
+                  <div>
+                    <h3 className="font-mono text-xs uppercase tracking-wide text-negative">Cons</h3>
+                    <ul className="mt-2 flex flex-col gap-2">
+                      {conNotes.map((note) => (
+                        <li key={note.id} className="rounded-sm border border-negative/20 bg-negative/5 p-3 text-xs text-foreground">
+                          {note.body}
+                          <span
+                            className={`mt-1.5 block w-fit rounded-sm border px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wide ${SOURCE_CLASS[note.dataSource]}`}
+                          >
+                            {SOURCE_LABEL[note.dataSource]}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        {/* Related */}
+        <section id="related" className="scroll-mt-32 flex flex-col gap-8">
+          {related.length > 0 ? (
+            <div>
+              <h2 className="font-mono text-lg font-semibold text-foreground">Nearby Projects</h2>
+              <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {related.map((p) => (
+                  <ProjectCard key={p.id} project={maskProjectBrochure(p, locked)} />
+                ))}
+              </div>
             </div>
-          ) : (
-            <p className="mt-3 text-sm text-muted">No downloads available yet.</p>
-          )}
+          ) : null}
+
+          <SimilarProjectsRecommended
+            project={{ id: project.id, localityId: project.localityId, builderId: project.builderId }}
+            locked={locked}
+            publicUserId={publicSession?.userId ?? null}
+          />
+
+          {otherNearbyBuilders.length > 0 ? (
+            <div>
+              <h2 className="font-mono text-lg font-semibold text-foreground">Nearby Builders</h2>
+              <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {otherNearbyBuilders.map((b) => (
+                  <BuilderCard
+                    key={b.slug}
+                    builder={{ slug: b.slug, name: b.name, logoUrl: b.logoUrl, overallScore: b.score, projectCount: b.projectCount }}
+                    locked={locked}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {nearbyLocalities.length > 0 ? (
+            <div>
+              <h2 className="font-mono text-lg font-semibold text-foreground">Nearby Localities</h2>
+              <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {nearbyLocalities.map((l) => (
+                  <LocalityCard key={l.id} locality={l} locked={locked} />
+                ))}
+              </div>
+            </div>
+          ) : null}
         </section>
 
         {/* FAQs */}
-        <section id="faqs" className="scroll-mt-32">
-          <h2 className="font-mono text-lg font-semibold text-foreground">FAQs</h2>
-          {project.faqs.length > 0 ? (
+        {project.faqs.length > 0 ? (
+          <section id="faqs" className="scroll-mt-32">
+            <h2 className="font-mono text-lg font-semibold text-foreground">FAQs</h2>
             <div className="mt-3 flex flex-col gap-2">
               {project.faqs.map((faq) => (
                 <details key={faq.id} className="rounded-sm border border-border bg-surface p-3">
@@ -784,10 +775,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 </details>
               ))}
             </div>
-          ) : (
-            <p className="mt-3 text-sm text-muted">No FAQs added yet.</p>
-          )}
-        </section>
+          </section>
+        ) : null}
 
         <div className="flex items-center justify-between">
           <Link href="/projects" className="text-xs text-muted hover:text-accent">
@@ -801,4 +790,3 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     </div>
   );
 }
-

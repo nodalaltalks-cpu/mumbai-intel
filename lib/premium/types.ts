@@ -4,7 +4,6 @@ export type PremiumFeature =
   | "builder-analytics"
   | "market-analytics"
   | "locality-analytics"
-  | "brochure"
   | "wishlist"
   | "save-search"
   | "reports"
@@ -16,7 +15,6 @@ export const PREMIUM_FEATURE_LABEL: Record<PremiumFeature, string> = {
   "builder-analytics": "Builder Performance Analytics",
   "market-analytics": "Market Intelligence",
   "locality-analytics": "Locality Intelligence",
-  brochure: "Official Brochures",
   wishlist: "Wishlist",
   "save-search": "Saved Searches",
   reports: "Market Reports",
@@ -39,17 +37,16 @@ export const PREMIUM_FEATURE_SUBTITLE: Partial<Record<PremiumFeature, string>> =
   "builder-analytics": "Sign in free to see builder performance analytics — delivery track record, project history and trust scores.",
   "market-analytics": "Sign in free to see full market intelligence — price trends, locality benchmarks and builder rankings.",
   "locality-analytics": "Sign in free to see full locality intelligence — pricing, growth and rental yield data.",
-  brochure: "Sign in free to download the official project brochure.",
   wishlist: "Sign in free to save this and revisit it anytime from your account.",
   "save-search": "Sign in free to save this search and get notified about new matches.",
   reports: "Sign in free to view the full market report.",
 };
 
+/** Phase 68 — "Download Official Project Brochures" removed: brochure downloads are free and ungated for every visitor, signed in or not, so it's no longer a sign-in incentive. */
 export const PREMIUM_BENEFITS: string[] = [
   "No Phone Number Required",
   "No Spam Calls Ever",
   "Save Favourite Projects",
-  "Download Official Project Brochures",
   "Track Your Research Across Devices",
   "100% Free Account",
 ];

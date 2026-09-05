@@ -6,17 +6,13 @@ import { useEffect, useRef, useState } from "react";
 import Button from "@/app/components/ui/Button";
 import CompareToggleButton from "@/app/components/CompareToggleButton";
 import BrochureDownloadLink from "@/app/components/BrochureDownloadLink";
-import InfoTooltip from "@/app/components/ui/InfoTooltip";
 import { IconClose } from "@/app/components/ui/icons";
 import { useModalBackClose } from "@/lib/use-modal-back-close";
-import { formatPossessionMonthYear, formatPriceBand, formatPriceFrom, formatPricePerSqft, formatProjectSize } from "@/lib/format";
+import { formatPossessionMonthYear, formatPriceBand, formatPriceFrom, formatPricePerSqft } from "@/lib/format";
 import { maskPricePerSqft } from "@/lib/premium/mask";
 import {
   CONSTRUCTION_BADGE_CLASS,
   CONSTRUCTION_BADGE_LABEL,
-  PAYMENT_PLAN_TYPE_LABEL,
-  SOURCE_CLASS,
-  SOURCE_LABEL,
   STATUS_CLASS,
   STATUS_LABEL,
   type DataSource,
@@ -83,13 +79,11 @@ function initials(name: string): string {
 
 export default function ProjectCard({ project, onNavigate }: { project: ProjectCardData; onNavigate?: () => void }) {
   const [quickViewOpen, setQuickViewOpen] = useState(false);
-  const projectSize = formatProjectSize(project.totalUnits, project.totalTowers, project.landAreaAcres);
-  const paymentPlanLabel = project.paymentPlanType ? PAYMENT_PLAN_TYPE_LABEL[project.paymentPlanType] : "No Payment Plan";
 
   return (
     <>
       <div className="group relative flex flex-col overflow-hidden rounded-sm border border-border bg-surface transition-[box-shadow,border-color] duration-150 md:hover:border-accent/40 md:hover:shadow-md">
-        {/* Stretched link: an invisible full-card click target rendered as a sibling (not an ancestor) of the content below, so the Payment Plan info icon — a real nested button — never ends up inside an <a>. Non-interactive content is pointer-events-none and lets clicks fall through to this link; only actual controls opt back in with pointer-events-auto. */}
+        {/* Stretched link: an invisible full-card click target rendered as a sibling (not an ancestor) of the content below, so the Compare/Brochure/Floor Plan controls — real nested buttons — never end up inside an <a>. Non-interactive content is pointer-events-none and lets clicks fall through to this link; only actual controls opt back in with pointer-events-auto. */}
         <Link
           href={`/projects/${project.slug}`}
           aria-label={project.name}
@@ -138,12 +132,8 @@ export default function ProjectCard({ project, onNavigate }: { project: ProjectC
 
             {project.builderName ? <p className="truncate text-xs text-muted">{project.builderName}</p> : null}
 
-            {project.configurationSummary || projectSize ? (
-              <p className="truncate text-[11px] text-muted">
-                {[project.configurationSummary, projectSize].filter(Boolean).join(" · ")}
-              </p>
-            ) : project.tagline ? (
-              <p className="line-clamp-2 text-xs text-muted">{project.tagline}</p>
+            {project.configurationSummary ? (
+              <p className="truncate text-[11px] text-muted">{project.configurationSummary}</p>
             ) : null}
 
             <div className="mt-auto border-t border-border pt-2.5">
@@ -157,29 +147,6 @@ export default function ProjectCard({ project, onNavigate }: { project: ProjectC
                 <p className="font-mono text-[10px] text-muted" title="🔒 Sign in to unlock verified intelligence">
                   {maskPricePerSqft()}
                 </p>
-              ) : null}
-            </div>
-
-            <div className="flex items-center gap-1">
-              <p className="text-[10px] uppercase tracking-wide text-muted">Payment Plan</p>
-              {project.paymentPlanDescription ? (
-                <span className="pointer-events-auto">
-                  <InfoTooltip label={`${paymentPlanLabel}: payment plan details`}>{project.paymentPlanDescription}</InfoTooltip>
-                </span>
-              ) : null}
-            </div>
-            <p className="-mt-1.5 font-mono text-xs text-foreground">{paymentPlanLabel}</p>
-
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span
-                className={`w-fit rounded-sm border px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider ${SOURCE_CLASS[project.dataSource]}`}
-              >
-                {SOURCE_LABEL[project.dataSource]}
-              </span>
-              {project.brochureAvailable ? (
-                <span className="w-fit rounded-sm border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider text-accent">
-                  📄 Brochure available
-                </span>
               ) : null}
             </div>
 

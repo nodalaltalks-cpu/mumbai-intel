@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toProjectSchemaInput } from "./project-data";
+import { buildProjectData, parseProjectForm, toProjectSchemaInput } from "./project-data";
 import type { ProjectImportPayload } from "@/lib/ingestion/connectors/fileImport/types";
 
 /**
@@ -163,5 +163,156 @@ describe("toProjectSchemaInput — deliberately still NOT mapped (real, separate
     const payload = { ...BASE_PAYLOAD, actualPossession: "Handover expected Q1 2028" };
     const result = toProjectSchemaInput(payload as ProjectImportPayload);
     expect(result.actualPossession).toBeUndefined();
+  });
+});
+
+/**
+ * Phase 68.1 -- regression coverage for the admin ProjectForm's own submit
+ * path: parseProjectForm(FormData) -> buildProjectData(data) is exactly what
+ * updateProjectAction/autosaveProjectAction run on every save (see
+ * lib/actions/projects.ts). This pipeline itself was never the bug -- the
+ * root cause was CoverImageUploader rendering its own <form> nested inside
+ * ProjectForm's <form>, invalid HTML that made the browser's real DOM
+ * disagree with React's tree and corrupted what `new FormData(formRef.current)`
+ * captured client-side, before parseProjectForm ever saw it. Fixed by moving
+ * CoverImageUploader out to its own card, same as every other post-creation
+ * manager (ConfigurationsManager, BrochureUploader, ...) -- see
+ * app/admin/components/ProjectForm.tsx and the edit page that composes it.
+ * These tests pin down that the parse/build pipeline itself correctly
+ * threads address, builderId and isPublished through a save, so a future
+ * change to this pipeline can't reintroduce a *different* way to lose them.
+ */
+function projectFormData(fields: Record<string, string>): FormData {
+  const data = new FormData();
+  // Every field parseProjectForm reads via formData.get() -- a real submit always
+  // includes all of these (ProjectForm renders every one, several as hidden inputs
+  // carrying deprioritized values -- see ProjectForm.tsx's Phase 68 comments), so
+  // omitting most of them here mirrors formData.get() returning null for a field
+  // never present in the DOM, exactly like parseProjectForm's own null-tolerant
+  // preprocessing (nullToEmptyString/emptyToUndefined) already expects.
+  data.set("name", fields.name ?? "Kalpataru Vian");
+  data.set("localityId", fields.localityId ?? "loc-andheri-west");
+  for (const [key, value] of Object.entries(fields)) {
+    data.set(key, value);
+  }
+  return data;
+}
+
+describe("parseProjectForm + buildProjectData — Phase 68.1 save-path regression coverage", () => {
+  it("editing the address field persists the new value", () => {
+    const parsed = parseProjectForm(projectFormData({ address: "Near Andheri Metro Station, Andheri West, Mumbai" }));
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(buildProjectData(parsed.data).address).toBe("Near Andheri Metro Station, Andheri West, Mumbai");
+  });
+
+  it("clearing the address field persists null, not the previous value", () => {
+    const parsed = parseProjectForm(projectFormData({ address: "" }));
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(buildProjectData(parsed.data).address).toBeNull();
+  });
+
+  it("changing the developer (builderId) persists the newly selected builder", () => {
+    const parsed = parseProjectForm(projectFormData({ builderId: "bldr-godrej-properties" }));
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(buildProjectData(parsed.data).builderId).toBe("bldr-godrej-properties");
+  });
+
+  it("un-setting the developer (back to 'No developer') persists null", () => {
+    const parsed = parseProjectForm(projectFormData({ builderId: "" }));
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(buildProjectData(parsed.data).builderId).toBeNull();
+  });
+
+  it("publishing a project (isPublished checked) persists true, given the status/category it requires", () => {
+    const parsed = parseProjectForm(projectFormData({ isPublished: "on", status: "PRE_LAUNCH", category: "RESIDENTIAL" }));
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(buildProjectData(parsed.data).isPublished).toBe(true);
+  });
+
+  it("unpublishing a project (isPublished unchecked) persists false", () => {
+    // A real <input type="checkbox"> submits nothing at all when unchecked --
+    // formData.get("isPublished") returns null here, not "off" or "false".
+    const parsed = parseProjectForm(projectFormData({}));
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(buildProjectData(parsed.data).isPublished).toBe(false);
+  });
+
+  it("publishing without status/category fails validation with a friendly per-field message, rather than silently saving half-published", () => {
+    const parsed = parseProjectForm(projectFormData({ isPublished: "on" }));
+    expect(parsed.success).toBe(false);
+    if (parsed.success) return;
+    const messages = parsed.error.issues.map((i) => i.message);
+    expect(messages).toContain("Status is required to publish this project.");
+    expect(messages).toContain("Category is required to publish this project.");
+  });
+
+  it("editing address, developer and publish state together in one save doesn't clobber each other", () => {
+    const parsed = parseProjectForm(
+      projectFormData({
+        address: "Off New Link Road, Andheri West",
+        builderId: "bldr-godrej-properties",
+        isPublished: "on",
+        status: "PRE_LAUNCH",
+        category: "RESIDENTIAL",
+        reraNumber: "PR1180002600863",
+      })
+    );
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    const result = buildProjectData(parsed.data);
+    expect(result.address).toBe("Off New Link Road, Andheri West");
+    expect(result.builderId).toBe("bldr-godrej-properties");
+    expect(result.isPublished).toBe(true);
+    expect(result.reraNumber).toBe("PR1180002600863");
+  });
+
+  /**
+   * Phase 68.1 -- the SECOND, more direct root cause behind the reported bug (address/
+   * builderId/isPublished edits silently not saving): metaTitle/metaDescription are plain
+   * `String?` columns (unlike dataSource/confidence/paymentPlanType, which are real Postgres
+   * enum columns the DB itself guarantees are valid) -- Phase 68 kept them as hidden
+   * "preserve unchanged" carry-through inputs on every submit (see ProjectForm.tsx), but a
+   * handful of existing projects already had a metaTitle/metaDescription longer than this
+   * schema allows (set before this form enforced maxLength, e.g. via enrichment/bulk-import).
+   * Submitting that value unclamped made parseProjectForm() reject the WHOLE FormData with no
+   * visible error -- silently blocking every other edit on the form for that project, forever,
+   * regardless of the nested-<form> hydration bug fixed alongside this. The actual fix is in
+   * ProjectForm.tsx (clamps the hidden inputs' defaultValue to 70/160 chars before submit) --
+   * these tests pin down that parseProjectForm is right to reject an oversized value (so a
+   * regression can't silently start accepting one), which is exactly why the clamp has to live
+   * upstream of it, not here.
+   */
+  it("rejects a metaTitle longer than 70 characters with a clear per-field message", () => {
+    const parsed = parseProjectForm(projectFormData({ metaTitle: "x".repeat(100) }));
+    expect(parsed.success).toBe(false);
+    if (parsed.success) return;
+    expect(parsed.error.issues[0]?.path).toEqual(["metaTitle"]);
+  });
+
+  it("rejects a metaDescription longer than 160 characters with a clear per-field message", () => {
+    const parsed = parseProjectForm(projectFormData({ metaDescription: "x".repeat(200) }));
+    expect(parsed.success).toBe(false);
+    if (parsed.success) return;
+    expect(parsed.error.issues[0]?.path).toEqual(["metaDescription"]);
+  });
+
+  it("accepts a metaTitle/metaDescription clamped to exactly the schema limit (what ProjectForm's hidden inputs now submit)", () => {
+    const parsed = parseProjectForm(
+      projectFormData({
+        address: "Near Andheri Metro Station",
+        metaTitle: "x".repeat(100).slice(0, 70),
+        metaDescription: "x".repeat(200).slice(0, 160),
+      })
+    );
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    // The real bug: an oversized metaTitle/metaDescription blocked THIS field (address) too.
+    expect(buildProjectData(parsed.data).address).toBe("Near Andheri Metro Station");
   });
 });
