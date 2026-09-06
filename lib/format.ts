@@ -71,6 +71,7 @@ const DATE_FORMATTER = new Intl.DateTimeFormat("en-IN", {
   day: "2-digit",
   month: "short",
   year: "numeric",
+  timeZone: "Asia/Kolkata",
 });
 
 export function formatDate(date: Date | string | null | undefined): string {
@@ -97,6 +98,7 @@ export function formatDateTime(date: Date | string | null | undefined): string {
 const MONTH_FORMATTER = new Intl.DateTimeFormat("en-IN", {
   month: "short",
   year: "2-digit",
+  timeZone: "Asia/Kolkata",
 });
 
 export function formatMonth(date: Date | string): string {

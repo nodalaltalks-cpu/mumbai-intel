@@ -272,6 +272,13 @@ export default function ProjectForm({
   const [, startAutosaveTransition] = useTransition();
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewSections, setReviewSections] = useState<ReviewSection[]>([]);
+  /** Snapshot of the Published checkbox AT THE MOMENT "Review before submitting" was
+   * clicked -- drives the submit button's label. Reading `project.isPublished` there
+   * instead would show the project's stale persisted state, not what this pending
+   * submit is actually about to save (e.g. a founder who just checked "Published" on a
+   * previously-draft project would see the button say "Save Draft" while it in fact
+   * publishes). */
+  const [reviewIsPublished, setReviewIsPublished] = useState(false);
 
   // ── Phase 68 — Developer Website / Spokesperson reuse ──────────────────
   // Deliberately separate persistence from the main form save (same "explicit
@@ -430,6 +437,7 @@ export default function ProjectForm({
         ],
       },
     ]);
+    setReviewIsPublished(data.get("isPublished") === "on");
     setReviewOpen(true);
   }
 
@@ -1077,7 +1085,7 @@ export default function ProjectForm({
         <ProjectReviewModal
           sections={reviewSections}
           onClose={() => setReviewOpen(false)}
-          actions={<SubmitButton>{project ? (project.isPublished ? "Save changes" : "Save Draft") : "Save Draft"}</SubmitButton>}
+          actions={<SubmitButton>{project ? (reviewIsPublished ? "Save changes" : "Save Draft") : reviewIsPublished ? "Save & publish" : "Save Draft"}</SubmitButton>}
         />
       ) : null}
     </form>
