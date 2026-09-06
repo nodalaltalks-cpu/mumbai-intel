@@ -53,6 +53,30 @@ export async function recordFounderException(
   });
 }
 
+/**
+ * Phase 69 — lets an automated caller check whether the exact same exception
+ * (same field, same reason) was already the most recent raise for this field
+ * before raising another, so a repeated automation run never piles up
+ * identical AuditLog rows for a decision that hasn't changed. Only compares
+ * against the SINGLE most recent raise for this (stagingRecordId, fieldKey)
+ * pair -- if a founder resolved it and it was raised again for a genuinely
+ * new reason, that's a real re-raise, not a duplicate.
+ */
+export async function getMostRecentFounderException(stagingRecordId: string, fieldKey: string): Promise<{ reason: string } | null> {
+  const rows = await prisma.auditLog.findMany({
+    where: { action: FOUNDER_EXCEPTION_ACTION, entityType: ENRICHMENT_HISTORY_ENTITY_TYPE, entityId: stagingRecordId },
+    orderBy: { at: "desc" },
+    take: 200,
+  });
+  for (const row of rows) {
+    const after = row.after as Record<string, unknown> | null;
+    if (after?.fieldKey === fieldKey) {
+      return { reason: typeof after.reason === "string" ? after.reason : "" };
+    }
+  }
+  return null;
+}
+
 export interface FounderExceptionRow {
   auditId: string;
   stagingRecordId: string;

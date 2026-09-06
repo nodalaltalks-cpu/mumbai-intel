@@ -176,7 +176,15 @@ export default function DiscoveryCandidateList({
   builders,
 }: {
   rows: DiscoveryCandidateRow[];
-  onAction: (id: string, action: DiscoveryFounderAction) => Promise<{ ok: boolean; error?: string; projectStagingRecordId?: string }>;
+  onAction: (
+    id: string,
+    action: DiscoveryFounderAction
+  ) => Promise<{
+    ok: boolean;
+    error?: string;
+    projectStagingRecordId?: string;
+    enrichment?: { ran: boolean; status: string; autoAcceptedCount: number; exceptionCount: number };
+  }>;
   onEdit: (id: string, edits: DiscoveryCandidateEditInput) => Promise<{ ok: boolean; error?: string }>;
   /** Phase 71 — the existing Builder registry (id/name/legalNames/websiteUrl only), used to look up a developer's saved website LIVE from whatever the founder currently has typed/selected in the edit panel's Developer field — not frozen to the candidate's original staged developerName. */
   builders: BuilderForWebsiteLookup[];
@@ -187,6 +195,7 @@ export default function DiscoveryCandidateList({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [localStatus, setLocalStatus] = useState<Record<string, DiscoveryStatus>>({});
   const [stagedProjectId, setStagedProjectId] = useState<Record<string, string>>({});
+  const [enrichmentSummary, setEnrichmentSummary] = useState<Record<string, string>>({});
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, EditDraft>>({});
@@ -214,6 +223,16 @@ export default function DiscoveryCandidateList({
       const next: DiscoveryStatus = action === "EXCLUDE" ? "EXCLUDED" : action === "REVIEW" ? "NEEDS_REVIEW" : "PROJECT_STAGED";
       setLocalStatus((prev) => ({ ...prev, [row.id]: next }));
       if (result.projectStagingRecordId) setStagedProjectId((prev) => ({ ...prev, [row.id]: result.projectStagingRecordId! }));
+      if (result.enrichment) {
+        const e = result.enrichment;
+        const summary = !e.ran
+          ? null // enrichment itself errored/skipped — say nothing rather than expose internals, per "avoid implementation details"
+          : e.status === "NO_SOURCE"
+            ? "No official source recognized yet for this developer — add fields manually in Project Review."
+            : `${e.autoAcceptedCount} field${e.autoAcceptedCount === 1 ? "" : "s"} automatically populated.` +
+              (e.exceptionCount > 0 ? ` ${e.exceptionCount} field${e.exceptionCount === 1 ? "" : "s"} need your attention (Founder Exceptions).` : "");
+        if (summary) setEnrichmentSummary((prev) => ({ ...prev, [row.id]: summary }));
+      }
     } else {
       setErrors((prev) => ({ ...prev, [row.id]: result.error ?? "Could not update this candidate." }));
     }
@@ -393,6 +412,9 @@ export default function DiscoveryCandidateList({
                           View in Project Review Queue →
                         </a>
                       </p>
+                    ) : null}
+                    {enrichmentSummary[row.id] ? (
+                      <p className="mt-1 text-[10px] text-muted">{enrichmentSummary[row.id]}</p>
                     ) : null}
                     {p.founderDecisionNote ? (
                       <p className="mt-1 text-[10px] text-muted">

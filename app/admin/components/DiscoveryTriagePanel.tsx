@@ -85,7 +85,15 @@ export default function DiscoveryTriagePanel({
   builders,
 }: {
   rows: DiscoveryCandidateRow[];
-  onAction: (id: string, action: DiscoveryFounderAction) => Promise<{ ok: boolean; error?: string; projectStagingRecordId?: string }>;
+  onAction: (
+    id: string,
+    action: DiscoveryFounderAction
+  ) => Promise<{
+    ok: boolean;
+    error?: string;
+    projectStagingRecordId?: string;
+    enrichment?: { ran: boolean; status: string; autoAcceptedCount: number; exceptionCount: number };
+  }>;
   onEdit: (id: string, edits: DiscoveryCandidateEditInput) => Promise<{ ok: boolean; error?: string }>;
   /** Phase 71 — the existing Builder registry, passed through unchanged so the edit panel can look up a developer's saved website LIVE as the founder types/selects, not just from whatever developerName the candidate happened to be staged with. */
   builders: BuilderForWebsiteLookup[];

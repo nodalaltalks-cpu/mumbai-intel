@@ -18,6 +18,18 @@ vi.mock("@/lib/prisma", () => ({
 
 vi.mock("@/lib/queries", () => ({ PRIMARY_CITY_SLUG: "mumbai" }));
 
+const runAutoAcceptPilotRealWriteMock = vi.fn();
+vi.mock("@/lib/actions/autoAcceptPilot", () => ({
+  runAutoAcceptPilotRealWrite: (...args: unknown[]) => runAutoAcceptPilotRealWriteMock(...args),
+}));
+
+const recordFounderExceptionMock = vi.fn();
+const getMostRecentFounderExceptionMock = vi.fn().mockResolvedValue(null);
+vi.mock("@/lib/enrichment/founderExceptions", () => ({
+  recordFounderException: (...args: unknown[]) => recordFounderExceptionMock(...args),
+  getMostRecentFounderException: (...args: unknown[]) => getMostRecentFounderExceptionMock(...args),
+}));
+
 import { prisma } from "@/lib/prisma";
 import { applyDiscoveryFounderAction, stageDiscoveryBatch, updateDiscoveryCandidateDetails } from "./discovery";
 import { DISCOVERY_ENTITY_TYPE } from "@/lib/ingestion/discovery/types";
@@ -332,6 +344,104 @@ describe("applyDiscoveryFounderAction — Include (Phase 40 Part B/E)", () => {
     await applyDiscoveryFounderAction("cand-1", "INCLUDE");
     expect((prisma as unknown as { project: { update?: unknown; create?: unknown } }).project.update).toBeUndefined();
     expect((prisma as unknown as { project: { update?: unknown; create?: unknown } }).project.create).toBeUndefined();
+  });
+});
+
+describe("applyDiscoveryFounderAction — Include triggers automatic enrichment (Phase 69)", () => {
+  /**
+   * Unlike every other Include test above (which only care that a Project
+   * staging record is created and don't care what `stagingFindUniqueMock`
+   * returns on a second call), these tests need the SAME mock to answer
+   * differently for `loadDiscoveryCandidate`'s own lookup (by the discovery
+   * candidate id, "cand-1") vs. the new Project staging record's own lookup
+   * (by whatever id `stagingCreateMock` just returned) -- so they key off
+   * the real `where.id` instead of a single fixed return value.
+   */
+  function mockTwoStagingRecords() {
+    stagingFindUniqueMock.mockImplementation(((args: unknown) => {
+      const id = (args as { where: { id: string } }).where.id;
+      if (id === "cand-1") return Promise.resolve(discoveryCandidateRecord());
+      if (id === "new-project-staging-1") return Promise.resolve({ id, entityType: "Project", payload: { name: "Gurukrupa Ekam" } });
+      return Promise.resolve(null);
+    }) as never);
+  }
+
+  it("a successful Include immediately runs enrichment against the new staging record and returns its outcome", async () => {
+    mockTwoStagingRecords();
+    runAutoAcceptPilotRealWriteMock.mockResolvedValue({
+      rows: [
+        {
+          stagingRecordId: "new-project-staging-1",
+          projectName: "Gurukrupa Ekam",
+          field: "reraNumber",
+          currentValue: null,
+          proposedValue: "P51800080217",
+          confidence: "High",
+          classification: "GREEN_NEW",
+          tier: "A",
+          sourceType: "OFFICIAL_DEVELOPER",
+          sourceUrl: "https://gurukruparealcon.com/projects/gurukrupa-ekam",
+          decision: "AUTO_ACCEPT",
+          reason: "Tier A field, GREEN_NEW, trusted official source.",
+          wouldWrite: true,
+          writeOutcome: "WRITTEN",
+        },
+      ],
+      duplicateUrlWarnings: [],
+    });
+
+    const result = await applyDiscoveryFounderAction("cand-1", "INCLUDE");
+
+    expect(result.ok).toBe(true);
+    expect(runAutoAcceptPilotRealWriteMock).toHaveBeenCalledWith([{ id: "new-project-staging-1", name: "Gurukrupa Ekam" }]);
+    expect(result.enrichment).toEqual(expect.objectContaining({ ran: true, status: "SUCCESS", autoAcceptedCount: 1, exceptionCount: 0 }));
+  });
+
+  it("a CONFLICT field raises a real Founder Exception instead of being written, and Include still succeeds", async () => {
+    mockTwoStagingRecords();
+    runAutoAcceptPilotRealWriteMock.mockResolvedValue({
+      rows: [
+        {
+          stagingRecordId: "new-project-staging-1",
+          projectName: "Gurukrupa Ekam",
+          field: "priceMin",
+          currentValue: "5.61 Cr",
+          proposedValue: "6.10 Cr",
+          confidence: "High",
+          classification: "CONFLICT",
+          tier: "A",
+          sourceType: "OFFICIAL_DEVELOPER",
+          sourceUrl: "https://gurukruparealcon.com/projects/gurukrupa-ekam",
+          decision: "HUMAN_REVIEW",
+          reason: "The new source disagrees with the existing value.",
+          wouldWrite: false,
+          writeOutcome: "SKIPPED_NOT_AUTO_ACCEPT",
+        },
+      ],
+      duplicateUrlWarnings: [],
+    });
+
+    const result = await applyDiscoveryFounderAction("cand-1", "INCLUDE");
+
+    expect(result.ok).toBe(true);
+    expect(result.enrichment).toEqual(expect.objectContaining({ autoAcceptedCount: 0, exceptionCount: 1 }));
+    expect(recordFounderExceptionMock).toHaveBeenCalledWith(
+      "user-1",
+      "new-project-staging-1",
+      "priceMin",
+      expect.objectContaining({ reason: "The new source disagrees with the existing value." })
+    );
+  });
+
+  it("Include still succeeds even if the enrichment engine itself throws", async () => {
+    mockTwoStagingRecords();
+    runAutoAcceptPilotRealWriteMock.mockRejectedValue(new Error("fetch failed"));
+
+    const result = await applyDiscoveryFounderAction("cand-1", "INCLUDE");
+
+    expect(result.ok).toBe(true);
+    expect(result.projectStagingRecordId).toBe("new-project-staging-1");
+    expect(result.enrichment?.status).toBe("ERROR");
   });
 });
 

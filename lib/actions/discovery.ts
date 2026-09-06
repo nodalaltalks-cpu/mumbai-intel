@@ -24,6 +24,7 @@ import { discoverDeveloperProjects, type DeveloperDiscoveryResult } from "@/lib/
 import { stageMumbaiDiscoveryCandidates, type DeveloperStagingTally } from "@/lib/ingestion/discovery/generic/stageMumbaiDiscoveryCandidates";
 import { runWithConcurrency } from "@/lib/ingestion/discovery/generic/runWithConcurrency";
 import { discoverHousieyLocalityProjects } from "@/lib/ingestion/discovery/housiey/discoverHousieyLocality";
+import { runAutomaticEnrichmentForStagingRecord, type AutoEnrichOutcome } from "@/lib/enrichment/autoEnrichOnInclude";
 
 /**
  * Phase 39 Part H/K — stages a batch of discovery candidates for ONE already-
@@ -131,6 +132,8 @@ export interface DiscoveryFounderActionResult {
   error?: string;
   /** Set only on a successful INCLUDE (Phase 40) — the id of the new `entityType: "Project"` IngestStagingRecord now sitting in the EXISTING Project Review Queue. */
   projectStagingRecordId?: string;
+  /** Phase 69 — set only on a successful INCLUDE. Best-effort summary of the automatic enrichment pass that just ran against the new staging record; never blocks or reflects back on Include's own success. */
+  enrichment?: AutoEnrichOutcome;
 }
 
 /**
@@ -285,7 +288,26 @@ export async function applyDiscoveryFounderAction(id: string, action: DiscoveryF
     after: { status: "PROJECT_STAGED", projectStagingRecordId: projectStagingRecord.id },
   });
 
-  return { ok: true, projectStagingRecordId: projectStagingRecord.id };
+  // Phase 69 — the founder's one Include click now also runs the existing
+  // enrichment/auto-accept/exception engine (Phases 29/60/61/62A) against the
+  // Project staging record just created, instead of requiring a SEPARATE
+  // manual "Enrich Project" + per-field "Accept" pass in the Review Queue.
+  // Best-effort and never blocks Include's own success: the staging record
+  // above is already committed regardless of what happens next. Does NOT
+  // approve, publish, or touch the candidate's own status beyond what was
+  // already set above — a founder still reviews and approves the staging
+  // record into a live Project exactly as before this phase. Wrapped here
+  // too (belt-and-suspenders, on top of that function's own internal
+  // try/catch) so Include can NEVER fail because of this call, regardless of
+  // how it's invoked or mocked.
+  let enrichment: AutoEnrichOutcome | undefined;
+  try {
+    enrichment = await runAutomaticEnrichmentForStagingRecord(session.userId, projectStagingRecord.id);
+  } catch (error) {
+    enrichment = { ran: false, status: "ERROR", autoAcceptedCount: 0, exceptionCount: 0, error: error instanceof Error ? error.message : String(error) };
+  }
+
+  return { ok: true, projectStagingRecordId: projectStagingRecord.id, enrichment };
 }
 
 /** A full http(s):// URL, same discipline every other founder-facing URL field in this app already applies — never a bare domain or relative path. */
