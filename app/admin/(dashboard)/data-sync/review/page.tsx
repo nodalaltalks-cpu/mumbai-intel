@@ -12,7 +12,7 @@ import {
   buildTransactionReviewCompleteness,
 } from "@/lib/ingestion/reviewFieldRegistry";
 import { computeApprovalReadiness } from "@/lib/ingestion/projectApprovalReadiness";
-import { deriveEnrichmentBadge } from "@/lib/enrichment/enrichmentSummary";
+import { deriveEnrichmentBadge, readEnrichmentSummary } from "@/lib/enrichment/enrichmentSummary";
 import ReviewQueueList, { type ReviewRecord } from "@/app/admin/components/ReviewQueueList";
 import EmptyState from "@/app/components/ui/EmptyState";
 
@@ -215,6 +215,12 @@ export default async function DataSyncReviewPage() {
     // straight off this same payload -- pure, synchronous, no live fetch.
     // Never computed for a non-Project record.
     const enrichmentBadge = isProject ? deriveEnrichmentBadge(record.payload) : null;
+    // Phase 71B: the same persisted summary's field-key->classification map,
+    // needed so the Review Queue can name WHICH field(s) are in conflict
+    // (the badge above only carries counts). Reuses readEnrichmentSummary
+    // exactly as deriveEnrichmentBadge already does internally -- no new
+    // enrichment logic, no live re-fetch.
+    const enrichmentOutstanding = isProject ? (readEnrichmentSummary(record.payload)?.outstanding ?? null) : null;
 
     return {
       id: record.id,
@@ -231,6 +237,7 @@ export default async function DataSyncReviewPage() {
       isProject,
       readiness,
       enrichmentBadge,
+      enrichmentOutstanding,
     };
   });
 

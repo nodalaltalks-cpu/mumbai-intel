@@ -45,6 +45,8 @@ export interface ReviewRecord {
   readiness: ApprovalReadinessResult | null;
   /** Phase 46 Part E — the last persisted enrichment run's at-a-glance status, read straight off the staging payload (no live fetch). Null for every non-Project record. */
   enrichmentBadge: EnrichmentBadgeInfo | null;
+  /** Phase 71B — the same persisted run's fieldKey -> classification map (badge above only has counts), so the Review Queue's details dialog can name which field(s) are actually in CONFLICT. Null for every non-Project record or when enrichment has never run. */
+  enrichmentOutstanding: Record<string, "GREEN_NEW" | "YELLOW" | "CONFLICT"> | null;
 }
 
 type EnrichmentFilter = "ALL" | "PENDING" | "CONFLICTS" | "NOT_ENRICHED";
@@ -346,7 +348,7 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-3 text-[11px]">
                   <span className="font-mono text-foreground">
-                    {record.completeness.receivedCount} / {record.completeness.totalFields} fields received
+                    {record.completeness.receivedCount} / {record.completeness.totalFields} ingestion fields received
                   </span>
                   <span className="text-positive">🟢 {record.completeness.receivedCount} Received</span>
                   <span className="text-negative">🔴 {record.completeness.missingCount} Missing</span>
@@ -372,6 +374,8 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
           title={detailsRecord.proposedTitle}
           sourceKey={detailsRecord.sourceKey}
           completeness={detailsRecord.completeness}
+          isProject={detailsRecord.isProject}
+          enrichmentOutstanding={detailsRecord.enrichmentOutstanding}
           onClose={() => setDetailsRecordId(null)}
         />
       ) : null}
