@@ -59,9 +59,17 @@ import {
 } from "@/lib/enrichment/adapters/shapoorjiPallonjiAdapter";
 import { piramalRealtyAdapter, PIRAMAL_MAHALAXMI_PROJECT_URL, PIRAMAL_ARANYA_PROJECT_URL, PIRAMAL_REVANTA_PROJECT_URL } from "@/lib/enrichment/adapters/piramalRealtyAdapter";
 import { resolveProjectSource, type DeveloperSource } from "@/lib/enrichment/projectSourceResolution";
-import { buildEnrichmentSummary, withFieldTouched, type ProjectEnrichmentStatus } from "@/lib/enrichment/enrichmentSummary";
+import {
+  buildEnrichmentSummary,
+  deriveEnrichmentBadge,
+  readEnrichmentSummary,
+  withFieldTouched,
+  type EnrichmentBadgeInfo,
+  type ProjectEnrichmentStatus,
+} from "@/lib/enrichment/enrichmentSummary";
 import type { EnrichmentField } from "@/lib/enrichment/types";
-import { buildProjectReviewCompleteness } from "@/lib/ingestion/reviewFieldRegistry";
+import { buildProjectReviewCompleteness, type ReviewCompleteness } from "@/lib/ingestion/reviewFieldRegistry";
+import { computeApprovalReadiness, type ApprovalReadinessResult } from "@/lib/ingestion/projectApprovalReadiness";
 import type { ProjectImportPayload } from "@/lib/ingestion/connectors/fileImport/types";
 import { PRIMARY_CITY_SLUG } from "@/lib/queries";
 import { logAudit } from "@/lib/audit";
@@ -77,6 +85,8 @@ export interface EnrichProjectResult {
   builderMatch?: EntityMatchProposal;
   localityMatch?: EntityMatchProposal;
   error?: string;
+  /** Present whenever persistEnrichmentSummary succeeded -- see ProjectReviewSnapshot's own doc comment. */
+  snapshot?: ProjectReviewSnapshot;
 }
 
 /**
@@ -388,18 +398,21 @@ function toEnrichmentSummaryStatus(status: EnrichProjectStatus): ProjectEnrichme
  * must never fail the enrichment result itself, since the result the founder
  * sees in the dialog is already complete and correct without it.
  */
-async function persistEnrichmentSummary(stagingRecordId: string, result: EnrichProjectResult): Promise<void> {
+async function persistEnrichmentSummary(stagingRecordId: string, result: EnrichProjectResult): Promise<ProjectReviewSnapshot | undefined> {
   try {
     const record = await prisma.ingestStagingRecord.findUnique({ where: { id: stagingRecordId } });
-    if (!record || record.entityType !== "Project") return;
+    if (!record || record.entityType !== "Project") return undefined;
     const payload = record.payload as unknown as Record<string, unknown>;
     const summary = buildEnrichmentSummary(toEnrichmentSummaryStatus(result.status), result.fields);
+    const payloadToWrite = { ...payload, enrichmentSummary: summary };
     await prisma.ingestStagingRecord.update({
       where: { id: stagingRecordId },
-      data: { payload: { ...payload, enrichmentSummary: summary } as unknown as Prisma.InputJsonValue },
+      data: { payload: payloadToWrite as unknown as Prisma.InputJsonValue },
     });
+    return await buildProjectReviewSnapshot(payloadToWrite, record.matchedExistingId);
   } catch (error) {
     console.error("[enrichmentSummary] failed to persist for", stagingRecordId, error);
+    return undefined;
   }
 }
 
@@ -413,8 +426,8 @@ async function persistEnrichmentSummary(stagingRecordId: string, result: EnrichP
  */
 export async function enrichProjectAction(stagingRecordId: string): Promise<EnrichProjectResult> {
   const result = await computeEnrichmentResult(stagingRecordId);
-  await persistEnrichmentSummary(stagingRecordId, result);
-  return result;
+  const snapshot = await persistEnrichmentSummary(stagingRecordId, result);
+  return { ...result, snapshot };
 }
 
 /**
@@ -481,11 +494,56 @@ async function resolveBuilderAndLocalityMatches(
   return { builderMatch, localityMatch };
 }
 
+/**
+ * Targeted fix (real-time Review Queue synchronization) -- the SAME
+ * completeness/readiness/badge data page.tsx computes for every card on a
+ * full page load, recomputed here straight from the payload a mutation JUST
+ * wrote. Every field-level mutation action below attaches one of these to
+ * its SUCCESS result so the caller (ReviewQueueList) can update the parent
+ * Review Queue card immediately from the mutation's own response, instead of
+ * relying solely on router.refresh()'s separate, slower, best-effort
+ * round-trip (kept as a background sync, not the source of truth for the UI
+ * update). No new counting rules -- this calls the exact same
+ * buildProjectReviewCompleteness / computeApprovalReadiness /
+ * deriveEnrichmentBadge functions the server already used to render the
+ * queue.
+ */
+export interface ProjectReviewSnapshot {
+  completeness: ReviewCompleteness;
+  enrichmentBadge: EnrichmentBadgeInfo;
+  enrichmentOutstanding: Record<string, "GREEN_NEW" | "YELLOW" | "CONFLICT"> | null;
+  readiness: ApprovalReadinessResult;
+}
+
+async function buildProjectReviewSnapshot(payload: Record<string, unknown>, matchedExistingId: string | null): Promise<ProjectReviewSnapshot> {
+  const projectPayload = payload as unknown as ProjectImportPayload;
+  const [locality, matched] = await Promise.all([
+    projectPayload.localityId
+      ? prisma.locality.findUnique({ where: { id: projectPayload.localityId }, select: { name: true } })
+      : Promise.resolve(null),
+    matchedExistingId
+      ? prisma.project.findUnique({ where: { id: matchedExistingId }, select: { name: true, status: true, reraNumber: true } })
+      : Promise.resolve(null),
+  ]);
+  const completeness = buildProjectReviewCompleteness(projectPayload, {
+    localityName: locality?.name,
+    matched: matched ? { name: matched.name, status: matched.status, reraNumber: matched.reraNumber } : null,
+  });
+  return {
+    completeness,
+    readiness: computeApprovalReadiness(completeness),
+    enrichmentBadge: deriveEnrichmentBadge(payload),
+    enrichmentOutstanding: readEnrichmentSummary(payload)?.outstanding ?? null,
+  };
+}
+
 export type AcceptEnrichmentFieldStatus = "SUCCESS" | "NOT_FOUND" | "NOT_PENDING" | "INVALID_FIELD" | "INVALID_VALUE" | "ERROR";
 
 export interface AcceptEnrichmentFieldResult {
   status: AcceptEnrichmentFieldStatus;
   error?: string;
+  /** Present on SUCCESS only -- see ProjectReviewSnapshot's own doc comment. */
+  snapshot?: ProjectReviewSnapshot;
 }
 
 export interface AcceptEnrichmentFieldContext {
@@ -593,7 +651,8 @@ export async function acceptEnrichmentFieldAction(
 
   await logAudit(session.userId, actionTypeToStoredAction(actionType), ENRICHMENT_HISTORY_ENTITY_TYPE, stagingRecordId, { before, after });
 
-  return { status: "SUCCESS" };
+  const snapshot = await buildProjectReviewSnapshot(payloadToWrite, record.matchedExistingId);
+  return { status: "SUCCESS", snapshot };
 }
 
 export type RejectEnrichmentFieldStatus = "SUCCESS" | "NOT_FOUND" | "NOT_PENDING" | "INVALID_FIELD" | "INVALID_REASON" | "ERROR";
@@ -601,6 +660,8 @@ export type RejectEnrichmentFieldStatus = "SUCCESS" | "NOT_FOUND" | "NOT_PENDING
 export interface RejectEnrichmentFieldResult {
   status: RejectEnrichmentFieldStatus;
   error?: string;
+  /** Present on SUCCESS only -- see ProjectReviewSnapshot's own doc comment. */
+  snapshot?: ProjectReviewSnapshot;
 }
 
 export interface RejectEnrichmentFieldContext {
@@ -687,7 +748,8 @@ export async function rejectEnrichmentFieldAction(
 
   await logAudit(session.userId, actionTypeToStoredAction("REJECT"), ENRICHMENT_HISTORY_ENTITY_TYPE, stagingRecordId, { before: null, after });
 
-  return { status: "SUCCESS" };
+  const snapshot = await buildProjectReviewSnapshot(payloadToWrite, record.matchedExistingId);
+  return { status: "SUCCESS", snapshot };
 }
 
 export type AcceptEntityMatchStatus = "SUCCESS" | "NOT_FOUND" | "NOT_PENDING" | "INVALID_ENTITY" | "ERROR";
@@ -695,6 +757,8 @@ export type AcceptEntityMatchStatus = "SUCCESS" | "NOT_FOUND" | "NOT_PENDING" | 
 export interface AcceptEntityMatchResult {
   status: AcceptEntityMatchStatus;
   error?: string;
+  /** Present on SUCCESS only -- see ProjectReviewSnapshot's own doc comment. */
+  snapshot?: ProjectReviewSnapshot;
 }
 
 /**
@@ -748,7 +812,8 @@ export async function acceptEntityMatchAction(
     return { status: "ERROR", error: friendlyPrismaError(error) };
   }
 
-  return { status: "SUCCESS" };
+  const snapshot = await buildProjectReviewSnapshot(updatedPayload, record.matchedExistingId);
+  return { status: "SUCCESS", snapshot };
 }
 
 /**
@@ -767,6 +832,8 @@ export type RevertEnrichmentFieldStatus = "SUCCESS" | "NOT_FOUND" | "NOT_PENDING
 export interface RevertEnrichmentFieldResult {
   status: RevertEnrichmentFieldStatus;
   error?: string;
+  /** Present on SUCCESS only -- see ProjectReviewSnapshot's own doc comment. */
+  snapshot?: ProjectReviewSnapshot;
 }
 
 /**
@@ -864,5 +931,6 @@ export async function revertEnrichmentFieldAction(
 
   await logAudit(session.userId, actionTypeToStoredAction("REVERT"), ENRICHMENT_HISTORY_ENTITY_TYPE, stagingRecordId, { before, after });
 
-  return { status: "SUCCESS" };
+  const snapshot = await buildProjectReviewSnapshot(payloadToWrite, record.matchedExistingId);
+  return { status: "SUCCESS", snapshot };
 }

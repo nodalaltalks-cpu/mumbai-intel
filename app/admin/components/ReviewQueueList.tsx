@@ -19,10 +19,12 @@ import {
   rejectEnrichmentFieldAction,
   revertEnrichmentFieldAction,
   type EnrichProjectResult,
+  type ProjectReviewSnapshot,
 } from "@/lib/actions/enrichment";
 import type { EnrichmentField } from "@/lib/enrichment/types";
 import type { EnrichmentHistoryEntry } from "@/lib/enrichment/enrichmentHistory";
 import type { EnrichmentBadgeInfo } from "@/lib/enrichment/enrichmentSummary";
+import { applyReviewSnapshotOverrides } from "@/lib/enrichment/reviewSnapshotOverrides";
 import ConfirmButton from "./ConfirmButton";
 import ReviewDataDetailsDialog from "./ReviewDataDetailsDialog";
 import EnrichmentDialog from "./EnrichmentDialog";
@@ -89,17 +91,36 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
   const [isPending, startTransition] = useTransition();
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [detailsRecordId, setDetailsRecordId] = useState<string | null>(null);
-  const detailsRecord = records.find((r) => r.id === detailsRecordId) ?? null;
+
+  // Targeted fix (real-time Review Queue synchronization) -- every
+  // enrichment mutation (Accept/Edit/Reject/Undo/Enrich) now returns a fresh
+  // ProjectReviewSnapshot computed straight from the payload it just wrote
+  // (see lib/actions/enrichment.ts). Applying it here, keyed by staging
+  // record id, updates the card's completeness/badge/readiness the INSTANT
+  // the mutation resolves -- not dependent on router.refresh()'s separate,
+  // slower round-trip completing (kept below as a best-effort background
+  // sync for anything else on the page, never the source of truth for this
+  // record's own card). Overwritten by the next mutation's snapshot for the
+  // same record, so a later authoritative response always wins over an
+  // earlier one -- never the other way around.
+  const [snapshotOverrides, setSnapshotOverrides] = useState<Record<string, ProjectReviewSnapshot>>({});
+  const displayRecords = applyReviewSnapshotOverrides(records, snapshotOverrides);
+  function applySnapshot(recordId: string, snapshot: ProjectReviewSnapshot | undefined) {
+    if (!snapshot) return;
+    setSnapshotOverrides((prev) => ({ ...prev, [recordId]: snapshot }));
+  }
+
+  const detailsRecord = displayRecords.find((r) => r.id === detailsRecordId) ?? null;
 
   const [enrichmentRecordId, setEnrichmentRecordId] = useState<string | null>(null);
   const [enrichmentByRecordId, setEnrichmentByRecordId] = useState<Record<string, EnrichmentViewState>>({});
-  const enrichmentRecord = records.find((r) => r.id === enrichmentRecordId) ?? null;
+  const enrichmentRecord = displayRecords.find((r) => r.id === enrichmentRecordId) ?? null;
   const enrichmentState = enrichmentRecordId ? enrichmentByRecordId[enrichmentRecordId] : null;
 
   // Phase 46 Part F -- a very small filter over the already-loaded records,
   // client-side only (no new fetch/query, no data-grid infrastructure).
   const [enrichmentFilter, setEnrichmentFilter] = useState<EnrichmentFilter>("ALL");
-  const visibleRecords = records.filter((r) => matchesEnrichmentFilter(r, enrichmentFilter));
+  const visibleRecords = displayRecords.filter((r) => matchesEnrichmentFilter(r, enrichmentFilter));
 
   function runEnrichment(recordId: string) {
     setEnrichmentRecordId(recordId);
@@ -107,8 +128,10 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
     startTransition(async () => {
       const result = await enrichProjectAction(recordId);
       setEnrichmentByRecordId((prev) => ({ ...prev, [recordId]: { loading: false, result } }));
-      // Phase 46 Part E/J -- the run just persisted a fresh enrichmentSummary
-      // onto this record; refresh so the row's badge reflects it immediately.
+      applySnapshot(recordId, result.snapshot);
+      // Best-effort background sync for anything this snapshot doesn't cover
+      // (e.g. a different record's row) -- the card above is already correct
+      // without waiting for this to resolve.
       router.refresh();
     });
   }
@@ -122,7 +145,8 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
       confidence: field.confidence,
     });
     if (result.status === "SUCCESS") {
-      router.refresh(); // re-derives the completeness counter/badges from the freshly persisted staging payload
+      applySnapshot(enrichmentRecordId, result.snapshot);
+      router.refresh(); // best-effort background sync -- the card is already correct via applySnapshot above
       return { ok: true };
     }
     return { ok: false, error: result.error ?? "Could not save this field." };
@@ -138,7 +162,8 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
       confidence: field.confidence,
     });
     if (result.status === "SUCCESS") {
-      router.refresh(); // re-derives the completeness counter/badges from the freshly persisted staging payload
+      applySnapshot(enrichmentRecordId, result.snapshot);
+      router.refresh(); // best-effort background sync -- the card is already correct via applySnapshot above
       return { ok: true };
     }
     return { ok: false, error: result.error ?? "Could not reject this proposal." };
@@ -148,6 +173,7 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
     if (!enrichmentRecordId) return { ok: false, error: "No record open." };
     const result = await acceptEntityMatchAction(enrichmentRecordId, kind, existingId);
     if (result.status === "SUCCESS") {
+      applySnapshot(enrichmentRecordId, result.snapshot);
       router.refresh();
       return { ok: true };
     }
@@ -163,6 +189,7 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
     if (!enrichmentRecordId) return { ok: false, error: "No record open." };
     const result = await revertEnrichmentFieldAction(enrichmentRecordId, fieldKey, historyEventId);
     if (result.status === "SUCCESS") {
+      applySnapshot(enrichmentRecordId, result.snapshot);
       router.refresh();
       return { ok: true };
     }

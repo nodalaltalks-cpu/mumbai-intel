@@ -14,6 +14,12 @@ vi.mock("@/lib/prisma", () => ({
     ingestStagingRecord: { findUnique: vi.fn(), update: vi.fn() },
     locality: { findUnique: vi.fn(), findMany: vi.fn() },
     builder: { findUnique: vi.fn(), findMany: vi.fn() },
+    // Targeted fix (real-time Review Queue sync) -- buildProjectReviewSnapshot
+    // looks up the matched-duplicate project (only when matchedExistingId is
+    // actually set) to recompute completeness the same way page.tsx does.
+    // Every existing fixture below defaults matchedExistingId to null, so
+    // this is never actually called by any pre-existing test.
+    project: { findUnique: vi.fn() },
     city: { findUnique: vi.fn() },
     auditLog: { findMany: vi.fn(), create: vi.fn() },
   },
@@ -51,6 +57,7 @@ const localityFindUniqueMock = vi.mocked(prisma.locality.findUnique);
 const localityFindManyMock = vi.mocked(prisma.locality.findMany);
 const builderFindUniqueMock = vi.mocked(prisma.builder.findUnique);
 const builderFindManyMock = vi.mocked(prisma.builder.findMany);
+const projectFindUniqueMock = vi.mocked(prisma.project.findUnique);
 const cityFindUniqueMock = vi.mocked(prisma.city.findUnique);
 const auditLogFindManyMock = vi.mocked(prisma.auditLog.findMany);
 const auditLogCreateMock = vi.mocked(prisma.auditLog.create);
@@ -563,7 +570,24 @@ describe("acceptEntityMatchAction (Phase 33 Part F/G — persists a founder-sele
     builderFindUniqueMock.mockResolvedValue({ id: "bldr-1", name: "Adani Realty" } as never);
     await acceptEntityMatchAction("stage-1", "builder", "bldr-1");
     expect(stagingUpdateMock).toHaveBeenCalledTimes(1);
-    // No prisma.project mock exists in this test file's mocked client -- if the action ever attempted prisma.project.update, it would throw.
+    expect(projectFindUniqueMock).not.toHaveBeenCalled(); // no matchedExistingId on this fixture -- never queried
+  });
+
+  it("24. targeted fix (real-time Review Queue sync) -- SUCCESS carries a fresh snapshot reflecting the just-linked builder", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    builderFindUniqueMock.mockResolvedValue({ id: "bldr-1", name: "Adani Realty" } as never);
+    const result = await acceptEntityMatchAction("stage-1", "builder", "bldr-1");
+    expect(result.status).toBe("SUCCESS");
+    expect(result.snapshot).toBeDefined();
+    expect(result.snapshot!.completeness.totalFields).toBeGreaterThan(0);
+  });
+
+  it("25. a FAILED match (invalid builder id) never returns a snapshot", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    builderFindUniqueMock.mockResolvedValue(null as never);
+    const result = await acceptEntityMatchAction("stage-1", "builder", "bldr-does-not-exist");
+    expect(result.status).toBe("INVALID_ENTITY");
+    expect(result.snapshot).toBeUndefined();
   });
 });
 
@@ -767,6 +791,34 @@ describe("acceptEnrichmentFieldAction (Phase 32 — persists ONE accepted field 
     expect((thisModule as Record<string, unknown>).rejectStagingRecordAction).toBeUndefined();
     expect(typeof thisModule.acceptEnrichmentFieldAction).toBe("function");
   });
+
+  it("19. targeted fix (real-time Review Queue sync) -- SUCCESS carries a fresh snapshot with the just-accepted field no longer outstanding, computed from the SAME payload just written", async () => {
+    stagingFindUniqueMock.mockResolvedValue(
+      stagingRecord({
+        payload: {
+          ...GODREJ_PAYLOAD,
+          enrichmentSummary: { status: "READY", lastRunAt: "2026-01-01T00:00:00.000Z", outstanding: { name: "CONFLICT", tagline: "GREEN_NEW" } },
+        },
+      })
+    );
+    const result = await acceptEnrichmentFieldAction("stage-1", "name", "Godrej Skyshore");
+    expect(result.status).toBe("SUCCESS");
+    expect(result.snapshot).toBeDefined();
+    // "name" was resolved by this very call -- only "tagline" remains outstanding.
+    expect(result.snapshot!.enrichmentBadge.proposedCount).toBe(1);
+    expect(result.snapshot!.enrichmentOutstanding).toEqual({ tagline: "GREEN_NEW" });
+    // The completeness snapshot is the SAME registry-derived calculation the
+    // Review Queue page itself uses -- not a hand-rolled counter.
+    const byKey = new Map(result.snapshot!.completeness.groups.flatMap((g) => g.fields).map((f) => [f.key, f]));
+    expect(byKey.get("name")?.value).toBe("Godrej Skyshore");
+  });
+
+  it("20. a FAILED mutation (invalid field) never returns a snapshot -- no data exists to falsely imply the UI should update", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    const result = await acceptEnrichmentFieldAction("stage-1", "notARealField", "whatever");
+    expect(result.status).toBe("INVALID_FIELD");
+    expect(result.snapshot).toBeUndefined();
+  });
 });
 
 describe("rejectEnrichmentFieldAction (targeted fix, founder-testing round — Accept/Edit/REJECT model, never applies the value)", () => {
@@ -862,6 +914,29 @@ describe("rejectEnrichmentFieldAction (targeted fix, founder-testing round — A
     stagingFindUniqueMock.mockResolvedValue(stagingRecord());
     await rejectEnrichmentFieldAction("stage-1", "name", "reason");
     expect(stagingUpdateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("D. targeted fix (real-time Review Queue sync) -- SUCCESS carries a fresh snapshot with the rejected field no longer outstanding (e.g. '13 proposed / 1 conflict' -> '13 proposed / 0 conflict')", async () => {
+    stagingFindUniqueMock.mockResolvedValue(
+      stagingRecord({
+        payload: {
+          ...GODREJ_PAYLOAD,
+          enrichmentSummary: { status: "READY", lastRunAt: "2026-01-01T00:00:00.000Z", outstanding: { name: "CONFLICT" } },
+        },
+      })
+    );
+    const result = await rejectEnrichmentFieldAction("stage-1", "name", "Marketing name, not the RERA-registered name");
+    expect(result.status).toBe("SUCCESS");
+    expect(result.snapshot!.enrichmentBadge.proposedCount).toBe(0);
+    expect(result.snapshot!.enrichmentBadge.conflictCount).toBe(0);
+    expect(result.snapshot!.enrichmentOutstanding).toEqual({});
+  });
+
+  it("E. a FAILED rejection (blank reason) never returns a snapshot", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    const result = await rejectEnrichmentFieldAction("stage-1", "name", "   ");
+    expect(result.status).toBe("INVALID_REASON");
+    expect(result.snapshot).toBeUndefined();
   });
 });
 
@@ -1126,6 +1201,28 @@ describe("revertEnrichmentFieldAction (Phase 37 — exact restoration, never a b
     const result = await revertEnrichmentFieldAction("stage-1", "landAreaAcres", "evt-1");
     expect(result.status).toBe("NOT_PENDING");
     expect(stagingUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("26. targeted fix (real-time Review Queue sync) -- SUCCESS carries a fresh snapshot computed from the restored payload", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord({ payload: { ...GODREJ_PAYLOAD, landAreaAcres: 2.5 } }));
+    auditLogFindManyMock.mockResolvedValue([auditRow()] as never);
+    const result = await revertEnrichmentFieldAction("stage-1", "landAreaAcres", "evt-1");
+    expect(result.status).toBe("SUCCESS");
+    expect(result.snapshot).toBeDefined();
+    const byKey = new Map(result.snapshot!.completeness.groups.flatMap((g) => g.fields).map((f) => [f.key, f]));
+    // auditRow()'s "before" restores landAreaAcres to unset -- the snapshot must reflect that, not the pre-revert value.
+    expect(byKey.get("landAreaAcres")?.status).toBe("MISSING");
+  });
+
+  it("27. a FAILED revert (stale historyEventId) never returns a snapshot", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord({ payload: { ...GODREJ_PAYLOAD, landAreaAcres: 3.1 } }));
+    auditLogFindManyMock.mockResolvedValue([
+      auditRow({ id: "evt-2", at: new Date("2026-08-31T09:00:00.000Z") }),
+      auditRow({ id: "evt-1", at: new Date("2026-08-30T10:00:00.000Z") }),
+    ] as never);
+    const result = await revertEnrichmentFieldAction("stage-1", "landAreaAcres", "evt-1");
+    expect(result.status).toBe("CONFLICT");
+    expect(result.snapshot).toBeUndefined();
   });
 });
 

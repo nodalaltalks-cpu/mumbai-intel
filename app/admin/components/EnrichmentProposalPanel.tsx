@@ -121,9 +121,19 @@ export default function EnrichmentProposalPanel({
     byGroup.set(field.group, group);
   }
 
+  // Targeted fix (real-time Review Queue synchronization) -- a field the
+  // founder just Accepted/Saved/Rejected is resolved for this run (exactly
+  // the same "no longer outstanding" rule the parent Review Queue card's own
+  // badge already applies via enrichmentSummary.outstanding), so it's counted
+  // as settled here too instead of staying in its original GREEN_NEW/YELLOW/
+  // CONFLICT/MISSING bucket until the next explicit Enrich run. This never
+  // rewrites field.classification itself (the per-row badge/history still
+  // show exactly what happened) -- only this aggregate summary.
   const counts = fields.reduce(
     (acc, f) => {
-      acc[f.classification] += 1;
+      const state = saveState[f.key];
+      const resolved = state === "saved" || state === "rejected";
+      acc[resolved ? "CONFIRMED" : f.classification] += 1;
       return acc;
     },
     { CONFIRMED: 0, GREEN_NEW: 0, YELLOW: 0, CONFLICT: 0, MISSING: 0 } as Record<EnrichmentClassification, number>
