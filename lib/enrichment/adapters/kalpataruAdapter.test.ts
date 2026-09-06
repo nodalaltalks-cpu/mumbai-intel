@@ -277,7 +277,7 @@ describe("extractKalpataruVianFacts (Phase 38 — third-developer generalization
     expect(byKey("reraNumber").classification).toBe("GREEN_NEW");
     expect(byKey("landAreaAcres").classification).toBe("YELLOW");
     expect(byKey("googleMapsUrl").classification).toBe("MISSING");
-    expect(result).toHaveLength(41);
+    expect(result).toHaveLength(40);
   });
 
   it("23. never leaks Godrej fixture content into a Kalpataru extraction run", () => {

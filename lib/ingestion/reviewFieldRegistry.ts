@@ -92,7 +92,6 @@ export interface MatchedProjectSnapshot {
 
 export interface ProjectReviewContext {
   localityName?: string;
-  builderName?: string;
   /** Null when this record has no possible-duplicate match (IngestStagingRecord.matchedExistingId is null) -- the normal case for a brand-new project candidate. */
   matched?: MatchedProjectSnapshot | null;
 }
@@ -133,8 +132,7 @@ export function buildProjectReviewCompleteness(payload: ProjectImportPayload, co
         payload.name,
         payload.name ? `${slugify(payload.name)} (auto-generated preview, finalized at approval)` : null
       ),
-      field("builder", "Builder", payload.builderId, context.builderName ?? null),
-      field("developerGroup", "Developer group", payload.developerGroup, payload.developerGroup ?? null),
+      field("developerGroup", "Developer", payload.developerGroup, payload.developerGroup ?? null),
       field("status", "Status", payload.status, payload.status ? STATUS_LABEL[payload.status] : null, statusReview),
       field("category", "Category", payload.category, payload.category ? CATEGORY_LABEL[payload.category] : null),
       field("tagline", "Tagline", raw.tagline, typeof raw.tagline === "string" ? raw.tagline : null),

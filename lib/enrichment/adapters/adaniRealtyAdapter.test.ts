@@ -249,7 +249,7 @@ describe("extractAdaniLinkbayFacts (Phase 31 — second-developer generalization
     expect(byKey("developerGroup").classification).toBe("CONFLICT"); // "& RC Group" JV suffix vs real "Adani Realty" alone
     expect(byKey("address").classification).toBe("GREEN_NEW"); // was blank, real value found
     expect(byKey("reraCertificateUrl").classification).toBe("GREEN_NEW");
-    expect(result).toHaveLength(41);
+    expect(result).toHaveLength(40);
   });
 
   it("16. never leaks Godrej fixture content into an Adani extraction run", () => {

@@ -32,7 +32,6 @@ describe("computeApprovalReadiness (Phase 34 Part B/C — reuses the EXISTING co
   it("1. a fully complete project (no NEEDS_REVIEW fields at all) is READY", () => {
     const completeness = buildProjectReviewCompleteness(FULLY_FILLED_PAYLOAD, {
       localityName: "Andheri West",
-      builderName: "Adani Realty",
     });
     const result = computeApprovalReadiness(completeness);
     expect(result.status).toBe("READY");
@@ -91,19 +90,7 @@ describe("computeApprovalReadiness (Phase 34 Part B/C — reuses the EXISTING co
     expect(completeness.totalFields).toBe(before.total);
     expect(completeness.receivedCount).toBe(before.received);
     expect(completeness.missingCount).toBe(before.missing);
-    expect(completeness.totalFields).toBe(41);
-  });
-
-  it("9. reflects Builder resolution: builderId present + resolved name turns 'Builder' from MISSING to RECEIVED, keeping readiness READY", () => {
-    const withoutBuilder = buildProjectReviewCompleteness(ADANI_PAYLOAD, { localityName: "Andheri West" });
-    expect(computeApprovalReadiness(withoutBuilder).missingFieldLabels).toContain("Builder");
-
-    const withBuilder = buildProjectReviewCompleteness(
-      { ...ADANI_PAYLOAD, builderId: "bldr-1" },
-      { localityName: "Andheri West", builderName: "Adani Realty" }
-    );
-    expect(computeApprovalReadiness(withBuilder).missingFieldLabels).not.toContain("Builder");
-    expect(computeApprovalReadiness(withBuilder).status).toBe("READY");
+    expect(completeness.totalFields).toBe(40);
   });
 
   it("10. reflects Locality resolution the same way (locality already required on every staged payload, but confirms the mechanism)", () => {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { decideFieldAutomation } from "./autoDecideFieldAutomation";
 import { classifyProjectEnrichment } from "./classifyEnrichment";
 import type { ProjectImportPayload } from "../ingestion/connectors/fileImport/types";
-import type { SourceFactsMap, SourceMeta } from "./types";
+import type { EnrichmentField, SourceFactsMap, SourceMeta } from "./types";
 import type { ExistingLocalityWithAliases } from "../ingestion/discovery/areaLocalityResolution";
 
 const OFFICIAL_META: SourceMeta = { url: "https://www.example-developer.com/mumbai/some-project", tier: "OFFICIAL_DEVELOPER" };
@@ -234,8 +234,23 @@ describe("decideFieldAutomation — protected identity fields never auto-apply e
 });
 
 describe("decideFieldAutomation — fields the existing write path can never accept", () => {
-  it("builder field GREEN_NEW -> HUMAN_REVIEW, tagged UNSUPPORTED_WRITE_PATH (applyAcceptedField itself refuses this key)", () => {
-    const field = byKey(BASE_PAYLOAD, { builder: { value: "Some Builder Co.", confidence: "High" } }, "builder");
+  it("slug field GREEN_NEW -> HUMAN_REVIEW, tagged UNSUPPORTED_WRITE_PATH (applyAcceptedField itself refuses this key; slug is always auto-derived)", () => {
+    // Constructed directly rather than via classifyProjectEnrichment: the
+    // registry always derives "slug" from the project name, so it never
+    // actually reaches GREEN_NEW in a real run -- this only exercises
+    // decideFieldAutomation's own UNSUPPORTED_FOR_AUTO_ACCEPT branch.
+    const field: EnrichmentField = {
+      key: "slug",
+      label: "Slug",
+      group: "general",
+      currentValue: null,
+      proposedValue: "kalpataru-vian",
+      sourceUrl: OFFICIAL_META.url,
+      sourceType: OFFICIAL_META.tier,
+      confidence: "High",
+      classification: "GREEN_NEW",
+      reason: "Source proposed a slug value.",
+    };
     const result = decideFieldAutomation(field);
     expect(result.decision).toBe("HUMAN_REVIEW");
     expect(result.tag).toBe("UNSUPPORTED_WRITE_PATH");

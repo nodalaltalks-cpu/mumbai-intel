@@ -188,7 +188,6 @@ export default async function DataSyncReviewPage() {
     const completeness = projectPayload
       ? buildProjectReviewCompleteness(projectPayload, {
           localityName: localityNameById.get(projectPayload.localityId),
-          builderName: projectPayload.builderId ? builderNameById.get(projectPayload.builderId) : undefined,
           matched: matchedProjectForCompleteness
             ? { name: matchedProjectForCompleteness.name, status: matchedProjectForCompleteness.status, reraNumber: matchedProjectForCompleteness.reraNumber }
             : null,

@@ -94,10 +94,10 @@ describe("classifyProjectEnrichment — Part M rules (generic, not project-speci
     }
   });
 
-  it("15. reuses the existing 41-field registry exactly -- same field count, same keys, no second registry", () => {
+  it("15. reuses the existing 40-field registry exactly -- same field count, same keys, no second registry", () => {
     const completeness = buildProjectReviewCompleteness(GODREJ_PAYLOAD, CONTEXT);
     const result = classifyProjectEnrichment(GODREJ_PAYLOAD, CONTEXT, {}, { url: "https://example.com", tier: "OFFICIAL_DEVELOPER" });
-    expect(result).toHaveLength(41);
+    expect(result).toHaveLength(40);
     expect(result).toHaveLength(completeness.totalFields);
     const registryKeys = completeness.groups.flatMap((g) => g.fields.map((f) => f.key)).sort();
     const enrichmentKeys = result.map((f) => f.key).sort();
@@ -196,7 +196,7 @@ describe("Godrej Sky Shore acceptance test (Phase 28 Part L — the 10 named cas
     expect(byKey(result, "amenities")!.classification).toBe("YELLOW");
   });
 
-  it("total field count is still exactly 41 for the full Godrej run", () => {
-    expect(result).toHaveLength(41);
+  it("total field count is still exactly 40 for the full Godrej run", () => {
+    expect(result).toHaveLength(40);
   });
 });

@@ -98,12 +98,6 @@ describe("buildProjectReviewCompleteness — CASE 2: partial real payload (Adani
     every_missing_field_has_null_value(result);
   });
 
-  it("builder is MISSING when builderId is absent, even though developerGroup (free text) is present", () => {
-    const byKey = new Map(result.groups.flatMap((g) => g.fields).map((f) => [f.key, f]));
-    expect(byKey.get("builder")?.status).toBe("MISSING");
-    expect(byKey.get("developerGroup")?.status).toBe("RECEIVED");
-  });
-
   it("no field is NEEDS_REVIEW when there is no possible-duplicate match (the real Phase 13E case)", () => {
     expect(result.needsReviewCount).toBe(0);
   });
@@ -170,7 +164,6 @@ describe("buildProjectReviewCompleteness — CASE 1: fully populated payload", (
 
   const result = buildProjectReviewCompleteness(fullPayload, {
     localityName: "Andheri West",
-    builderName: "Adani Realty",
   });
 
   it("every field is RECEIVED, nothing MISSING", () => {

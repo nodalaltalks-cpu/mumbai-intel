@@ -326,10 +326,9 @@ async function computeEnrichmentResult(stagingRecordId: string): Promise<EnrichP
   }
   const projectUrl = projectSource.projectUrl!;
 
-  const [locality, builder] = await Promise.all([
-    payload.localityId ? prisma.locality.findUnique({ where: { id: payload.localityId }, select: { name: true } }) : Promise.resolve(null),
-    payload.builderId ? prisma.builder.findUnique({ where: { id: payload.builderId }, select: { name: true } }) : Promise.resolve(null),
-  ]);
+  const locality = payload.localityId
+    ? await prisma.locality.findUnique({ where: { id: payload.localityId }, select: { name: true } })
+    : null;
 
   let facts;
   try {
@@ -349,7 +348,7 @@ async function computeEnrichmentResult(stagingRecordId: string): Promise<EnrichP
 
   const fields = classifyProjectEnrichment(
     payload,
-    { localityName: locality?.name, builderName: builder?.name },
+    { localityName: locality?.name },
     facts,
     { url: projectUrl, tier: source.adapter.tier }
   );
