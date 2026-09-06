@@ -16,6 +16,7 @@ import {
   acceptEntityMatchAction,
   enrichProjectAction,
   getEnrichmentFieldHistoryAction,
+  rejectEnrichmentFieldAction,
   revertEnrichmentFieldAction,
   type EnrichProjectResult,
 } from "@/lib/actions/enrichment";
@@ -125,6 +126,22 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
       return { ok: true };
     }
     return { ok: false, error: result.error ?? "Could not save this field." };
+  }
+
+  async function handleRejectField(field: EnrichmentField, reason: string): Promise<{ ok: boolean; error?: string }> {
+    if (!enrichmentRecordId) return { ok: false, error: "No record open." };
+    const result = await rejectEnrichmentFieldAction(enrichmentRecordId, field.key, reason, {
+      proposedValue: field.proposedValue,
+      proposedItems: field.proposedItems,
+      sourceUrl: field.sourceUrl,
+      sourceType: field.sourceType,
+      confidence: field.confidence,
+    });
+    if (result.status === "SUCCESS") {
+      router.refresh(); // re-derives the completeness counter/badges from the freshly persisted staging payload
+      return { ok: true };
+    }
+    return { ok: false, error: result.error ?? "Could not reject this proposal." };
   }
 
   async function handleAcceptEntityMatch(kind: "builder" | "locality", existingId: string): Promise<{ ok: boolean; error?: string }> {
@@ -392,6 +409,7 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
           onClose={() => setEnrichmentRecordId(null)}
           onRetry={() => runEnrichment(enrichmentRecord.id)}
           onAcceptField={handleAcceptField}
+          onRejectField={handleRejectField}
           onAcceptEntityMatch={handleAcceptEntityMatch}
           onViewHistory={handleViewHistory}
           onUndo={handleUndo}

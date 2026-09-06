@@ -19,13 +19,14 @@ import { getAuditHistory } from "@/lib/admin-queries";
 
 export const ENRICHMENT_HISTORY_ENTITY_TYPE = "ProjectEnrichmentField";
 
-export type EnrichmentHistoryActionType = "ACCEPT" | "EDIT_ACCEPT" | "REVERT" | "RE_ACCEPT";
+export type EnrichmentHistoryActionType = "ACCEPT" | "EDIT_ACCEPT" | "REVERT" | "RE_ACCEPT" | "REJECT";
 
 const ACTION_TYPE_TO_STORED: Record<EnrichmentHistoryActionType, string> = {
   ACCEPT: "enrichment.accept",
   EDIT_ACCEPT: "enrichment.edit_accept",
   REVERT: "enrichment.revert",
   RE_ACCEPT: "enrichment.re_accept",
+  REJECT: "enrichment.reject",
 };
 
 const STORED_TO_ACTION_TYPE: Record<string, EnrichmentHistoryActionType> = Object.fromEntries(
@@ -47,7 +48,10 @@ export function actionTypeToStoredAction(actionType: EnrichmentHistoryActionType
  * Undo, never re-parsed from the display string, so restoration is always
  * byte-exact regardless of field type. `sourceUrl`/`sourceType`/`confidence`
  * are only ever present on a real accept from an official source -- a
- * Revert never invents provenance for the value it restores.
+ * Revert never invents provenance for the value it restores. `reason`
+ * (targeted fix, founder-testing round) is set ONLY on a REJECT event's
+ * `after` snapshot -- the founder's required explanation for declining a
+ * proposed value; every other action type leaves it undefined.
  */
 export interface EnrichmentHistorySnapshot {
   fieldKey: string;
@@ -57,6 +61,7 @@ export interface EnrichmentHistorySnapshot {
   sourceUrl?: string | null;
   sourceType?: string | null;
   confidence?: string | null;
+  reason?: string;
 }
 
 export interface EnrichmentHistoryEntry {

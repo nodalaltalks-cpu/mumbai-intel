@@ -17,7 +17,7 @@ const CLASSIFICATION_BADGE: Record<EnrichmentClassification, { tone: BadgeTone; 
   MISSING: { tone: "muted", label: "Missing", icon: "⚪" },
 };
 
-type FieldSaveState = "idle" | "saving" | "saved" | "error" | "kept";
+type FieldSaveState = "idle" | "saving" | "saved" | "error" | "rejected";
 
 const STATUS_OPTIONS = Object.values(STATUS_LABEL);
 const CATEGORY_OPTIONS = Object.values(CATEGORY_LABEL);
@@ -51,16 +51,25 @@ const MONTH_OPTIONS = POSSESSION_MONTH_LABEL.filter(Boolean);
 export default function EnrichmentProposalPanel({
   fields,
   onAcceptField,
+  onRejectField,
   onViewHistory,
   onUndo,
 }: {
   fields: EnrichmentField[];
   onAcceptField: (field: EnrichmentField) => Promise<{ ok: boolean; error?: string }>;
+  /** Targeted fix (post-Phase 71B founder testing) -- declines a proposed value with a required reason, recorded to the same enrichment history Accept/Undo already write to. Never applies the proposed value. */
+  onRejectField: (field: EnrichmentField, reason: string) => Promise<{ ok: boolean; error?: string }>;
   onViewHistory: (fieldKey: string) => Promise<EnrichmentHistoryEntry[]>;
   onUndo: (fieldKey: string, historyEventId: string) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const [saveState, setSaveState] = useState<Record<string, FieldSaveState>>({});
   const [saveError, setSaveError] = useState<Record<string, string>>({});
+
+  // Reject reason prompt -- local-only until "Confirm Rejection" is clicked.
+  const [rejectingKey, setRejectingKey] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejectSubmitting, setRejectSubmitting] = useState(false);
+  const [rejectError, setRejectError] = useState<string | null>(null);
 
   // Phase 36 -- local-only edits, keyed by field.key. Never sent to the
   // server until the founder clicks Accept/Accept Proposed.
@@ -151,8 +160,35 @@ export default function EnrichmentProposalPanel({
     }
   }
 
-  function handleKeepCurrent(fieldKey: string) {
-    setSaveState((prev) => ({ ...prev, [fieldKey]: "kept" }));
+  function startReject(fieldKey: string) {
+    setRejectingKey(fieldKey);
+    setRejectReason("");
+    setRejectError(null);
+  }
+
+  function cancelReject() {
+    setRejectingKey(null);
+    setRejectReason("");
+    setRejectError(null);
+  }
+
+  async function confirmReject(field: EnrichmentField) {
+    if (!rejectReason.trim()) {
+      setRejectError("A reason is required to reject this proposal.");
+      return;
+    }
+    setRejectSubmitting(true);
+    const fieldToReject: EnrichmentField = { ...field, proposedValue: displayValue(field), proposedItems: displayItems(field) };
+    const result = await onRejectField(fieldToReject, rejectReason.trim());
+    setRejectSubmitting(false);
+    if (result.ok) {
+      setSaveState((prev) => ({ ...prev, [field.key]: "rejected" }));
+      setRejectingKey(null);
+      setRejectReason("");
+      setRejectError(null);
+    } else {
+      setRejectError(result.error ?? "Could not reject this proposal.");
+    }
   }
 
   function startEdit(field: EnrichmentField) {
@@ -303,9 +339,46 @@ export default function EnrichmentProposalPanel({
     const state = saveState[fieldKey];
     if (state === "saving") return <span className="text-[10px] text-muted">Saving...</span>;
     if (state === "saved") return <span className="text-[10px] text-positive">✓ Saved to pending review</span>;
-    if (state === "kept") return <span className="text-[10px] text-muted">Keeping current value — no change made</span>;
+    if (state === "rejected") return <span className="text-[10px] text-muted">✓ Rejected — recorded to history, current value kept</span>;
     if (state === "error") return <span className="text-[10px] text-negative">{saveError[fieldKey]}</span>;
     return null;
+  }
+
+  function renderRejectPrompt(field: EnrichmentField) {
+    return (
+      <div className="mt-1.5 flex flex-col gap-1.5 rounded-sm border border-negative/30 bg-negative/5 p-2">
+        <p className="text-[10px] font-mono uppercase tracking-wide text-negative">Reject Enrichment Proposal</p>
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] uppercase tracking-wide text-muted">Reason</span>
+          <textarea
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            rows={2}
+            className="w-full rounded-sm border border-border bg-surface px-2 py-1 text-xs text-foreground"
+            placeholder="Why is this proposed value being declined?"
+          />
+        </label>
+        {rejectError ? <span className="text-[10px] text-negative">{rejectError}</span> : null}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={rejectSubmitting}
+            onClick={() => confirmReject(field)}
+            className="rounded-sm border border-negative/40 px-2 py-0.5 text-[10px] font-mono uppercase text-negative hover:bg-negative/10 disabled:opacity-50"
+          >
+            {rejectSubmitting ? "Confirming..." : "Confirm Rejection"}
+          </button>
+          <button
+            type="button"
+            disabled={rejectSubmitting}
+            onClick={cancelReject}
+            className="rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-foreground hover:text-foreground disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -330,8 +403,9 @@ export default function EnrichmentProposalPanel({
             {groupFields.map((field) => {
               const state = saveState[field.key] ?? "idle";
               const busy = state === "saving";
-              const done = state === "saved" || state === "kept";
+              const done = state === "saved" || state === "rejected";
               const isEditing = editingKey === field.key;
+              const isRejecting = rejectingKey === field.key;
               // Phase 67: gates on whether applyAcceptedField can actually write this
               // key at all (excludes locality/builder/slug/dataSource/sourceRef),
               // independent of classification -- including MISSING, so a field like
@@ -387,7 +461,7 @@ export default function EnrichmentProposalPanel({
                   ) : null}
                   <p className="text-[10px] text-muted">{field.reason}</p>
 
-                  {!isEditing && field.classification === "GREEN_NEW" ? (
+                  {!isEditing && !isRejecting && field.classification === "GREEN_NEW" ? (
                     <div className="mt-1 flex items-center gap-2">
                       {canEdit ? (
                         <button
@@ -407,6 +481,14 @@ export default function EnrichmentProposalPanel({
                       >
                         Accept
                       </button>
+                      <button
+                        type="button"
+                        disabled={busy || done}
+                        onClick={() => startReject(field.key)}
+                        className="rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-negative hover:text-negative disabled:opacity-50"
+                      >
+                        Reject
+                      </button>
                       {statusLine(field.key)}
                       <button
                         type="button"
@@ -418,7 +500,7 @@ export default function EnrichmentProposalPanel({
                     </div>
                   ) : null}
 
-                  {!isEditing && field.classification === "YELLOW" ? (
+                  {!isEditing && !isRejecting && field.classification === "YELLOW" ? (
                     <div className="mt-1 flex items-center gap-2">
                       {canEdit ? (
                         <button
@@ -439,6 +521,14 @@ export default function EnrichmentProposalPanel({
                       >
                         Accept (lower confidence)
                       </button>
+                      <button
+                        type="button"
+                        disabled={busy || done}
+                        onClick={() => startReject(field.key)}
+                        className="rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-negative hover:text-negative disabled:opacity-50"
+                      >
+                        Reject
+                      </button>
                       {statusLine(field.key)}
                       <button
                         type="button"
@@ -450,16 +540,8 @@ export default function EnrichmentProposalPanel({
                     </div>
                   ) : null}
 
-                  {!isEditing && field.classification === "CONFLICT" ? (
+                  {!isEditing && !isRejecting && field.classification === "CONFLICT" ? (
                     <div className="mt-1 flex items-center gap-2">
-                      <button
-                        type="button"
-                        disabled={busy || done}
-                        onClick={() => handleKeepCurrent(field.key)}
-                        className="rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-foreground hover:text-foreground disabled:opacity-50"
-                      >
-                        Keep Current
-                      </button>
                       {canEdit ? (
                         <button
                           type="button"
@@ -478,6 +560,14 @@ export default function EnrichmentProposalPanel({
                       >
                         Accept Proposed
                       </button>
+                      <button
+                        type="button"
+                        disabled={busy || done}
+                        onClick={() => startReject(field.key)}
+                        className="rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-foreground hover:text-foreground disabled:opacity-50"
+                      >
+                        Reject
+                      </button>
                       {statusLine(field.key)}
                       <button
                         type="button"
@@ -488,6 +578,8 @@ export default function EnrichmentProposalPanel({
                       </button>
                     </div>
                   ) : null}
+
+                  {isRejecting ? renderRejectPrompt(field) : null}
 
                   {!isEditing && field.classification === "CONFIRMED" ? (
                     <div className="mt-1 flex items-center gap-2">

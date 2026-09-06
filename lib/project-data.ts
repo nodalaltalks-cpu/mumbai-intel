@@ -305,6 +305,21 @@ export function toProjectSchemaInput(payload: ProjectImportPayload): ProjectSche
     ? (rawPaymentPlanType as ProjectSchemaInput["paymentPlanType"])
     : undefined;
 
+  // Targeted fix (post-Phase 71B founder testing) -- `paymentPlans` (plural,
+  // multiple structured entries) is a NEW, additive staging field; Project
+  // itself still has only the single paymentPlanDescription column
+  // (unchanged, no schema migration). When present, every plan is folded
+  // into that one field as separate paragraphs -- preserving the founder's
+  // full multi-plan review, without inventing a live-Project relation this
+  // mapper has no mechanism to create (same reasoning as amenities/
+  // specifications above). Falls back to the existing single-description
+  // field exactly as before when `paymentPlans` was never set.
+  const rawPaymentPlans = (payload as unknown as Record<string, unknown>).paymentPlans;
+  const paymentPlansJoined =
+    Array.isArray(rawPaymentPlans) && rawPaymentPlans.length > 0 && rawPaymentPlans.every((p) => typeof p === "string")
+      ? rawPaymentPlans.join("\n\n")
+      : undefined;
+
   return {
     name: payload.name,
     slug: undefined,
@@ -331,7 +346,7 @@ export function toProjectSchemaInput(payload: ProjectImportPayload): ProjectSche
     landAreaAcres: readRawNumber(payload, "landAreaAcres"),
     priceMinRupees: payload.priceMinRupees,
     paymentPlanType,
-    paymentPlanDescription: readRawString(payload, "paymentPlanDescription"),
+    paymentPlanDescription: paymentPlansJoined ?? readRawString(payload, "paymentPlanDescription"),
     dataSource: payload.dataSource,
     confidence: "MEDIUM",
     sourceRef: payload.sourceRef,

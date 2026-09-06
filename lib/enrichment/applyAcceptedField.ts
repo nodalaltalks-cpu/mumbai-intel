@@ -208,6 +208,7 @@ const ARRAY_WRAP_FIELDS: Record<string, string> = {
   faqs: "faqs",
   images: "images",
   documents: "documents",
+  paymentPlans: "paymentPlans",
 };
 
 /** Special-cased-by-name fields handled directly in applyAcceptedField, above and beyond DIRECT_STRING_FIELDS/ARRAY_WRAP_FIELDS. */

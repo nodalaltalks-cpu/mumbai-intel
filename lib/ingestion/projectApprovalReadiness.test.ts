@@ -91,7 +91,7 @@ describe("computeApprovalReadiness (Phase 34 Part B/C — reuses the EXISTING co
     expect(completeness.totalFields).toBe(before.total);
     expect(completeness.receivedCount).toBe(before.received);
     expect(completeness.missingCount).toBe(before.missing);
-    expect(completeness.totalFields).toBe(40);
+    expect(completeness.totalFields).toBe(41);
   });
 
   it("9. reflects Builder resolution: builderId present + resolved name turns 'Builder' from MISSING to RECEIVED, keeping readiness READY", () => {

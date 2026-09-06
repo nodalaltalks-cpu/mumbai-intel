@@ -62,24 +62,42 @@ describe("classifyProjectEnrichment — Part M rules (generic, not project-speci
     expect(f.proposedValue).toBe("A Totally Different Name");
   });
 
-  it("7. no source value for a field -> MISSING, whether or not it's currently blank", () => {
+  it("7. no source value for a currently-blank field -> MISSING", () => {
     const result = classifyProjectEnrichment(GODREJ_PAYLOAD, CONTEXT, {}, { url: "https://example.com", tier: "OFFICIAL_DEVELOPER" });
     expect(byKey(result, "brochure")!.classification).toBe("MISSING");
     expect(byKey(result, "launchDate")!.classification).toBe("MISSING");
   });
 
-  it("8. no fabrication across a full run with zero facts provided", () => {
+  it("7b. no source value for a currently-POPULATED field -> CONFIRMED, never MISSING (targeted fix: dataSource/sourceRef and every other already-filled field with no competing source opinion)", () => {
+    const result = classifyProjectEnrichment(GODREJ_PAYLOAD, CONTEXT, {}, { url: "https://example.com", tier: "OFFICIAL_DEVELOPER" });
+    const dataSource = byKey(result, "dataSource")!;
+    expect(dataSource.classification).toBe("CONFIRMED");
+    expect(dataSource.currentValue).toBe("OPEN DATA");
+    expect(dataSource.proposedValue).toBe("OPEN DATA");
+    const sourceRef = byKey(result, "sourceRef")!;
+    expect(sourceRef.classification).toBe("CONFIRMED");
+    expect(sourceRef.currentValue).toBe("PM1180002500076");
+    expect(sourceRef.proposedValue).toBe("PM1180002500076");
+  });
+
+  it("8. no fabrication across a full run with zero facts provided -- every field is either MISSING (genuinely blank) or CONFIRMED (populated, proposedValue mirrors currentValue exactly, never a fabricated different value)", () => {
     const result = classifyProjectEnrichment(GODREJ_PAYLOAD, CONTEXT, {}, { url: "https://example.com", tier: "OFFICIAL_DEVELOPER" });
     for (const f of result) {
-      expect(f.classification).toBe("MISSING");
-      expect(f.proposedValue).toBeNull();
+      expect(["MISSING", "CONFIRMED"]).toContain(f.classification);
+      if (f.classification === "MISSING") {
+        expect(f.currentValue).toBeNull();
+        expect(f.proposedValue).toBeNull();
+      } else {
+        expect(f.currentValue).not.toBeNull();
+        expect(f.proposedValue).toBe(f.currentValue);
+      }
     }
   });
 
-  it("15. reuses the existing 40-field registry exactly -- same field count, same keys, no second registry", () => {
+  it("15. reuses the existing 41-field registry exactly -- same field count, same keys, no second registry", () => {
     const completeness = buildProjectReviewCompleteness(GODREJ_PAYLOAD, CONTEXT);
     const result = classifyProjectEnrichment(GODREJ_PAYLOAD, CONTEXT, {}, { url: "https://example.com", tier: "OFFICIAL_DEVELOPER" });
-    expect(result).toHaveLength(40);
+    expect(result).toHaveLength(41);
     expect(result).toHaveLength(completeness.totalFields);
     const registryKeys = completeness.groups.flatMap((g) => g.fields.map((f) => f.key)).sort();
     const enrichmentKeys = result.map((f) => f.key).sort();
@@ -178,7 +196,7 @@ describe("Godrej Sky Shore acceptance test (Phase 28 Part L — the 10 named cas
     expect(byKey(result, "amenities")!.classification).toBe("YELLOW");
   });
 
-  it("total field count is still exactly 40 for the full Godrej run", () => {
-    expect(result).toHaveLength(40);
+  it("total field count is still exactly 41 for the full Godrej run", () => {
+    expect(result).toHaveLength(41);
   });
 });

@@ -26,6 +26,7 @@ export default function EnrichmentDialog({
   onClose,
   onRetry,
   onAcceptField,
+  onRejectField,
   onAcceptEntityMatch,
   onViewHistory,
   onUndo,
@@ -40,6 +41,7 @@ export default function EnrichmentDialog({
   onClose: () => void;
   onRetry: () => void;
   onAcceptField: (field: EnrichmentField) => Promise<{ ok: boolean; error?: string }>;
+  onRejectField: (field: EnrichmentField, reason: string) => Promise<{ ok: boolean; error?: string }>;
   onAcceptEntityMatch: (kind: "builder" | "locality", existingId: string) => Promise<{ ok: boolean; error?: string }>;
   onViewHistory: (fieldKey: string) => Promise<EnrichmentHistoryEntry[]>;
   onUndo: (fieldKey: string, historyEventId: string) => Promise<{ ok: boolean; error?: string }>;
@@ -58,7 +60,13 @@ export default function EnrichmentDialog({
                 {localityMatch ? <EntityMatchCard proposal={localityMatch} onAccept={(id) => onAcceptEntityMatch("locality", id)} /> : null}
               </div>
             ) : null}
-            <EnrichmentProposalPanel fields={fields} onAcceptField={onAcceptField} onViewHistory={onViewHistory} onUndo={onUndo} />
+            <EnrichmentProposalPanel
+              fields={fields}
+              onAcceptField={onAcceptField}
+              onRejectField={onRejectField}
+              onViewHistory={onViewHistory}
+              onUndo={onUndo}
+            />
           </>
         ) : status === "NO_SOURCE" || status === "SOURCE_UNAVAILABLE" || status === "NO_NEW_INFO" ? (
           <div className="flex flex-col gap-3">

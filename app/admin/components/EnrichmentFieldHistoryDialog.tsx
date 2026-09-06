@@ -11,6 +11,7 @@ const ACTION_LABEL: Record<EnrichmentHistoryEntry["action"], string> = {
   EDIT_ACCEPT: "Edited & Accepted",
   REVERT: "Reverted",
   RE_ACCEPT: "Re-accepted",
+  REJECT: "Rejected",
 };
 
 function displayText(snapshot: EnrichmentHistoryEntry["before"]): string {
@@ -56,7 +57,8 @@ export default function EnrichmentFieldHistoryDialog({
   }, [entries]);
 
   const latest = entries?.[0] ?? null;
-  const canUndo = latest && latest.action !== "REVERT";
+  // A rejection never changed the staged value -- there's nothing to undo.
+  const canUndo = latest && latest.action !== "REVERT" && latest.action !== "REJECT";
 
   async function handleUndo() {
     if (!latest) return;
@@ -124,16 +126,27 @@ export default function EnrichmentFieldHistoryDialog({
               {entries.map((entry) => (
                 <div key={entry.id} className="border-b border-border pb-3 last:border-b-0 last:pb-0">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <Badge tone={entry.action === "REVERT" ? "muted" : "accent"}>{ACTION_LABEL[entry.action]}</Badge>
+                    <Badge tone={entry.action === "REVERT" ? "muted" : entry.action === "REJECT" ? "negative" : "accent"}>
+                      {ACTION_LABEL[entry.action]}
+                    </Badge>
                     <span className="text-[11px] text-muted">
                       {entry.actorName ?? "System"} · {formatDateTime(entry.at)}
                     </span>
                   </div>
-                  <p className="mt-1.5 text-[11px] text-muted">
-                    <span className="text-foreground">{displayText(entry.before)}</span>
-                    <span className="mx-1">→</span>
-                    <span className="text-foreground">{displayText(entry.after)}</span>
-                  </p>
+                  {entry.action === "REJECT" ? (
+                    <>
+                      <p className="mt-1.5 text-[11px] text-muted">
+                        Declined proposed value: <span className="text-foreground">{displayText(entry.after)}</span>
+                      </p>
+                      {entry.after?.reason ? <p className="mt-0.5 text-[11px] text-foreground">Reason: {entry.after.reason}</p> : null}
+                    </>
+                  ) : (
+                    <p className="mt-1.5 text-[11px] text-muted">
+                      <span className="text-foreground">{displayText(entry.before)}</span>
+                      <span className="mx-1">→</span>
+                      <span className="text-foreground">{displayText(entry.after)}</span>
+                    </p>
+                  )}
                   {entry.after?.sourceUrl ? <p className="mt-0.5 text-[10px] text-muted">Source: {entry.after.sourceUrl}</p> : null}
                 </div>
               ))}

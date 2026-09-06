@@ -181,6 +181,20 @@ export function buildProjectReviewCompleteness(payload: ProjectImportPayload, co
         raw.paymentPlanDescription,
         typeof raw.paymentPlanDescription === "string" ? raw.paymentPlanDescription : null
       ),
+      // Targeted fix (post-Phase 71B founder testing) -- real projects can
+      // offer multiple alternative payment plans (e.g. Construction Linked
+      // AND Down Payment), which paymentPlanType/paymentPlanDescription above
+      // (a single type + single free-text description) can't represent.
+      // Deliberately additive: those two fields are untouched for backward
+      // compatibility with every existing staging record; this is a NEW,
+      // separate array-shaped field (same convention as highlights/amenities
+      // below), each entry a self-contained "Type: description" string.
+      field(
+        "paymentPlans",
+        "Payment plans",
+        raw.paymentPlans,
+        Array.isArray(raw.paymentPlans) ? `${raw.paymentPlans.length} plan(s) listed` : null
+      ),
     ],
   };
 

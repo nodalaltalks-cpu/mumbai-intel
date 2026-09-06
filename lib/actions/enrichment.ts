@@ -434,7 +434,13 @@ async function resolveBuilderAndLocalityMatches(
   const localityField = fields.find((f) => f.key === "locality");
 
   const [builderMatch, localityMatch] = await Promise.all([
-    developerGroupField?.proposedValue
+    // `sourceUrl` (not just `proposedValue`) is the correct gate: since the
+    // targeted classifyEnrichment fix, a field with NO real source fact still
+    // carries a `proposedValue` that mirrors its current value (a CONFIRMED-
+    // by-omission, `sourceUrl: null`) -- that must not trigger a Builder
+    // lookup. A field the source genuinely reported on always has a real
+    // `sourceUrl`, whatever its classification.
+    developerGroupField?.proposedValue && developerGroupField.sourceUrl
       ? (async () => {
           const builders = await prisma.builder.findMany({ select: { id: true, name: true, legalNames: true, reraNumber: true } });
           const currentBuilder = payload.builderId ? (builders.find((b) => b.id === payload.builderId) ?? null) : null;
@@ -449,7 +455,7 @@ async function resolveBuilderAndLocalityMatches(
           );
         })()
       : Promise.resolve(undefined),
-    localityField?.proposedValue
+    localityField?.proposedValue && localityField.sourceUrl
       ? (async () => {
           const city = await prisma.city.findUnique({ where: { slug: PRIMARY_CITY_SLUG }, select: { id: true } });
           const localities = city
@@ -587,6 +593,100 @@ export async function acceptEnrichmentFieldAction(
   };
 
   await logAudit(session.userId, actionTypeToStoredAction(actionType), ENRICHMENT_HISTORY_ENTITY_TYPE, stagingRecordId, { before, after });
+
+  return { status: "SUCCESS" };
+}
+
+export type RejectEnrichmentFieldStatus = "SUCCESS" | "NOT_FOUND" | "NOT_PENDING" | "INVALID_FIELD" | "INVALID_REASON" | "ERROR";
+
+export interface RejectEnrichmentFieldResult {
+  status: RejectEnrichmentFieldStatus;
+  error?: string;
+}
+
+export interface RejectEnrichmentFieldContext {
+  /** The proposed value the founder is declining -- recorded for the history entry only; never written to the staging payload. */
+  proposedValue?: string | null;
+  proposedItems?: string[];
+  sourceUrl?: string | null;
+  sourceType?: string | null;
+  confidence?: string | null;
+}
+
+/**
+ * Targeted fix (post-Phase 71B founder testing) -- the third decision a
+ * founder needs alongside Accept/Edit: explicitly decline a proposed
+ * enrichment value, with a required reason, recorded to history. Never
+ * applies `proposedValue` to the staging payload (the current value stands,
+ * exactly like the old client-only "Keep Current" this replaces) and never
+ * touches the live Project -- same PENDING-only guard as
+ * acceptEnrichmentFieldAction/revertEnrichmentFieldAction.
+ *
+ * Still calls withFieldTouched: rejecting is a real founder decision that
+ * resolves this field for the current enrichment run, so it should stop
+ * counting toward the Review Queue's "N proposed"/"N conflict" badge until
+ * the next explicit Enrich run -- exactly like Accept and Undo already do.
+ *
+ * Reuses the EXISTING AuditLog-backed enrichment-history mechanism
+ * (ENRICHMENT_HISTORY_ENTITY_TYPE, same entityId) rather than a second
+ * history system -- this is the one new action type it adds, "REJECT"
+ * (stored as "enrichment.reject", matching the existing "enrichment.*"
+ * naming convention every other action here already uses).
+ */
+export async function rejectEnrichmentFieldAction(
+  stagingRecordId: string,
+  fieldKey: string,
+  reason: string,
+  context?: RejectEnrichmentFieldContext
+): Promise<RejectEnrichmentFieldResult> {
+  const session = await requireMutateSession();
+
+  if (!reason || !reason.trim()) {
+    return { status: "INVALID_REASON", error: "A reason is required to reject this proposal." };
+  }
+
+  const record = await prisma.ingestStagingRecord.findUnique({ where: { id: stagingRecordId } });
+  if (!record) {
+    return { status: "NOT_FOUND", error: "Staging record not found." };
+  }
+  if (record.entityType !== "Project") {
+    return { status: "ERROR", error: "Enrichment rejection is only available for Project staging records." };
+  }
+  if (record.status !== "PENDING") {
+    return { status: "NOT_PENDING", error: "This record is no longer pending review -- it has already been approved or rejected." };
+  }
+
+  const payload = record.payload as unknown as Record<string, unknown>;
+
+  const completeness = buildProjectReviewCompleteness(payload as unknown as ProjectImportPayload, {});
+  const validKeys = new Set(completeness.groups.flatMap((g) => g.fields.map((f) => f.key)));
+  if (!validKeys.has(fieldKey)) {
+    return { status: "INVALID_FIELD", error: `"${fieldKey}" is not a recognized Project field.` };
+  }
+
+  const payloadToWrite = withFieldTouched(payload, fieldKey);
+
+  try {
+    await prisma.ingestStagingRecord.update({
+      where: { id: stagingRecordId },
+      data: { payload: payloadToWrite as unknown as Prisma.InputJsonValue },
+    });
+  } catch (error) {
+    return { status: "ERROR", error: friendlyPrismaError(error) };
+  }
+
+  const after: EnrichmentHistorySnapshot = {
+    fieldKey,
+    displayValue: context?.proposedValue ?? null,
+    displayItems: context?.proposedItems,
+    payloadChanges: {},
+    reason: reason.trim(),
+    sourceUrl: context?.sourceUrl ?? null,
+    sourceType: context?.sourceType ?? null,
+    confidence: context?.confidence ?? null,
+  };
+
+  await logAudit(session.userId, actionTypeToStoredAction("REJECT"), ENRICHMENT_HISTORY_ENTITY_TYPE, stagingRecordId, { before: null, after });
 
   return { status: "SUCCESS" };
 }

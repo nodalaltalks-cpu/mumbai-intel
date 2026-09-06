@@ -149,6 +149,7 @@ describe("buildProjectReviewCompleteness — CASE 1: fully populated payload", (
     reraCertificateUrl: "https://maharera.example/cert/P51800047539",
     paymentPlanType: "CONSTRUCTION_LINKED",
     paymentPlanDescription: "10:80:10",
+    paymentPlans: ["Construction Linked Plan: 10:80:10, payable over 24 months", "Down Payment Plan: 5% discount on full upfront payment"],
     actualPossession: "2028-10-15T00:00:00.000Z",
     constructionPercent: 42,
     landAreaAcres: 5.5,

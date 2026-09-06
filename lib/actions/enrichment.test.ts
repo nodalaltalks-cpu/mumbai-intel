@@ -41,6 +41,7 @@ import {
   acceptEntityMatchAction,
   enrichProjectAction,
   getEnrichmentFieldHistoryAction,
+  rejectEnrichmentFieldAction,
   revertEnrichmentFieldAction,
 } from "./enrichment";
 
@@ -765,6 +766,102 @@ describe("acceptEnrichmentFieldAction (Phase 32 — persists ONE accepted field 
     expect((thisModule as Record<string, unknown>).approveStagingRecordAction).toBeUndefined();
     expect((thisModule as Record<string, unknown>).rejectStagingRecordAction).toBeUndefined();
     expect(typeof thisModule.acceptEnrichmentFieldAction).toBe("function");
+  });
+});
+
+describe("rejectEnrichmentFieldAction (targeted fix, founder-testing round — Accept/Edit/REJECT model, never applies the value)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stagingUpdateMock.mockResolvedValue({} as never);
+    auditLogFindManyMock.mockResolvedValue([] as never);
+    auditLogCreateMock.mockResolvedValue({} as never);
+  });
+
+  it("A. requires a non-empty reason -- rejects with INVALID_REASON and never touches the payload or history when blank", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    const result = await rejectEnrichmentFieldAction("stage-1", "name", "   ");
+    expect(result.status).toBe("INVALID_REASON");
+    expect(stagingUpdateMock).not.toHaveBeenCalled();
+    expect(auditLogCreateMock).not.toHaveBeenCalled();
+  });
+
+  it("B. rejecting a proposed value never applies it -- the staging payload's real field value is untouched", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    const result = await rejectEnrichmentFieldAction("stage-1", "name", "Not the developer's real project name", {
+      proposedValue: "A Totally Different Name",
+    });
+    expect(result.status).toBe("SUCCESS");
+    expect(updatedPayload().name).toBe(GODREJ_PAYLOAD.name); // unchanged -- never overwritten by the rejected proposal
+  });
+
+  it("B2. rejecting removes the field from enrichmentSummary.outstanding, same as Accept -- it no longer counts as needing attention", async () => {
+    stagingFindUniqueMock.mockResolvedValue(
+      stagingRecord({
+        payload: {
+          ...GODREJ_PAYLOAD,
+          enrichmentSummary: { status: "READY", lastRunAt: "2026-01-01T00:00:00.000Z", outstanding: { name: "CONFLICT", tagline: "GREEN_NEW" } },
+        },
+      })
+    );
+    await rejectEnrichmentFieldAction("stage-1", "name", "Confirmed via a phone call with the developer's sales office");
+    const summary = updatedPayload().enrichmentSummary as { outstanding: Record<string, string> };
+    expect(summary.outstanding).toEqual({ tagline: "GREEN_NEW" });
+  });
+
+  it("C. records a REJECT event in the SAME enrichment history AuditLog, carrying the reason and the declined value -- never fabricated, never a silent no-op", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    await rejectEnrichmentFieldAction("stage-1", "name", "Marketing name, not the RERA-registered name", {
+      proposedValue: "A Totally Different Name",
+      sourceUrl: "https://example.com/project",
+      sourceType: "OFFICIAL_DEVELOPER",
+      confidence: "High",
+    });
+
+    expect(auditLogCreateMock).toHaveBeenCalledTimes(1);
+    const call = auditLogCreateMock.mock.calls[0][0] as { data: Record<string, unknown> };
+    expect(call.data.action).toBe("enrichment.reject");
+    expect(call.data.entityType).toBe("ProjectEnrichmentField");
+    expect(call.data.entityId).toBe("stage-1");
+    expect(call.data.before).toBeNull();
+    const after = call.data.after as Record<string, unknown>;
+    expect(after.fieldKey).toBe("name");
+    expect(after.displayValue).toBe("A Totally Different Name");
+    expect(after.reason).toBe("Marketing name, not the RERA-registered name");
+    expect(after.sourceUrl).toBe("https://example.com/project");
+  });
+
+  it("does not expose sensitive information -- the recorded reason is exactly the founder's own text, nothing appended or templated", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    await rejectEnrichmentFieldAction("stage-1", "name", "  Just not correct  ");
+    const call = auditLogCreateMock.mock.calls[0][0] as { data: Record<string, unknown> };
+    expect((call.data.after as Record<string, unknown>).reason).toBe("Just not correct");
+  });
+
+  it("rejects an invalid/unknown field key", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    const result = await rejectEnrichmentFieldAction("stage-1", "notARealField", "some reason");
+    expect(result.status).toBe("INVALID_FIELD");
+    expect(stagingUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("requires the staging record to exist and be PENDING", async () => {
+    stagingFindUniqueMock.mockResolvedValue(null);
+    expect((await rejectEnrichmentFieldAction("missing-id", "name", "reason")).status).toBe("NOT_FOUND");
+
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord({ status: "APPROVED" } as never));
+    expect((await rejectEnrichmentFieldAction("stage-1", "name", "reason")).status).toBe("NOT_PENDING");
+  });
+
+  it("is gated behind requireMutateSession -- the same auth bar as accept/revert", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    await rejectEnrichmentFieldAction("stage-1", "name", "reason");
+    expect(requireMutateSession).toHaveBeenCalled();
+  });
+
+  it("never calls prisma.project.* -- only the staging record's own payload is ever touched, the live Project stays untouched", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    await rejectEnrichmentFieldAction("stage-1", "name", "reason");
+    expect(stagingUpdateMock).toHaveBeenCalledTimes(1);
   });
 });
 

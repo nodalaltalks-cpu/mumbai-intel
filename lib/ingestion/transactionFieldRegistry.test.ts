@@ -144,6 +144,6 @@ describe("Project Review remains unaffected by the new Transaction registry", ()
       sourceRef: "test:1",
     };
     const result = buildProjectReviewCompleteness(projectPayload);
-    expect(result.totalFields).toBe(40);
+    expect(result.totalFields).toBe(41);
   });
 });

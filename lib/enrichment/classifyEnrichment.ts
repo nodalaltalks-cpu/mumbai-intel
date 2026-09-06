@@ -20,12 +20,23 @@ function normalizeForCompare(value: string): string {
  *  2. existing blank + ambiguous new value         -> YELLOW
  *  3. existing value + same source value           -> CONFIRMED
  *  4. existing value + different source value      -> CONFLICT (never auto-applied)
- *  5. no source value                              -> MISSING
+ *  5. no source value                              -> MISSING if currently blank, CONFIRMED if a value already exists
  *
  * Phase 67 removed the `priceMax` field (and its single-listing-artifact
  * exception below) along with `latitude`/`longitude`/`reraStatus` — a
  * project-level maximum price is misleading (varies by configuration/unit),
  * and none of the other three were ever maintained.
+ *
+ * Targeted fix (post-Phase 71B founder testing): rule 5 used to classify a
+ * field as MISSING whenever no source even attempted it, regardless of
+ * whether a real value already existed (e.g. `dataSource`/`sourceRef` are
+ * never something an adapter reports on, so they were ALWAYS "MISSING" even
+ * though the current value was perfectly fine). MISSING must mean "no
+ * meaningful value exists anywhere" — a populated current value with no
+ * competing source opinion is CONFIRMED (the existing value stands, nothing
+ * to write), exactly like rule 3's "agrees with the source" case. This never
+ * changes rule 1/2/4's behavior and never touches `decideFieldAutomation`,
+ * which already treats CONFIRMED as a safe no-op.
  */
 export function classifyProjectEnrichment(
   currentPayload: ProjectImportPayload,
@@ -47,11 +58,15 @@ export function classifyProjectEnrichment(
           label: field.label,
           group: group.label,
           currentValue,
-          proposedValue: null,
+          // Mirrors rule 3's CONFIRMED shape (proposedValue = the value that
+          // stands) rather than null -- a populated field with no competing
+          // source opinion isn't "nothing proposed", it's "current value
+          // confirmed by omission".
+          proposedValue: currentValue,
           sourceUrl: null,
           sourceType: null,
           confidence: null,
-          classification: "MISSING",
+          classification: currentValue !== null ? "CONFIRMED" : "MISSING",
           reason: currentValue
             ? "No new source value found for this field; the existing value is retained as-is."
             : "No value found for this field in any inspected source.",

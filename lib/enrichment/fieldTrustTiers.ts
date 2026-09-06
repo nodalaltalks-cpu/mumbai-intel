@@ -82,6 +82,9 @@ const TIER_C_FIELDS: readonly string[] = [
   "faqs",
   "metaTitle",
   "metaDescription",
+  // Targeted fix (post-Phase 71B founder testing) -- multiple payment plans,
+  // same editorial/list nature as highlights/amenities above.
+  "paymentPlans",
 ];
 
 const TIER_D_FIELDS: readonly string[] = ["coverImage", "images", "videoUrl", "tour360Url", "brochure", "documents", "ogImageUrl", "reraCertificateUrl"];

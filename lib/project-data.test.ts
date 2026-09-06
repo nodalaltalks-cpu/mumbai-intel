@@ -137,6 +137,37 @@ describe("toProjectSchemaInput — Phase 35 fix: previously-dropped accepted-enr
     expect(result.highlights).toBe("Distance highlights: Airport 18 mins\nSea view\nCoastal Road");
   });
 
+  describe("paymentPlans (targeted fix, founder-testing round — multiple structured plans, no schema migration)", () => {
+    it("F. a single plan is joined straight into paymentPlanDescription", () => {
+      const payload = { ...BASE_PAYLOAD, paymentPlans: ["Construction Linked Plan: 10:80:10"] };
+      const result = toProjectSchemaInput(payload as ProjectImportPayload);
+      expect(result.paymentPlanDescription).toBe("Construction Linked Plan: 10:80:10");
+    });
+
+    it("F2. multiple plans are preserved, joined as separate paragraphs -- never truncated to just the first one", () => {
+      const payload = {
+        ...BASE_PAYLOAD,
+        paymentPlans: ["Construction Linked Plan: 10:80:10, payable over 24 months", "Down Payment Plan: 5% discount on full upfront payment"],
+      };
+      const result = toProjectSchemaInput(payload as ProjectImportPayload);
+      expect(result.paymentPlanDescription).toBe(
+        "Construction Linked Plan: 10:80:10, payable over 24 months\n\nDown Payment Plan: 5% discount on full upfront payment"
+      );
+    });
+
+    it("empty plans: an empty paymentPlans array falls back to the existing single paymentPlanDescription field, never blanking it out", () => {
+      const payload = { ...BASE_PAYLOAD, paymentPlans: [], paymentPlanDescription: "Existing single-plan text" };
+      const result = toProjectSchemaInput(payload as ProjectImportPayload);
+      expect(result.paymentPlanDescription).toBe("Existing single-plan text");
+    });
+
+    it("backward compatibility: a staging record with no paymentPlans key at all behaves exactly as before -- reads the existing singular field", () => {
+      const payload = { ...BASE_PAYLOAD, paymentPlanDescription: "20:80 payment plan" };
+      const result = toProjectSchemaInput(payload as ProjectImportPayload);
+      expect(result.paymentPlanDescription).toBe("20:80 payment plan");
+    });
+  });
+
   it("paymentPlanType: only passes through a genuinely valid enum value -- an unrecognized string is treated as absent, never a silently-invalid enum write", () => {
     const validPayload = { ...BASE_PAYLOAD, paymentPlanType: "CONSTRUCTION_LINKED" };
     expect(toProjectSchemaInput(validPayload as ProjectImportPayload).paymentPlanType).toBe("CONSTRUCTION_LINKED");

@@ -149,6 +149,62 @@ describe("applyAcceptedField — array-shaped count fields", () => {
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.payload.highlights).toEqual(["A shoreline sanctuary..."]);
   });
+
+  it("I. amenities: no artificial maximum -- a 30+ item list (add/remove already exercised via the SAME array mechanism paymentPlans reuses below) saves in full, none dropped", () => {
+    const manyAmenities = Array.from({ length: 34 }, (_, i) => `Amenity ${i + 1}`);
+    const result = applyAcceptedField(BASE_PAYLOAD, "amenities", "34 selected", manyAmenities);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.payload.amenities).toHaveLength(34);
+  });
+
+  describe("paymentPlans (targeted fix, founder-testing round — the founder can add/edit/remove multiple plans, same array mechanism as amenities/highlights)", () => {
+    it("G. a single plan saves as a one-item array", () => {
+      const result = applyAcceptedField(BASE_PAYLOAD, "paymentPlans", "1 plan(s) listed", ["Construction Linked Plan: 10:80:10"]);
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.payload.paymentPlans).toEqual(["Construction Linked Plan: 10:80:10"]);
+    });
+
+    it("G2. multiple plans save as a multi-item array, in the founder's own order", () => {
+      const plans = ["Construction Linked Plan: 10:80:10", "Down Payment Plan: 5% discount", "Flexi Payment Plan: 30:70"];
+      const result = applyAcceptedField(BASE_PAYLOAD, "paymentPlans", "3 plan(s) listed", plans);
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.payload.paymentPlans).toEqual(plans);
+    });
+
+    it("H. editing (re-accepting with a changed list) replaces the array wholesale -- the previous set of plans is not merged with the new one", () => {
+      const original = applyAcceptedField(BASE_PAYLOAD, "paymentPlans", "2 plan(s) listed", ["Plan A", "Plan B"]);
+      if (!original.ok) throw new Error("expected ok");
+      const edited = applyAcceptedField(original.payload, "paymentPlans", "2 plan(s) listed", ["Plan A (revised)", "Plan C"]);
+      expect(edited.ok).toBe(true);
+      if (edited.ok) expect(edited.payload.paymentPlans).toEqual(["Plan A (revised)", "Plan C"]);
+    });
+
+    it("H2. removing a plan (re-accepting with fewer items) shrinks the array -- a removed plan never lingers", () => {
+      const original = applyAcceptedField(BASE_PAYLOAD, "paymentPlans", "3 plan(s) listed", ["Plan A", "Plan B", "Plan C"]);
+      if (!original.ok) throw new Error("expected ok");
+      const afterRemoval = applyAcceptedField(original.payload, "paymentPlans", "2 plan(s) listed", ["Plan A", "Plan C"]);
+      expect(afterRemoval.ok).toBe(true);
+      if (afterRemoval.ok) expect(afterRemoval.payload.paymentPlans).toEqual(["Plan A", "Plan C"]);
+    });
+
+    it("no artificial maximum -- 30+ plans save without truncation", () => {
+      const manyPlans = Array.from({ length: 32 }, (_, i) => `Plan ${i + 1}`);
+      const result = applyAcceptedField(BASE_PAYLOAD, "paymentPlans", "32 plan(s) listed", manyPlans);
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.payload.paymentPlans).toHaveLength(32);
+    });
+
+    it("is manually editable (founder can type a plan from scratch when the field is currently MISSING)", () => {
+      expect(isFieldManuallyEditable("paymentPlans")).toBe(true);
+      expect(getFieldEditorKind("paymentPlans", 0)).toBe("array");
+    });
+
+    it("empty plans: an empty items list falls back to the display value rather than silently discarding the field (same convention as every other array field -- the UI's own Save Edit already refuses to save a fully-empty list before this is ever reached)", () => {
+      const result = applyAcceptedField(BASE_PAYLOAD, "paymentPlans", "Plan text", []);
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.payload.paymentPlans).toEqual(["Plan text"]);
+    });
+  });
 });
 
 describe("applyAcceptedField — possession month/year (derived from a single possessionDateIso)", () => {
