@@ -2,6 +2,7 @@ import { buildProjectReviewCompleteness, type ProjectReviewContext } from "../in
 import { mergeLegacyPaymentPlans } from "../ingestion/paymentPlanFormat";
 import type { ProjectImportPayload } from "../ingestion/connectors/fileImport/types";
 import { SOURCE_TIER_RANK, type EnrichmentField, type SourceFactsMap, type SourceMeta } from "./types";
+import type { EnrichmentHistoryActionType, EnrichmentHistorySnapshot } from "./enrichmentHistory";
 
 /** Case/whitespace-insensitive equality for display-string comparison -- deliberately simple for this MVP; a false CONFLICT (over-flagging) is far safer than a false CONFIRMED (silently missing a real disagreement). */
 function normalizeForCompare(value: string): string {
@@ -157,4 +158,52 @@ export function mergeEnrichmentResults(resultsBySource: EnrichmentField[][]): En
   }
 
   return [...byKey.values()];
+}
+
+/**
+ * Targeted fix (repeated rejected proposal bug) -- a fresh "Enrich Project"
+ * run re-fetches the source and re-classifies EVERY field from scratch
+ * (classifyProjectEnrichment has no memory of past founder decisions by
+ * design -- it's a pure function of the current payload + live facts). That
+ * means a field the founder EXPLICITLY rejected reappears as an identical
+ * outstanding proposal on every subsequent run, forever, even though nothing
+ * about it has changed -- there is no way to permanently dismiss a stale
+ * source disagreement.
+ *
+ * This is a POST-PROCESSING pass over classifyProjectEnrichment's own
+ * output, applied by the caller (enrichProjectAction) using history it
+ * fetches itself -- classifyProjectEnrichment stays pure/DB-free and
+ * unchanged, so every existing caller (researchProvider.ts, every adapter
+ * test) is unaffected.
+ *
+ * The rule: if the MOST RECENT history event for a field is a REJECT, and
+ * the freshly classified proposal is the EXACT SAME value + items + source
+ * URL the founder already declined, fold it back to CONFIRMED (the current
+ * value stands, nothing new to review) rather than showing it again. If
+ * EITHER the proposed value/items OR the source URL differs at all, the new
+ * proposal is materially different and is let through unchanged -- this
+ * never permanently suppresses a field, only an identical repeat.
+ */
+export function suppressPreviouslyRejectedProposals(
+  fields: EnrichmentField[],
+  mostRecentEventByField: Map<string, { action: EnrichmentHistoryActionType; after: EnrichmentHistorySnapshot | null }>
+): EnrichmentField[] {
+  return fields.map((field) => {
+    if (field.classification !== "GREEN_NEW" && field.classification !== "YELLOW" && field.classification !== "CONFLICT") return field;
+    const event = mostRecentEventByField.get(field.key);
+    if (!event || event.action !== "REJECT" || !event.after) return field;
+
+    const sameValue = normalizeForCompare(event.after.displayValue ?? "") === normalizeForCompare(field.proposedValue ?? "");
+    const sameItems = JSON.stringify(event.after.displayItems ?? null) === JSON.stringify(field.proposedItems ?? null);
+    const sameSource = (event.after.sourceUrl ?? null) === (field.sourceUrl ?? null);
+    if (!sameValue || !sameItems || !sameSource) return field;
+
+    return {
+      ...field,
+      classification: "CONFIRMED" as const,
+      proposedValue: field.currentValue,
+      proposedItems: undefined,
+      reason: "This exact proposal was already reviewed and declined -- the current value stands. A materially different proposed value or source will be shown again for review.",
+    };
+  });
 }

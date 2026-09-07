@@ -189,7 +189,7 @@ describe("extractPurvaEstrellaFacts (Phase 42 — fifth developer, first selecte
     expect(byKey("name").classification).toBe("GREEN_NEW");
     expect(byKey("priceMin").classification).toBe("GREEN_NEW");
     expect(byKey("reraNumber").classification).toBe("MISSING");
-    expect(result).toHaveLength(38);
+    expect(result).toHaveLength(39);
   });
 
   it("18. never leaks Godrej fixture content into a Puravankara extraction run", () => {

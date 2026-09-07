@@ -24,14 +24,15 @@ describe("buildFounderReviewSummary", () => {
     expect(buildFounderReviewSummary(builderCompleteness)).toBeNull();
   });
 
-  it("only surfaces the 15 founder-relevant fields, never the technical/deprecated ones", () => {
+  it("only surfaces the 16 founder-relevant fields, never the technical/deprecated ones", () => {
     const completeness = buildProjectReviewCompleteness(LINKBAY_PAYLOAD, { localityName: "Andheri West" });
     const summary = buildFounderReviewSummary(completeness)!;
-    expect(summary.totalFields).toBe(15);
+    expect(summary.totalFields).toBe(16);
     const keys = summary.fields.map((f) => f.key);
     expect(keys).toEqual([
       "name",
       "developerGroup",
+      "developerWebsiteUrl",
       "locality",
       "microMarket",
       "status",
@@ -88,6 +89,42 @@ describe("buildFounderReviewSummary", () => {
     expect(developer.label).toBe("Developer");
     expect(developer.status).toBe("RECEIVED");
     expect(developer.value).toBe("Adani Realty");
+  });
+
+  it("D. targeted fix (Official Developer Website) -- appears immediately below Developer and above Locality in the founder-facing order", () => {
+    const completeness = buildProjectReviewCompleteness(LINKBAY_PAYLOAD, { localityName: "Andheri West" });
+    const summary = buildFounderReviewSummary(completeness)!;
+    const keys = summary.fields.map((f) => f.key);
+    const developerIndex = keys.indexOf("developerGroup");
+    const websiteIndex = keys.indexOf("developerWebsiteUrl");
+    const localityIndex = keys.indexOf("locality");
+    expect(websiteIndex).toBe(developerIndex + 1);
+    expect(localityIndex).toBe(websiteIndex + 1);
+  });
+
+  it("E. Official Developer Website is MISSING with no override and no resolved Builder website, and RECEIVED once either is available", () => {
+    const missing = buildFounderReviewSummary(buildProjectReviewCompleteness(LINKBAY_PAYLOAD, { localityName: "Andheri West" }))!;
+    expect(missing.fields.find((f) => f.key === "developerWebsiteUrl")).toMatchObject({ status: "MISSING", value: null });
+
+    const withOverride = buildFounderReviewSummary(
+      buildProjectReviewCompleteness(
+        { ...LINKBAY_PAYLOAD, developerWebsiteUrl: "https://www.adanirealty.com" },
+        { localityName: "Andheri West" }
+      )
+    )!;
+    expect(withOverride.fields.find((f) => f.key === "developerWebsiteUrl")).toMatchObject({
+      label: "Official Developer Website",
+      status: "RECEIVED",
+      value: "https://www.adanirealty.com",
+    });
+
+    const withResolvedBuilderWebsite = buildFounderReviewSummary(
+      buildProjectReviewCompleteness(LINKBAY_PAYLOAD, { localityName: "Andheri West", officialDeveloperWebsiteUrl: "https://www.godrejproperties.com" })
+    )!;
+    expect(withResolvedBuilderWebsite.fields.find((f) => f.key === "developerWebsiteUrl")).toMatchObject({
+      status: "RECEIVED",
+      value: "https://www.godrejproperties.com",
+    });
   });
 
   it("merges possessionMonth+possessionYear into one Possession field, RECEIVED only when both halves are", () => {

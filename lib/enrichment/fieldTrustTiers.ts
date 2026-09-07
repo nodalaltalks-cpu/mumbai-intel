@@ -57,6 +57,7 @@ const TIER_B_FIELDS: readonly string[] = [
   "microMarket",
   "address",
   "googleMapsUrl",
+  "developerWebsiteUrl",
   "status",
   "category",
   "launchDate",

@@ -233,6 +233,19 @@ describe("applyAcceptedField — array-shaped count fields", () => {
       expect(validateProposedEdit("slug", "###").ok).toBe(false);
     });
   });
+
+  describe("developerWebsiteUrl (targeted fix, Official Developer Website)", () => {
+    it("E. accepts a founder-typed URL directly, same as every other URL-ish field (googleMapsUrl, reraCertificateUrl, ...)", () => {
+      const result = applyAcceptedField(BASE_PAYLOAD, "developerWebsiteUrl", "https://www.adanirealty.com");
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.payload.developerWebsiteUrl).toBe("https://www.adanirealty.com");
+    });
+
+    it("is manually editable, with the plain text editor kind", () => {
+      expect(isFieldManuallyEditable("developerWebsiteUrl")).toBe(true);
+      expect(getFieldEditorKind("developerWebsiteUrl", 5)).toBe("text");
+    });
+  });
 });
 
 describe("applyAcceptedField — possession month/year (derived from a single possessionDateIso)", () => {

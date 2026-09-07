@@ -2,10 +2,11 @@
 
 import { requireMutateSession } from "@/lib/auth/guard";
 import { prisma } from "@/lib/prisma";
-import { classifyProjectEnrichment } from "@/lib/enrichment/classifyEnrichment";
+import { classifyProjectEnrichment, suppressPreviouslyRejectedProposals } from "@/lib/enrichment/classifyEnrichment";
 import { resolveDeveloperDomain } from "@/lib/enrichment/developerDomainRegistry";
 import { applyAcceptedField } from "@/lib/enrichment/applyAcceptedField";
 import { buildEntityMatchProposal, resolveBuilderMatch, resolveLocalityMatch, type EntityMatchProposal } from "@/lib/enrichment/resolveNamedEntity";
+import { resolveSavedDeveloperWebsite } from "@/lib/enrichment/developerWebsite";
 import {
   actionTypeToStoredAction,
   applyStorableChanges,
@@ -13,6 +14,7 @@ import {
   determineAcceptActionType,
   ENRICHMENT_HISTORY_ENTITY_TYPE,
   getEnrichmentFieldHistory,
+  getMostRecentEnrichmentEventsByField,
   getMostRecentEnrichmentHistoryEvent,
   toStorableChanges,
   type EnrichmentHistoryEntry,
@@ -336,9 +338,10 @@ async function computeEnrichmentResult(stagingRecordId: string): Promise<EnrichP
   }
   const projectUrl = projectSource.projectUrl!;
 
-  const locality = payload.localityId
-    ? await prisma.locality.findUnique({ where: { id: payload.localityId }, select: { name: true } })
-    : null;
+  const [locality, officialDeveloperWebsiteUrl] = await Promise.all([
+    payload.localityId ? prisma.locality.findUnique({ where: { id: payload.localityId }, select: { name: true } }) : Promise.resolve(null),
+    resolveOfficialDeveloperWebsite(payload),
+  ]);
 
   let facts;
   try {
@@ -356,12 +359,19 @@ async function computeEnrichmentResult(stagingRecordId: string): Promise<EnrichP
     return { status: "SOURCE_UNAVAILABLE" };
   }
 
-  const fields = classifyProjectEnrichment(
+  const classified = classifyProjectEnrichment(
     payload,
-    { localityName: locality?.name },
+    { localityName: locality?.name, officialDeveloperWebsiteUrl },
     facts,
     { url: projectUrl, tier: source.adapter.tier }
   );
+
+  // Targeted fix (repeated rejected proposal bug) -- a field the founder
+  // already explicitly rejected must not reappear as an identical
+  // outstanding proposal on every subsequent Enrich run; a materially
+  // different proposal (new value/items/source) still comes through.
+  const recentEventsByField = await getMostRecentEnrichmentEventsByField(stagingRecordId);
+  const fields = suppressPreviouslyRejectedProposals(classified, recentEventsByField);
 
   const { builderMatch, localityMatch } = await resolveBuilderAndLocalityMatches(fields, payload);
 
@@ -515,19 +525,43 @@ export interface ProjectReviewSnapshot {
   readiness: ApprovalReadinessResult;
 }
 
+/**
+ * Targeted fix (Official Developer Website) -- read-only resolution of the
+ * canonical developer website for one Project payload, reusing the EXACT
+ * mechanism Phase 69's Discovery Include flow already uses
+ * (resolveSavedDeveloperWebsite: builderId when already matched, else an
+ * exact-name match against every Builder) rather than inventing a second
+ * lookup. Never writes to Builder -- a founder override for THIS project
+ * lives only on `payload.developerWebsiteUrl` (see reviewFieldRegistry.ts).
+ */
+async function resolveOfficialDeveloperWebsite(payload: ProjectImportPayload): Promise<string | null> {
+  if (payload.builderId) {
+    const builder = await prisma.builder.findUnique({ where: { id: payload.builderId }, select: { websiteUrl: true } });
+    if (builder?.websiteUrl) return builder.websiteUrl;
+  }
+  if (payload.developerGroup) {
+    const builders = await prisma.builder.findMany({ select: { id: true, name: true, legalNames: true, reraNumber: true, websiteUrl: true } });
+    const saved = resolveSavedDeveloperWebsite(payload.developerGroup, builders);
+    if (saved?.websiteUrl) return saved.websiteUrl;
+  }
+  return null;
+}
+
 async function buildProjectReviewSnapshot(payload: Record<string, unknown>, matchedExistingId: string | null): Promise<ProjectReviewSnapshot> {
   const projectPayload = payload as unknown as ProjectImportPayload;
-  const [locality, matched] = await Promise.all([
+  const [locality, matched, officialDeveloperWebsiteUrl] = await Promise.all([
     projectPayload.localityId
       ? prisma.locality.findUnique({ where: { id: projectPayload.localityId }, select: { name: true } })
       : Promise.resolve(null),
     matchedExistingId
       ? prisma.project.findUnique({ where: { id: matchedExistingId }, select: { name: true, status: true, reraNumber: true } })
       : Promise.resolve(null),
+    resolveOfficialDeveloperWebsite(projectPayload),
   ]);
   const completeness = buildProjectReviewCompleteness(projectPayload, {
     localityName: locality?.name,
     matched: matched ? { name: matched.name, status: matched.status, reraNumber: matched.reraNumber } : null,
+    officialDeveloperWebsiteUrl,
   });
   return {
     completeness,
@@ -813,6 +847,67 @@ export async function acceptEntityMatchAction(
   }
 
   const snapshot = await buildProjectReviewSnapshot(updatedPayload, record.matchedExistingId);
+  return { status: "SUCCESS", snapshot };
+}
+
+export type RejectEntityMatchStatus = "SUCCESS" | "NOT_FOUND" | "NOT_PENDING" | "INVALID_REASON" | "ERROR";
+
+export interface RejectEntityMatchResult {
+  status: RejectEntityMatchStatus;
+  error?: string;
+  snapshot?: ProjectReviewSnapshot;
+}
+
+/**
+ * Targeted fix (Reject option consistency) -- the Builder/Locality
+ * "Existing-record match" card's CONFLICT state used to offer only a
+ * client-only "Keep Current" button (no reason, no persistence, no history
+ * -- see EntityMatchCard.tsx's prior doc comment). That's a genuine
+ * actionable proposal (a real existing row the founder is being asked to
+ * switch to) and deserves the SAME founder-decision discipline every other
+ * field's Reject already has. Reuses the EXISTING enrichment-history
+ * mechanism (ENRICHMENT_HISTORY_ENTITY_TYPE, same entityId) under a
+ * synthetic field key ("builderMatch"/"localityMatch") -- distinct from the
+ * real "locality" registry field's own history, since declining a
+ * builder/locality MATCH is a different decision than editing the
+ * locality VALUE. Never applies the match (payload is never written here,
+ * exactly like a field reject never applies its proposed value) and never
+ * touches enrichmentSummary.outstanding (entity matches were never counted
+ * in it to begin with -- see persistEnrichmentSummary's own doc comment).
+ */
+export async function rejectEntityMatchAction(
+  stagingRecordId: string,
+  entityKind: "builder" | "locality",
+  reason: string,
+  context?: { proposedName?: string | null }
+): Promise<RejectEntityMatchResult> {
+  const session = await requireMutateSession();
+
+  if (!reason || !reason.trim()) {
+    return { status: "INVALID_REASON", error: "A reason is required to reject this match." };
+  }
+
+  const record = await prisma.ingestStagingRecord.findUnique({ where: { id: stagingRecordId } });
+  if (!record) {
+    return { status: "NOT_FOUND", error: "Staging record not found." };
+  }
+  if (record.entityType !== "Project") {
+    return { status: "ERROR", error: "Builder/Locality resolution is only available for Project staging records." };
+  }
+  if (record.status !== "PENDING") {
+    return { status: "NOT_PENDING", error: "This record is no longer pending review -- it has already been approved or rejected." };
+  }
+
+  const fieldKey = entityKind === "builder" ? "builderMatch" : "localityMatch";
+  const after: EnrichmentHistorySnapshot = {
+    fieldKey,
+    displayValue: context?.proposedName ?? null,
+    payloadChanges: {},
+    reason: reason.trim(),
+  };
+  await logAudit(session.userId, actionTypeToStoredAction("REJECT"), ENRICHMENT_HISTORY_ENTITY_TYPE, stagingRecordId, { before: null, after });
+
+  const snapshot = await buildProjectReviewSnapshot(record.payload as Record<string, unknown>, record.matchedExistingId);
   return { status: "SUCCESS", snapshot };
 }
 

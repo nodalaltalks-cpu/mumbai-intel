@@ -11,18 +11,23 @@ import type { FieldStatus, ReviewCompleteness, ReviewField } from "./reviewField
  * changes `totalFields`/`receivedCount`/`missingCount`/`needsReviewCount`
  * (those remain the untouched technical/ingestion metric used elsewhere).
  *
- * The 18-field founder-facing Project model (see ProjectForm.tsx) has THREE
+ * The 18-field founder-facing Project model (see ProjectForm.tsx) has TWO
  * fields with no representation anywhere in the Project staging/ingestion
  * schema, by design, not by omission here:
  *   - Configuration: a `Configuration` row is a CHILD of a real `Project`
  *     (`onDelete: Cascade` on `projectId`), so it cannot exist before a
  *     staging candidate is approved into a real Project. Never part of
  *     `ProjectImportPayload`.
- *   - Developer Website / Developer Spokesperson: these live only on
- *     `BuilderImportPayload`/the `Builder` model, never on
- *     `ProjectImportPayload` — a Project staging candidate isn't even
- *     linked to a resolved Builder pre-approval in the normal case.
+ *   - Developer Spokesperson: lives only on `BuilderImportPayload`/the
+ *     `Builder` model, never on `ProjectImportPayload`.
  * Deliberately NOT invented here — see this phase's own audit trail.
+ *
+ * Official Developer Website (targeted fix) IS now included below --
+ * `ProjectImportPayload.developerWebsiteUrl` is a founder-editable override
+ * that falls back to the existing Builder.websiteUrl resolution (see
+ * reviewFieldRegistry.ts's own field definition and
+ * lib/actions/enrichment.ts's resolveOfficialDeveloperWebsite), so this no
+ * longer needs a resolved builderId pre-approval to show a real value.
  */
 
 export interface FounderReviewField {
@@ -58,6 +63,7 @@ export interface EnrichmentConflict {
 const FOUNDER_FIELD_LABELS: readonly (readonly [string, string])[] = [
   ["name", "Project Name"],
   ["developerGroup", "Developer"],
+  ["developerWebsiteUrl", "Official Developer Website"],
   ["locality", "Locality"],
   ["microMarket", "Micro-market"],
   ["status", "Status"],

@@ -214,6 +214,7 @@ const DIRECT_STRING_FIELDS: Record<string, string> = {
   microMarket: "microMarketId",
   address: "address",
   googleMapsUrl: "googleMapsUrl",
+  developerWebsiteUrl: "developerWebsiteUrl",
   reraNumber: "reraNumber",
   reraCertificateUrl: "reraCertificateUrl",
   actualPossession: "actualPossession",

@@ -28,6 +28,7 @@ export default function EnrichmentDialog({
   onAcceptField,
   onRejectField,
   onAcceptEntityMatch,
+  onRejectEntityMatch,
   onViewHistory,
   onUndo,
 }: {
@@ -43,6 +44,8 @@ export default function EnrichmentDialog({
   onAcceptField: (field: EnrichmentField) => Promise<{ ok: boolean; error?: string }>;
   onRejectField: (field: EnrichmentField, reason: string) => Promise<{ ok: boolean; error?: string }>;
   onAcceptEntityMatch: (kind: "builder" | "locality", existingId: string) => Promise<{ ok: boolean; error?: string }>;
+  /** Targeted fix (Reject option consistency) -- the entity-match card's own reason-required reject, distinct from a regular field's onRejectField. */
+  onRejectEntityMatch: (kind: "builder" | "locality", reason: string, proposedName: string) => Promise<{ ok: boolean; error?: string }>;
   onViewHistory: (fieldKey: string) => Promise<EnrichmentHistoryEntry[]>;
   onUndo: (fieldKey: string, historyEventId: string) => Promise<{ ok: boolean; error?: string }>;
 }) {
@@ -56,8 +59,20 @@ export default function EnrichmentDialog({
             <p className="text-xs text-positive">Enrichment results ready.</p>
             {builderMatch || localityMatch ? (
               <div className="flex flex-col divide-y divide-border rounded-sm border border-border">
-                {builderMatch ? <EntityMatchCard proposal={builderMatch} onAccept={(id) => onAcceptEntityMatch("builder", id)} /> : null}
-                {localityMatch ? <EntityMatchCard proposal={localityMatch} onAccept={(id) => onAcceptEntityMatch("locality", id)} /> : null}
+                {builderMatch ? (
+                  <EntityMatchCard
+                    proposal={builderMatch}
+                    onAccept={(id) => onAcceptEntityMatch("builder", id)}
+                    onReject={(reason) => onRejectEntityMatch("builder", reason, builderMatch.proposedName)}
+                  />
+                ) : null}
+                {localityMatch ? (
+                  <EntityMatchCard
+                    proposal={localityMatch}
+                    onAccept={(id) => onAcceptEntityMatch("locality", id)}
+                    onReject={(reason) => onRejectEntityMatch("locality", reason, localityMatch.proposedName)}
+                  />
+                ) : null}
               </div>
             ) : null}
             <EnrichmentProposalPanel

@@ -95,6 +95,8 @@ export interface ProjectReviewContext {
   localityName?: string;
   /** Null when this record has no possible-duplicate match (IngestStagingRecord.matchedExistingId is null) -- the normal case for a brand-new project candidate. */
   matched?: MatchedProjectSnapshot | null;
+  /** Targeted fix (Official Developer Website) -- Builder.websiteUrl, resolved read-only via builderId or an exact developerGroup name match (lib/actions/enrichment.ts's resolveOfficialDeveloperWebsite) -- reuses the existing Phase 69 Discovery mechanism rather than duplicating it. Null/absent when no matching Builder has a saved website. */
+  officialDeveloperWebsiteUrl?: string | null;
 }
 
 /**
@@ -139,6 +141,20 @@ export function buildProjectReviewCompleteness(payload: ProjectImportPayload, co
       // real value the moment they clicked Save without changing anything.
       field("slug", "Slug", payload.slug || payload.name, payload.slug || (payload.name ? slugify(payload.name) : null)),
       field("developerGroup", "Developer", payload.developerGroup, payload.developerGroup ?? null),
+      // Targeted fix (Official Developer Website) -- payload.developerWebsiteUrl
+      // is a founder-typed override; absent falls back to the EXISTING
+      // read-only Builder.websiteUrl resolution (context.officialDeveloperWebsiteUrl,
+      // resolved via builderId or an exact developerGroup name match --
+      // reuses Phase 69's Discovery mechanism, never a second lookup path).
+      // This is the canonical developer's OWN official site, never the
+      // project's own marketing/source page (that's what `sourceUrl` on
+      // every other field already carries).
+      field(
+        "developerWebsiteUrl",
+        "Official Developer Website",
+        payload.developerWebsiteUrl || context.officialDeveloperWebsiteUrl || null,
+        payload.developerWebsiteUrl || context.officialDeveloperWebsiteUrl || null
+      ),
       field("status", "Status", payload.status, payload.status ? STATUS_LABEL[payload.status] : null, statusReview),
       field("category", "Category", payload.category, payload.category ? CATEGORY_LABEL[payload.category] : null),
       field("tagline", "Tagline", raw.tagline, typeof raw.tagline === "string" ? raw.tagline : null),

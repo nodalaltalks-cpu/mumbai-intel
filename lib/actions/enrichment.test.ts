@@ -48,6 +48,7 @@ import {
   enrichProjectAction,
   getEnrichmentFieldHistoryAction,
   rejectEnrichmentFieldAction,
+  rejectEntityMatchAction,
   revertEnrichmentFieldAction,
 } from "./enrichment";
 
@@ -186,6 +187,61 @@ describe("enrichProjectAction (Phase 29 Part J/K — no writes, no approval, pro
     });
     const result = await enrichProjectAction("stage-1");
     expect(result.status).toBe("NO_NEW_INFO");
+  });
+
+  it("A. targeted fix (repeated rejected conflict) -- a field the founder already rejected, with the source repeating the EXACT SAME value, does not come back as an outstanding conflict on the next Enrich run", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    fetchProjectFactsMock.mockResolvedValue({ name: { value: "A Totally Different Name", confidence: "High" } });
+    auditLogFindManyMock.mockResolvedValue([
+      {
+        id: "evt-1",
+        action: "enrichment.reject",
+        entityType: "ProjectEnrichmentField",
+        entityId: "stage-1",
+        before: null,
+        after: {
+          fieldKey: "name",
+          displayValue: "A Totally Different Name",
+          payloadChanges: {},
+          sourceUrl: "https://www.godrejproperties.com/mumbai/residential/godrej-skyshore",
+          reason: "Marketing name, not the RERA-registered name.",
+        },
+        at: new Date("2026-08-30T10:00:00.000Z"),
+        actor: { name: "Founder", email: "founder@example.com" },
+      },
+    ] as never);
+
+    const result = await enrichProjectAction("stage-1");
+    const nameField = result.fields!.find((f) => f.key === "name")!;
+    expect(nameField.classification).toBe("CONFIRMED");
+    expect(nameField.reason).toContain("already reviewed and declined");
+  });
+
+  it("B. targeted fix -- a MATERIALLY CHANGED proposal (different value) for a previously-rejected field DOES come back as an outstanding conflict", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    fetchProjectFactsMock.mockResolvedValue({ name: { value: "Godrej Sky Shore Phase 2", confidence: "High" } });
+    auditLogFindManyMock.mockResolvedValue([
+      {
+        id: "evt-1",
+        action: "enrichment.reject",
+        entityType: "ProjectEnrichmentField",
+        entityId: "stage-1",
+        before: null,
+        after: {
+          fieldKey: "name",
+          displayValue: "A Totally Different Name", // the OLD, previously-rejected proposal
+          payloadChanges: {},
+          sourceUrl: "https://www.godrejproperties.com/mumbai/residential/godrej-skyshore",
+        },
+        at: new Date("2026-08-30T10:00:00.000Z"),
+        actor: { name: "Founder", email: "founder@example.com" },
+      },
+    ] as never);
+
+    const result = await enrichProjectAction("stage-1");
+    const nameField = result.fields!.find((f) => f.key === "name")!;
+    expect(nameField.classification).toBe("CONFLICT");
+    expect(nameField.proposedValue).toBe("Godrej Sky Shore Phase 2");
   });
 
   it("8. never calls Project/Builder/Locality write methods (Phase 46: it DOES now write its own compact enrichmentSummary onto the SAME staging record -- see the dedicated enrichmentSummary describe block below)", async () => {
@@ -467,14 +523,14 @@ describe("enrichProjectAction — Builder/Locality resolution (Phase 33)", () =>
     );
   });
 
-  it("no developerGroup/locality fact at all -> no DB query for Builder/Locality candidates, no match proposal attached", async () => {
+  it("no developerGroup/locality fact at all -> no Builder/Locality MATCH PROPOSAL is attached, and no locality DB query happens (targeted fix: Official Developer Website's OWN read-only builder lookup is a separate, always-on resolution and is expected to query Builder regardless of whether this run's source proposed a developerGroup)", async () => {
     stagingFindUniqueMock.mockResolvedValue(stagingRecord());
     fetchProjectFactsMock.mockResolvedValue({ metaTitle: { value: "Something", confidence: "High" } });
+    builderFindManyMock.mockResolvedValue([] as never);
 
     const result = await enrichProjectAction("stage-1");
     expect(result.builderMatch).toBeUndefined();
     expect(result.localityMatch).toBeUndefined();
-    expect(builderFindManyMock).not.toHaveBeenCalled();
     expect(localityFindManyMock).not.toHaveBeenCalled();
   });
 });
@@ -485,6 +541,14 @@ describe("acceptEntityMatchAction (Phase 33 Part F/G — persists a founder-sele
     stagingUpdateMock.mockResolvedValue({} as never);
     auditLogFindManyMock.mockResolvedValue([] as never);
     auditLogCreateMock.mockResolvedValue({} as never);
+    // Targeted fix (Official Developer Website) -- buildProjectReviewSnapshot's
+    // own resolveOfficialDeveloperWebsite call reaches prisma.builder.findMany
+    // whenever payload.developerGroup is set (true for every stagingRecord()
+    // fixture below) and no builderId-based lookup already found a website.
+    // Explicitly mocked here (not relying on a prior describe block's
+    // leftover mock state, which vi.clearAllMocks() does NOT reset) so this
+    // suite passes in isolation, not just as part of the full file run.
+    builderFindManyMock.mockResolvedValue([] as never);
   });
 
   it("9. accepts a Builder match and persists builderId (not the name) into the payload", async () => {
@@ -588,6 +652,67 @@ describe("acceptEntityMatchAction (Phase 33 Part F/G — persists a founder-sele
     const result = await acceptEntityMatchAction("stage-1", "builder", "bldr-does-not-exist");
     expect(result.status).toBe("INVALID_ENTITY");
     expect(result.snapshot).toBeUndefined();
+  });
+});
+
+describe("rejectEntityMatchAction (targeted fix, Reject option consistency -- upgrades the entity-match card's 'Keep Current' into a proper reason-required, history-recorded reject)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stagingUpdateMock.mockResolvedValue({} as never);
+    auditLogCreateMock.mockResolvedValue({} as never);
+    builderFindManyMock.mockResolvedValue([] as never);
+  });
+
+  it("Q/R. requires a non-empty reason -- never persists or logs anything when blank", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    const result = await rejectEntityMatchAction("stage-1", "builder", "   ");
+    expect(result.status).toBe("INVALID_REASON");
+    expect(stagingUpdateMock).not.toHaveBeenCalled();
+    expect(auditLogCreateMock).not.toHaveBeenCalled();
+  });
+
+  it("records a REJECT event under a synthetic 'builderMatch' field key -- never applies the match, never touches the staging payload", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    const result = await rejectEntityMatchAction("stage-1", "builder", "Wrong entity, not the actual developer.", { proposedName: "Adani Realty" });
+    expect(result.status).toBe("SUCCESS");
+    expect(stagingUpdateMock).not.toHaveBeenCalled(); // "keep current" never writes payload.builderId
+
+    expect(auditLogCreateMock).toHaveBeenCalledTimes(1);
+    const call = auditLogCreateMock.mock.calls[0][0] as { data: Record<string, unknown> };
+    expect(call.data.action).toBe("enrichment.reject");
+    expect(call.data.entityType).toBe("ProjectEnrichmentField");
+    expect(call.data.entityId).toBe("stage-1");
+    const after = call.data.after as Record<string, unknown>;
+    expect(after.fieldKey).toBe("builderMatch");
+    expect(after.displayValue).toBe("Adani Realty");
+    expect(after.reason).toBe("Wrong entity, not the actual developer.");
+  });
+
+  it("uses a distinct 'localityMatch' field key for locality, never colliding with the real 'locality' field's own history", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    await rejectEntityMatchAction("stage-1", "locality", "Not the right locality.", { proposedName: "Bandra West" });
+    const call = auditLogCreateMock.mock.calls[0][0] as { data: Record<string, unknown> };
+    expect((call.data.after as Record<string, unknown>).fieldKey).toBe("localityMatch");
+  });
+
+  it("returns a fresh snapshot on SUCCESS, consistent with every other mutation action", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    const result = await rejectEntityMatchAction("stage-1", "builder", "reason");
+    expect(result.snapshot).toBeDefined();
+  });
+
+  it("requires the staging record to exist and be PENDING", async () => {
+    stagingFindUniqueMock.mockResolvedValue(null);
+    expect((await rejectEntityMatchAction("missing-id", "builder", "reason")).status).toBe("NOT_FOUND");
+
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord({ status: "APPROVED" } as never));
+    expect((await rejectEntityMatchAction("stage-1", "builder", "reason")).status).toBe("NOT_PENDING");
+  });
+
+  it("is gated behind requireMutateSession", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    await rejectEntityMatchAction("stage-1", "builder", "reason");
+    expect(requireMutateSession).toHaveBeenCalled();
   });
 });
 
@@ -827,6 +952,9 @@ describe("rejectEnrichmentFieldAction (targeted fix, founder-testing round — A
     stagingUpdateMock.mockResolvedValue({} as never);
     auditLogFindManyMock.mockResolvedValue([] as never);
     auditLogCreateMock.mockResolvedValue({} as never);
+    // See acceptEntityMatchAction's own beforeEach comment -- buildProjectReviewSnapshot's
+    // resolveOfficialDeveloperWebsite reaches this whenever developerGroup is set.
+    builderFindManyMock.mockResolvedValue([] as never);
   });
 
   it("A. requires a non-empty reason -- rejects with INVALID_REASON and never touches the payload or history when blank", async () => {
@@ -945,6 +1073,9 @@ describe("Phase 37 — enrichment history (built entirely on the existing AuditL
     vi.clearAllMocks();
     stagingUpdateMock.mockResolvedValue({} as never);
     auditLogCreateMock.mockResolvedValue({} as never);
+    // See acceptEntityMatchAction's own beforeEach comment -- buildProjectReviewSnapshot's
+    // resolveOfficialDeveloperWebsite reaches this whenever developerGroup is set.
+    builderFindManyMock.mockResolvedValue([] as never);
   });
 
   function auditRow(overrides: Partial<Record<string, unknown>> = {}) {
@@ -1054,6 +1185,9 @@ describe("revertEnrichmentFieldAction (Phase 37 — exact restoration, never a b
     vi.clearAllMocks();
     stagingUpdateMock.mockResolvedValue({} as never);
     auditLogCreateMock.mockResolvedValue({} as never);
+    // See acceptEntityMatchAction's own beforeEach comment -- buildProjectReviewSnapshot's
+    // resolveOfficialDeveloperWebsite reaches this whenever developerGroup is set.
+    builderFindManyMock.mockResolvedValue([] as never);
   });
 
   function auditRow(overrides: Partial<Record<string, unknown>> = {}) {

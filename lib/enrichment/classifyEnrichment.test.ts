@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyProjectEnrichment, mergeEnrichmentResults } from "./classifyEnrichment";
+import { classifyProjectEnrichment, mergeEnrichmentResults, suppressPreviouslyRejectedProposals } from "./classifyEnrichment";
 import { buildProjectReviewCompleteness } from "../ingestion/reviewFieldRegistry";
 import { GODREJ_SKY_SHORE_SOURCE_FACTS, GODREJ_SKY_SHORE_SOURCE_META } from "./fixtures/godrejSkyShoreSourceFacts";
 import type { ProjectImportPayload } from "../ingestion/connectors/fileImport/types";
@@ -94,10 +94,10 @@ describe("classifyProjectEnrichment — Part M rules (generic, not project-speci
     }
   });
 
-  it("15. reuses the existing 38-field registry exactly -- same field count, same keys, no second registry", () => {
+  it("15. reuses the existing 39-field registry exactly -- same field count, same keys, no second registry", () => {
     const completeness = buildProjectReviewCompleteness(GODREJ_PAYLOAD, CONTEXT);
     const result = classifyProjectEnrichment(GODREJ_PAYLOAD, CONTEXT, {}, { url: "https://example.com", tier: "OFFICIAL_DEVELOPER" });
-    expect(result).toHaveLength(38);
+    expect(result).toHaveLength(39);
     expect(result).toHaveLength(completeness.totalFields);
     const registryKeys = completeness.groups.flatMap((g) => g.fields.map((f) => f.key)).sort();
     const enrichmentKeys = result.map((f) => f.key).sort();
@@ -227,7 +227,112 @@ describe("Godrej Sky Shore acceptance test (Phase 28 Part L — the 10 named cas
     expect(byKey(result, "amenities")!.classification).toBe("YELLOW");
   });
 
-  it("total field count is still exactly 38 for the full Godrej run", () => {
-    expect(result).toHaveLength(38);
+  it("total field count is still exactly 39 for the full Godrej run", () => {
+    expect(result).toHaveLength(39);
+  });
+});
+
+describe("suppressPreviouslyRejectedProposals (targeted fix -- a rejected conflict must not return identically on the next Enrich run)", () => {
+  const CONFLICT_FIELDS = classifyProjectEnrichment(
+    GODREJ_PAYLOAD,
+    CONTEXT,
+    { name: { value: "A Totally Different Name", confidence: "High" } },
+    { url: "https://example.com/godrej", tier: "OFFICIAL_DEVELOPER" }
+  );
+
+  it("A. an identical repeat of an already-rejected proposal (same value + source) is folded back to CONFIRMED, not shown again", () => {
+    const rejectedEvents = new Map([
+      [
+        "name",
+        {
+          action: "REJECT" as const,
+          after: {
+            fieldKey: "name",
+            displayValue: "A Totally Different Name",
+            payloadChanges: {},
+            sourceUrl: "https://example.com/godrej",
+            reason: "Not the RERA-registered name.",
+          },
+        },
+      ],
+    ]);
+    const result = suppressPreviouslyRejectedProposals(CONFLICT_FIELDS, rejectedEvents);
+    const name = result.find((f) => f.key === "name")!;
+    expect(name.classification).toBe("CONFIRMED");
+    expect(name.proposedValue).toBe(name.currentValue);
+    expect(name.reason).toContain("already reviewed and declined");
+  });
+
+  it("B1. a MATERIALLY DIFFERENT proposed value (even from the same source) is let through unchanged, not suppressed", () => {
+    const rejectedEvents = new Map([
+      [
+        "name",
+        {
+          action: "REJECT" as const,
+          after: { fieldKey: "name", displayValue: "Some Other Rejected Name", payloadChanges: {}, sourceUrl: "https://example.com/godrej" },
+        },
+      ],
+    ]);
+    const result = suppressPreviouslyRejectedProposals(CONFLICT_FIELDS, rejectedEvents);
+    const name = result.find((f) => f.key === "name")!;
+    expect(name.classification).toBe("CONFLICT");
+    expect(name.proposedValue).toBe("A Totally Different Name");
+  });
+
+  it("B2. the SAME proposed value from a DIFFERENT source is let through unchanged, not suppressed", () => {
+    const rejectedEvents = new Map([
+      [
+        "name",
+        {
+          action: "REJECT" as const,
+          after: { fieldKey: "name", displayValue: "A Totally Different Name", payloadChanges: {}, sourceUrl: "https://a-different-source.example" },
+        },
+      ],
+    ]);
+    const result = suppressPreviouslyRejectedProposals(CONFLICT_FIELDS, rejectedEvents);
+    expect(result.find((f) => f.key === "name")!.classification).toBe("CONFLICT");
+  });
+
+  it("a field with no history event at all is untouched", () => {
+    const result = suppressPreviouslyRejectedProposals(CONFLICT_FIELDS, new Map());
+    expect(result.find((f) => f.key === "name")!.classification).toBe("CONFLICT");
+  });
+
+  it("a field whose most recent event is an ACCEPT (not a REJECT) is untouched -- only a REJECT ever suppresses", () => {
+    const events = new Map([
+      ["name", { action: "ACCEPT" as const, after: { fieldKey: "name", displayValue: "A Totally Different Name", payloadChanges: {}, sourceUrl: "https://example.com/godrej" } }],
+    ]);
+    const result = suppressPreviouslyRejectedProposals(CONFLICT_FIELDS, events);
+    expect(result.find((f) => f.key === "name")!.classification).toBe("CONFLICT");
+  });
+
+  it("CONFIRMED and MISSING fields are never touched, even if a stale REJECT event exists for that key", () => {
+    const events = new Map([
+      ["locality", { action: "REJECT" as const, after: { fieldKey: "locality", displayValue: "Andheri West", payloadChanges: {}, sourceUrl: null } }],
+    ]);
+    const result = suppressPreviouslyRejectedProposals(CONFLICT_FIELDS, events);
+    expect(result.find((f) => f.key === "locality")!.classification).toBe("CONFIRMED"); // unchanged, not re-flagged
+  });
+
+  it("array-shaped fields (proposedItems) are also compared -- a materially different items list is not suppressed", () => {
+    const amenitiesFields = classifyProjectEnrichment(
+      GODREJ_PAYLOAD,
+      CONTEXT,
+      { amenities: { value: "3 selected", confidence: "High", items: ["Pool", "Gym", "Spa"] } },
+      { url: "https://example.com/godrej", tier: "OFFICIAL_DEVELOPER" }
+    );
+    const events = new Map([
+      [
+        "amenities",
+        {
+          action: "REJECT" as const,
+          after: { fieldKey: "amenities", displayValue: "3 selected", displayItems: ["Pool", "Gym"], payloadChanges: {}, sourceUrl: "https://example.com/godrej" },
+        },
+      ],
+    ]);
+    const result = suppressPreviouslyRejectedProposals(amenitiesFields, events);
+    // items differ (["Pool","Gym","Spa"] vs ["Pool","Gym"]) even though the count-string display value happens to match -- must not be suppressed.
+    const amenities = result.find((f) => f.key === "amenities")!;
+    expect(["GREEN_NEW", "YELLOW", "CONFLICT"]).toContain(amenities.classification);
   });
 });

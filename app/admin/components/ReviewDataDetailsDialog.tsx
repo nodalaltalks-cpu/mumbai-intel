@@ -22,7 +22,7 @@ function FieldValue({ field }: { field: ReviewField }) {
   const isLong = value.length > 140;
   return (
     <div>
-      <p className={`text-xs text-foreground ${isLong && !expanded ? "line-clamp-2" : ""}`}>{value}</p>
+      <p className={`break-words text-xs text-foreground ${isLong && !expanded ? "line-clamp-2" : ""}`}>{value}</p>
       {isLong ? (
         <button type="button" onClick={() => setExpanded((e) => !e)} className="mt-0.5 text-[10px] font-mono uppercase text-accent hover:underline">
           {expanded ? "Show less" : "Show more"}
@@ -80,8 +80,8 @@ function FullIngestionBreakdown({ completeness }: { completeness: ReviewComplete
 function FounderReceivedRow({ field }: { field: FounderReviewField }) {
   return (
     <div className="flex items-start justify-between gap-3 px-3 py-2">
-      <span className="text-[11px] text-muted">{field.label}</span>
-      <span className="max-w-[60%] text-right text-xs text-foreground">{field.value}</span>
+      <span className="shrink-0 text-[11px] text-muted">{field.label}</span>
+      <span className="min-w-0 max-w-[60%] break-words text-right text-xs text-foreground">{field.value}</span>
     </div>
   );
 }
@@ -174,7 +174,7 @@ export default function ReviewDataDetailsDialog({
               {conflicts.map((c) => (
                 <li key={c.key} className="text-[11px]">
                   <p className="font-mono text-xs font-semibold text-foreground">{c.label}</p>
-                  <p className="mt-0.5 text-muted">
+                  <p className="mt-0.5 break-words text-muted">
                     Existing: <span className="text-foreground">{c.existingValue ?? "—"}</span>
                   </p>
                   <p className="text-muted italic">Proposed value &amp; source: run Enrich Project to view current details</p>

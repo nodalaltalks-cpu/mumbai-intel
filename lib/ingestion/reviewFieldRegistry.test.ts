@@ -170,6 +170,7 @@ describe("buildProjectReviewCompleteness — CASE 1: fully populated payload", (
     totalTowers: 3,
     launchDateIso: "2024-01-01T00:00:00.000Z",
     builderId: "builder-1",
+    developerWebsiteUrl: "https://www.adanirealty.com",
     tagline: "Live by the bay",
     microMarketId: "mm-1",
     googleMapsUrl: "https://maps.google.com/?q=19.1364,72.8296",

@@ -164,7 +164,7 @@ describe("extractLodhaCullinanFacts (Phase 42 — sixth developer, a sixth disti
     expect(byKey("reraNumber").classification).toBe("GREEN_NEW");
     expect(byKey("locality").classification).toBe("YELLOW"); // ambiguous, blank current -> YELLOW
     expect(byKey("priceMin").classification).toBe("MISSING");
-    expect(result).toHaveLength(38);
+    expect(result).toHaveLength(39);
   });
 
   it("15. never leaks Godrej fixture content into a Lodha extraction run", () => {

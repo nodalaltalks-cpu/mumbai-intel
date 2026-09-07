@@ -17,6 +17,7 @@ import {
   enrichProjectAction,
   getEnrichmentFieldHistoryAction,
   rejectEnrichmentFieldAction,
+  rejectEntityMatchAction,
   revertEnrichmentFieldAction,
   type EnrichProjectResult,
   type ProjectReviewSnapshot,
@@ -178,6 +179,17 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
       return { ok: true };
     }
     return { ok: false, error: result.error ?? `Could not save this ${kind}.` };
+  }
+
+  async function handleRejectEntityMatch(kind: "builder" | "locality", reason: string, proposedName: string): Promise<{ ok: boolean; error?: string }> {
+    if (!enrichmentRecordId) return { ok: false, error: "No record open." };
+    const result = await rejectEntityMatchAction(enrichmentRecordId, kind, reason, { proposedName });
+    if (result.status === "SUCCESS") {
+      applySnapshot(enrichmentRecordId, result.snapshot);
+      router.refresh();
+      return { ok: true };
+    }
+    return { ok: false, error: result.error ?? `Could not reject this ${kind} match.` };
   }
 
   async function handleViewHistory(fieldKey: string): Promise<EnrichmentHistoryEntry[]> {
@@ -438,6 +450,7 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
           onAcceptField={handleAcceptField}
           onRejectField={handleRejectField}
           onAcceptEntityMatch={handleAcceptEntityMatch}
+          onRejectEntityMatch={handleRejectEntityMatch}
           onViewHistory={handleViewHistory}
           onUndo={handleUndo}
         />

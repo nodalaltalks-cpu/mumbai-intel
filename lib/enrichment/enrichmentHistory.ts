@@ -153,6 +153,33 @@ export async function getMostRecentEnrichmentHistoryEvent(stagingRecordId: strin
 }
 
 /**
+ * Targeted fix (repeated rejected proposal bug) -- the most recent history
+ * event for EVERY field on this staging record, in ONE query (the same
+ * underlying getAuditHistory call getEnrichmentFieldHistory already uses per
+ * field, just grouped once instead of once-per-field). A fresh Enrich run
+ * uses this to tell "the source is proposing the EXACT SAME thing the
+ * founder already explicitly reviewed and declined" apart from "the
+ * proposal materially changed and deserves a fresh look" -- see
+ * classifyEnrichment.ts's suppressPreviouslyRejectedProposals, the only
+ * caller. Rows are already newest-first (getAuditHistory's own orderBy), so
+ * the first event seen for a given field key is authoritative.
+ */
+export async function getMostRecentEnrichmentEventsByField(
+  stagingRecordId: string
+): Promise<Map<string, { action: EnrichmentHistoryActionType; after: EnrichmentHistorySnapshot | null }>> {
+  const rows = await getAuditHistory(ENRICHMENT_HISTORY_ENTITY_TYPE, stagingRecordId, 200);
+  const result = new Map<string, { action: EnrichmentHistoryActionType; after: EnrichmentHistorySnapshot | null }>();
+  for (const row of rows) {
+    const before = row.before as unknown;
+    const after = row.after as unknown;
+    const fieldKey = isSnapshot(after) ? after.fieldKey : isSnapshot(before) ? before.fieldKey : null;
+    if (!fieldKey || result.has(fieldKey)) continue;
+    result.set(fieldKey, { action: STORED_TO_ACTION_TYPE[row.action] ?? "ACCEPT", after: isSnapshot(after) ? after : null });
+  }
+  return result;
+}
+
+/**
  * ACCEPT the first time a field is ever accepted; RE_ACCEPT immediately
  * after an Undo (the founder is putting an enrichment value back in place
  * after having reverted it); EDIT_ACCEPT for every other re-accept (a plain

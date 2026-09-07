@@ -13,6 +13,7 @@ import {
 } from "@/lib/ingestion/reviewFieldRegistry";
 import { computeApprovalReadiness } from "@/lib/ingestion/projectApprovalReadiness";
 import { deriveEnrichmentBadge, readEnrichmentSummary } from "@/lib/enrichment/enrichmentSummary";
+import { resolveSavedDeveloperWebsite, type BuilderForWebsiteLookup } from "@/lib/enrichment/developerWebsite";
 import ReviewQueueList, { type ReviewRecord } from "@/app/admin/components/ReviewQueueList";
 import EmptyState from "@/app/components/ui/EmptyState";
 
@@ -79,6 +80,21 @@ export default async function DataSyncReviewPage() {
   ];
   const builders = builderIds.length ? await prisma.builder.findMany({ where: { id: { in: builderIds } }, select: { id: true, name: true } }) : [];
   const builderNameById = new Map(builders.map((b) => [b.id, b.name]));
+
+  // Targeted fix (Official Developer Website) -- reuses the EXACT same
+  // Phase 69 Discovery mechanism (resolveSavedDeveloperWebsite), fetched
+  // unfiltered exactly like that page already does, since most Project
+  // staging candidates have no resolved builderId yet and can only be
+  // matched by an exact developerGroup name.
+  const allBuildersForWebsiteLookup: BuilderForWebsiteLookup[] = projectRecords.length
+    ? await prisma.builder.findMany({ select: { id: true, name: true, legalNames: true, reraNumber: true, websiteUrl: true } })
+    : [];
+  const builderWebsiteById = new Map(allBuildersForWebsiteLookup.map((b) => [b.id, b.websiteUrl]));
+  function resolveOfficialDeveloperWebsiteUrl(payload: ProjectImportPayload): string | null {
+    if (payload.builderId) return builderWebsiteById.get(payload.builderId) ?? null;
+    if (payload.developerGroup) return resolveSavedDeveloperWebsite(payload.developerGroup, allBuildersForWebsiteLookup)?.websiteUrl ?? null;
+    return null;
+  }
 
   const transactionProjectIds = [
     ...new Set(transactionRecords.map((r) => (r.payload as unknown as TransactionImportPayload).projectId).filter((id): id is string => Boolean(id))),
@@ -191,6 +207,7 @@ export default async function DataSyncReviewPage() {
           matched: matchedProjectForCompleteness
             ? { name: matchedProjectForCompleteness.name, status: matchedProjectForCompleteness.status, reraNumber: matchedProjectForCompleteness.reraNumber }
             : null,
+          officialDeveloperWebsiteUrl: resolveOfficialDeveloperWebsiteUrl(projectPayload),
         })
       : builderPayload
         ? buildBuilderReviewCompleteness(builderPayload)

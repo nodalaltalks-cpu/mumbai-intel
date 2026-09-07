@@ -22,6 +22,8 @@ export interface ProjectImportPayload {
   launchDateIso?: string;
   builderId?: string;
   developerGroup?: string;
+  /** Founder-editable override (Targeted fix, Official Developer Website) -- set only via the Enrichment dialog's Edit action on the "developerWebsiteUrl" field. Absent means "use whatever website is already resolved on the matched Builder row (Builder.websiteUrl), if any" -- see lib/actions/enrichment.ts's resolveOfficialDeveloperWebsite. Never written by any adapter/importer -- founder-only, and never writes back to the shared Builder row itself. */
+  developerWebsiteUrl?: string;
   localityId: string;
   description?: string;
   dataSource: DataSource;

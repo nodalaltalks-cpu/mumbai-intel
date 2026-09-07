@@ -83,14 +83,14 @@ describe("computeApprovalReadiness (Phase 34 Part B/C — reuses the EXISTING co
     expect(computeApprovalReadiness(notReadyCompleteness).status).toBe("NEEDS_ATTENTION");
   });
 
-  it("8. the underlying 38-field total/received/missing counts are untouched -- this function only reads them, never recomputes", () => {
+  it("8. the underlying 39-field total/received/missing counts are untouched -- this function only reads them, never recomputes", () => {
     const completeness = buildProjectReviewCompleteness(ADANI_PAYLOAD, { localityName: "Andheri West" });
     const before = { total: completeness.totalFields, received: completeness.receivedCount, missing: completeness.missingCount };
     computeApprovalReadiness(completeness);
     expect(completeness.totalFields).toBe(before.total);
     expect(completeness.receivedCount).toBe(before.received);
     expect(completeness.missingCount).toBe(before.missing);
-    expect(completeness.totalFields).toBe(38);
+    expect(completeness.totalFields).toBe(39);
   });
 
   it("10. reflects Locality resolution the same way (locality already required on every staged payload, but confirms the mechanism)", () => {

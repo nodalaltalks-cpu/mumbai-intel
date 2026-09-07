@@ -13,16 +13,29 @@ type CardState = "idle" | "saving" | "saved" | "error" | "kept";
  * the correct existing row. Nothing here ever creates a Builder or Locality
  * -- a genuinely new name shows "No existing match found" with no create
  * action, per Part Q.
+ *
+ * Targeted fix (Reject option consistency) -- a CONFLICT match is a genuine
+ * actionable proposal (a real existing row the founder is being asked to
+ * switch to), so declining it now goes through the SAME reason-required,
+ * history-recorded reject every other field's proposal already uses
+ * (onReject -> rejectEntityMatchAction), not a silent client-only "keep
+ * current" no-op.
  */
 export default function EntityMatchCard({
   proposal,
   onAccept,
+  onReject,
 }: {
   proposal: EntityMatchProposal;
   onAccept: (existingId: string) => Promise<{ ok: boolean; error?: string }>;
+  onReject: (reason: string) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const [state, setState] = useState<CardState>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejectSubmitting, setRejectSubmitting] = useState(false);
+  const [rejectError, setRejectError] = useState<string | null>(null);
 
   async function handleUse(id: string) {
     setState("saving");
@@ -32,6 +45,22 @@ export default function EntityMatchCard({
     } else {
       setState("error");
       setError(result.error ?? `Could not save this ${proposal.label.toLowerCase()}.`);
+    }
+  }
+
+  async function confirmReject() {
+    if (!rejectReason.trim()) {
+      setRejectError("A reason is required to reject this match.");
+      return;
+    }
+    setRejectSubmitting(true);
+    const result = await onReject(rejectReason.trim());
+    setRejectSubmitting(false);
+    if (result.ok) {
+      setState("kept");
+      setRejecting(false);
+    } else {
+      setRejectError(result.error ?? "Could not reject this match.");
     }
   }
 
@@ -58,30 +87,69 @@ export default function EntityMatchCard({
 
       {proposal.match.status === "SINGLE_MATCH" ? (
         <div className="flex flex-col gap-1">
-          <p className="text-[10px] text-muted">
+          <p className="break-words text-[10px] text-muted">
             Existing match: <span className="text-foreground">{proposal.match.candidates[0].name}</span>
           </p>
           {proposal.classification === "CONFIRMED" ? (
             <p className="text-[10px] text-positive">✓ Already matches this record</p>
           ) : proposal.classification === "CONFLICT" ? (
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={busy || done}
-                onClick={() => setState("kept")}
-                className="rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-foreground hover:text-foreground disabled:opacity-50"
-              >
-                Keep Current
-              </button>
-              <button
-                type="button"
-                disabled={busy || done}
-                onClick={() => handleUse(proposal.match.candidates[0].id)}
-                className="rounded-sm border border-negative/40 px-2 py-0.5 text-[10px] font-mono uppercase text-negative hover:bg-negative/10 disabled:opacity-50"
-              >
-                Use Match
-              </button>
-            </div>
+            rejecting ? (
+              <div className="flex flex-col gap-1.5 rounded-sm border border-negative/30 bg-negative/5 p-2">
+                <p className="text-[10px] font-mono uppercase tracking-wide text-negative">Reject This Match</p>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] uppercase tracking-wide text-muted">Reason</span>
+                  <textarea
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    rows={2}
+                    className="w-full rounded-sm border border-border bg-surface px-2 py-1 text-xs text-foreground"
+                    placeholder={`Why keep the current ${proposal.label.toLowerCase()} instead?`}
+                  />
+                </label>
+                {rejectError ? <span className="text-[10px] text-negative">{rejectError}</span> : null}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={rejectSubmitting}
+                    onClick={confirmReject}
+                    className="rounded-sm border border-negative/40 px-2 py-0.5 text-[10px] font-mono uppercase text-negative hover:bg-negative/10 disabled:opacity-50"
+                  >
+                    {rejectSubmitting ? "Confirming..." : "Confirm Rejection"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={rejectSubmitting}
+                    onClick={() => {
+                      setRejecting(false);
+                      setRejectReason("");
+                      setRejectError(null);
+                    }}
+                    className="rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-foreground hover:text-foreground disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={busy || done}
+                  onClick={() => setRejecting(true)}
+                  className="rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-negative hover:text-negative disabled:opacity-50"
+                >
+                  Reject
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || done}
+                  onClick={() => handleUse(proposal.match.candidates[0].id)}
+                  className="rounded-sm border border-negative/40 px-2 py-0.5 text-[10px] font-mono uppercase text-negative hover:bg-negative/10 disabled:opacity-50"
+                >
+                  Use Match
+                </button>
+              </div>
+            )
           ) : (
             <button
               type="button"
@@ -98,7 +166,7 @@ export default function EntityMatchCard({
           <p className="text-[10px] font-mono uppercase tracking-wide text-warning">Multiple matches — review required</p>
           {proposal.match.candidates.map((c) => (
             <div key={c.id} className="flex items-center justify-between gap-2">
-              <span className="text-foreground">{c.name}</span>
+              <span className="min-w-0 break-words text-foreground">{c.name}</span>
               <button
                 type="button"
                 disabled={busy || done}
@@ -116,7 +184,7 @@ export default function EntityMatchCard({
 
       {state === "saving" ? <span className="text-[10px] text-muted">Saving...</span> : null}
       {state === "saved" ? <span className="text-[10px] text-positive">✓ Saved to pending review</span> : null}
-      {state === "kept" ? <span className="text-[10px] text-muted">Keeping current value — no change made</span> : null}
+      {state === "kept" ? <span className="text-[10px] text-muted">✓ Rejected — recorded to history, current value kept</span> : null}
       {state === "error" ? <span className="text-[10px] text-negative">{error}</span> : null}
     </div>
   );
