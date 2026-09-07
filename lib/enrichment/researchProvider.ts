@@ -57,6 +57,10 @@ export interface ResearchFinding {
   reasoning: string;
   /** For array-shaped fields (amenities, paymentPlans, highlights, ...) -- the real underlying list, same convention as RawSourceFact.items. */
   items?: string[];
+  /** Targeted fix (Browser Integration Validation) -- the page's own title, purely for founder-facing evidence display; never used for identity verification (that's identitySignals below). Optional -- existing findings/tests predate this. */
+  sourceTitle?: string;
+  /** Targeted fix (Browser Integration Validation) -- ISO timestamp of when the page was actually read, for evidence traceability ("where did this value come from, and when"). Optional -- existing findings/tests predate this. */
+  accessedAt?: string;
   /**
    * Targeted fix (Research Automation, Section 12) -- project-identity
    * signals the provider extracted from the SAME page this finding came

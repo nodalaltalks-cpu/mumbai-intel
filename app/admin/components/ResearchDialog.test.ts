@@ -25,6 +25,13 @@ describe("ResearchDialog -- reuses EnrichmentProposalPanel, never rebuilds field
     expect(DIALOG_SOURCE).toContain("rejectedFindings");
     expect(DIALOG_SOURCE).toContain("could not be verified and were not included");
   });
+
+  it("Browser Integration Validation -- carries a findings submission form wired to onSubmitFindings, not a fabricated success state", () => {
+    expect(DIALOG_SOURCE).toContain("function FindingsSubmitForm");
+    expect(DIALOG_SOURCE).toContain("onSubmitFindings");
+    expect(DIALOG_SOURCE).toContain("<FindingsSubmitForm onSubmit={onSubmitFindings} />");
+    expect(DIALOG_SOURCE).toContain("JSON.parse(raw)");
+  });
 });
 
 describe("ReviewQueueList -- Research Project button reuses the SAME field mutation handlers as Enrich Project (source inspection)", () => {
@@ -46,5 +53,10 @@ describe("ReviewQueueList -- Research Project button reuses the SAME field mutat
 
   it("calls researchProjectAction, never a second/duplicate research action from this component", () => {
     expect(QUEUE_SOURCE).toContain("await researchProjectAction(recordId)");
+  });
+
+  it("Browser Integration Validation -- wires onSubmitFindings through submitResearchFindingsAction, the same identity-guarded pipeline as researchProjectAction", () => {
+    expect(QUEUE_SOURCE).toContain("submitResearchFindingsAction");
+    expect(QUEUE_SOURCE).toContain("onSubmitFindings={(findings) => submitFindings(enrichmentRecord.id, findings)}");
   });
 });

@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import Dialog from "@/app/components/ui/Dialog";
 import type { EnrichmentField } from "@/lib/enrichment/types";
 import type { EnrichmentHistoryEntry } from "@/lib/enrichment/enrichmentHistory";
 import type { ResearchRunStatus } from "@/lib/actions/research";
+import type { ResearchFinding } from "@/lib/enrichment/researchProvider";
 import EnrichmentProposalPanel from "./EnrichmentProposalPanel";
 
 /**
@@ -32,6 +34,102 @@ const STATUS_COPY: Record<string, string> = {
   ERROR: "Research couldn't run for this record.",
 };
 
+/**
+ * Targeted fix (Browser Integration Validation, Section 8) -- the actual
+ * Claude+Chrome submission boundary, made concrete. `submitResearchFindingsAction`
+ * (lib/actions/research.ts) already existed as a real, tested entry point but
+ * had no way to be invoked from a genuine authenticated browser request --
+ * this is that minimal connection, NOT a second review system: pasted
+ * findings go through the exact same identity guard / classifier /
+ * founder-authority pipeline as everything else here, and land in the same
+ * Accept/Edit/Reject panel below. No JSON parses to a finding, no submission
+ * happens.
+ */
+function FindingsSubmitForm({
+  onSubmit,
+}: {
+  onSubmit: (findings: ResearchFinding[]) => Promise<{ ok: boolean; error?: string }>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [raw, setRaw] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  async function handleSubmit() {
+    setFeedback(null);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      setFeedback("Not valid JSON.");
+      return;
+    }
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      setFeedback("Expected a non-empty JSON array of findings.");
+      return;
+    }
+    setSubmitting(true);
+    const result = await onSubmit(parsed as ResearchFinding[]);
+    setSubmitting(false);
+    if (result.ok) {
+      setRaw("");
+      setOpen(false);
+      setFeedback(null);
+    } else {
+      setFeedback(result.error ?? "Submission failed.");
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="w-fit rounded-sm border border-border px-2 py-1 text-[11px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+      >
+        Submit research findings
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-sm border border-border p-3">
+      <p className="text-[11px] text-muted">
+        Paste a JSON array of findings collected from an interactive research pass (each with fieldKey, value, confidence, sourceUrl,
+        sourceType, reasoning, and identitySignals). Every finding still passes through identity verification and classification below.
+      </p>
+      <textarea
+        value={raw}
+        onChange={(e) => setRaw(e.target.value)}
+        rows={8}
+        placeholder="[ { &quot;fieldKey&quot;: ..., &quot;value&quot;: ..., ... } ]"
+        className="w-full rounded-sm border border-border bg-background p-2 font-mono text-[11px] text-foreground"
+      />
+      {feedback ? <p className="text-[11px] text-negative">{feedback}</p> : null}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={submitting || raw.trim().length === 0}
+          className="w-fit rounded-sm border border-accent px-2 py-1 text-[11px] font-mono uppercase tracking-wide text-accent disabled:opacity-50"
+        >
+          {submitting ? "Submitting..." : "Submit"}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setOpen(false);
+            setFeedback(null);
+          }}
+          className="w-fit rounded-sm border border-border px-2 py-1 text-[11px] font-mono uppercase tracking-wide text-muted"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function ResearchDialog({
   title,
   loading,
@@ -41,6 +139,7 @@ export default function ResearchDialog({
   rejectedFindings,
   onClose,
   onRetry,
+  onSubmitFindings,
   onAcceptField,
   onRejectField,
   onUploadMedia,
@@ -55,6 +154,7 @@ export default function ResearchDialog({
   rejectedFindings?: { fieldKey: string; sourceUrl: string; reason: string }[];
   onClose: () => void;
   onRetry: () => void;
+  onSubmitFindings: (findings: ResearchFinding[]) => Promise<{ ok: boolean; error?: string }>;
   onAcceptField: (
     field: EnrichmentField,
     editContext?: { founderEdited: true; overriddenValue: string | null; overriddenItems?: string[] }
@@ -101,6 +201,7 @@ export default function ResearchDialog({
               onViewHistory={onViewHistory}
               onUndo={onUndo}
             />
+            <FindingsSubmitForm onSubmit={onSubmitFindings} />
           </>
         ) : (
           <div className="flex flex-col gap-3">
@@ -114,13 +215,16 @@ export default function ResearchDialog({
                 ))}
               </ul>
             ) : null}
-            <button
-              type="button"
-              onClick={onRetry}
-              className="w-fit rounded-sm border border-border px-2 py-1 text-[11px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
-            >
-              Try again
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={onRetry}
+                className="w-fit rounded-sm border border-border px-2 py-1 text-[11px] font-mono uppercase tracking-wide text-muted hover:border-accent hover:text-accent"
+              >
+                Try again
+              </button>
+            </div>
+            <FindingsSubmitForm onSubmit={onSubmitFindings} />
           </div>
         )}
       </div>

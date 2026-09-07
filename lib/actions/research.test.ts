@@ -299,6 +299,48 @@ describe("buildResearchPlanAction (Section 16 -- read-only query plan for the fo
     await buildResearchPlanAction("stage-1");
     expect(stagingUpdateMock).not.toHaveBeenCalled();
   });
+
+  it("Browser Integration Validation -- returns a task handoff contract carrying only founder-visible project identity, never a credential or secret", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    const result = await buildResearchPlanAction("stage-1");
+    expect(result.status).toBe("SUCCESS");
+    const task = result.task!;
+    expect(task.stagingRecordId).toBe("stage-1");
+    expect(task.project).toEqual({
+      name: "Linkbay Residences",
+      developer: "Adani Realty",
+      locality: "Andheri West",
+      address: LINKBAY_PAYLOAD.address ?? null,
+      reraNumber: "P51800047539",
+    });
+    expect(task.targetFields).toEqual(result.targetFieldKeys);
+    expect(task.queries).toEqual(result.querySets);
+    expect(task.identityRules.length).toBeGreaterThan(0);
+    expect(task.sourceRules.length).toBeGreaterThan(0);
+    expect(task.safetyRules.length).toBeGreaterThan(0);
+    expect(task.instructions).toContain("Linkbay Residences");
+    const serialized = JSON.stringify(task).toLowerCase();
+    for (const forbidden of ["password", "api_key", "apikey", "secret", "token", "database_url", "env"]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
+
+  it("Browser Integration Validation -- safety rules explicitly prohibit form submission, credential entry, and treating marketing copy as fact", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    const result = await buildResearchPlanAction("stage-1");
+    const safety = result.task!.safetyRules.join(" ").toLowerCase();
+    expect(safety).toContain("password");
+    expect(safety).toContain("form");
+    expect(safety).toContain("marketing");
+  });
+
+  it("Browser Integration Validation -- identity rules require RERA-or-(name+developer) matching, mirroring researchIdentityGuard.ts", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    const result = await buildResearchPlanAction("stage-1");
+    const identity = result.task!.identityRules.join(" ").toLowerCase();
+    expect(identity).toContain("rera");
+    expect(identity).toContain("developer");
+  });
 });
 
 afterEach(() => {

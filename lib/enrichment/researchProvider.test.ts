@@ -157,4 +157,23 @@ describe("runResearchProviders (targeted fix — smallest interface for future r
     expect(Array.isArray(result)).toBe(true);
     expect(result.every((f) => typeof f.classification === "string")).toBe(true);
   });
+
+  it("Browser Integration Validation -- sourceTitle/accessedAt are optional and don't affect classification", async () => {
+    const provider = providerReturning([
+      {
+        fieldKey: "address",
+        value: "Off Link Road, Andheri West",
+        confidence: "High",
+        sourceUrl: "https://www.adanirealty.com/linkbay",
+        sourceType: "OFFICIAL_DEVELOPER",
+        reasoning: "Address disclosed on the official project page.",
+        sourceTitle: "Linkbay Residences | Adani Realty",
+        accessedAt: "2026-09-07T12:00:00.000Z",
+      },
+    ]);
+    const result = await runResearchProviders([provider], QUERY, PAYLOAD);
+    const address = result.find((f) => f.key === "address")!;
+    expect(address.classification).toBe("GREEN_NEW");
+    expect(address.proposedValue).toBe("Off Link Road, Andheri West");
+  });
 });

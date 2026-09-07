@@ -29,7 +29,8 @@ import type { EnrichmentField } from "@/lib/enrichment/types";
 import type { EnrichmentHistoryEntry } from "@/lib/enrichment/enrichmentHistory";
 import type { EnrichmentBadgeInfo } from "@/lib/enrichment/enrichmentSummary";
 import { applyReviewSnapshotOverrides } from "@/lib/enrichment/reviewSnapshotOverrides";
-import { researchProjectAction, type ResearchRunResult } from "@/lib/actions/research";
+import { researchProjectAction, submitResearchFindingsAction, type ResearchRunResult } from "@/lib/actions/research";
+import type { ResearchFinding } from "@/lib/enrichment/researchProvider";
 import ConfirmButton from "./ConfirmButton";
 import ReviewDataDetailsDialog from "./ReviewDataDetailsDialog";
 import EnrichmentDialog from "./EnrichmentDialog";
@@ -158,11 +159,11 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
    * runs whatever automated ResearchProvider(s) are actually registered
    * (none, in this environment -- see lib/actions/research.ts's own doc
    * comment) through the EXACT SAME founder-authority/classification/
-   * persistence pipeline as researchProjectAction's sibling entry point,
-   * submitResearchFindingsAction (the real, tested Claude+Chrome handoff
-   * point, invoked programmatically rather than from this UI). This button
-   * never fakes a "researching..." state with no real backend: with zero
-   * providers configured, the dialog honestly reports NOT_CONFIGURED.
+   * persistence pipeline as its sibling entry point, submitResearchFindingsAction
+   * (see submitFindings below -- the concrete Claude+Chrome handoff, wired
+   * into ResearchDialog's FindingsSubmitForm). This button never fakes a
+   * "researching..." state with no real backend: with zero providers
+   * configured, the dialog honestly reports NOT_CONFIGURED.
    */
   function runResearch(recordId: string) {
     setResearchMode(true);
@@ -174,6 +175,24 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
       applySnapshot(recordId, result.snapshot);
       router.refresh();
     });
+  }
+
+  /**
+   * Targeted fix (Browser Integration Validation, Section 8) -- the concrete
+   * connection point for submitResearchFindingsAction, invoked from a real
+   * authenticated request (this admin session) rather than programmatically.
+   * Findings collected by an interactive Claude+Chrome research pass are
+   * pasted into ResearchDialog's FindingsSubmitForm and go through this exact
+   * same identity-guard/classification/persistence pipeline as any other
+   * research result -- nothing here bypasses runResearchPipeline.
+   */
+  async function submitFindings(recordId: string, findings: ResearchFinding[]): Promise<{ ok: boolean; error?: string }> {
+    const result = await submitResearchFindingsAction(recordId, findings);
+    setResearchByRecordId((prev) => ({ ...prev, [recordId]: { loading: false, result } }));
+    applySnapshot(recordId, result.snapshot);
+    router.refresh();
+    if (result.status === "SUCCESS" || result.status === "NO_NEW_INFO") return { ok: true };
+    return { ok: false, error: result.error ?? (result.rejectedFindings?.[0]?.reason || `Submission returned ${result.status}.`) };
   }
 
   async function handleAcceptField(
@@ -574,6 +593,7 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
             setResearchMode(false);
           }}
           onRetry={() => runResearch(enrichmentRecord.id)}
+          onSubmitFindings={(findings) => submitFindings(enrichmentRecord.id, findings)}
           onAcceptField={handleAcceptField}
           onRejectField={handleRejectField}
           onUploadMedia={handleUploadMedia}
