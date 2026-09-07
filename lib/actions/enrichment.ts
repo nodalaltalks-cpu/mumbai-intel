@@ -535,7 +535,12 @@ export interface ProjectReviewSnapshot {
  * lookup. Never writes to Builder -- a founder override for THIS project
  * lives only on `payload.developerWebsiteUrl` (see reviewFieldRegistry.ts).
  */
-async function resolveOfficialDeveloperWebsite(payload: ProjectImportPayload): Promise<string | null> {
+/**
+ * Targeted fix (Research Automation) -- exported so lib/actions/research.ts
+ * can reuse the EXACT same resolution this file's own enrichment/snapshot
+ * paths already use, rather than a second Builder-website lookup.
+ */
+export async function resolveOfficialDeveloperWebsite(payload: ProjectImportPayload): Promise<string | null> {
   if (payload.builderId) {
     const builder = await prisma.builder.findUnique({ where: { id: payload.builderId }, select: { websiteUrl: true } });
     if (builder?.websiteUrl) return builder.websiteUrl;
@@ -548,7 +553,12 @@ async function resolveOfficialDeveloperWebsite(payload: ProjectImportPayload): P
   return null;
 }
 
-async function buildProjectReviewSnapshot(payload: Record<string, unknown>, matchedExistingId: string | null): Promise<ProjectReviewSnapshot> {
+/**
+ * Targeted fix (Research Automation) -- exported so lib/actions/research.ts
+ * returns snapshots through the SAME mechanism every other enrichment
+ * mutation already uses, never a second computation.
+ */
+export async function buildProjectReviewSnapshot(payload: Record<string, unknown>, matchedExistingId: string | null): Promise<ProjectReviewSnapshot> {
   const projectPayload = payload as unknown as ProjectImportPayload;
   const [locality, matched, officialDeveloperWebsiteUrl] = await Promise.all([
     projectPayload.localityId

@@ -19,6 +19,18 @@ import { getAuditHistory } from "@/lib/admin-queries";
 
 export const ENRICHMENT_HISTORY_ENTITY_TYPE = "ProjectEnrichmentField";
 
+/**
+ * Targeted fix (Research Automation) -- the AuditLog entityType research-run
+ * events (research.started/completed/failed/proposal_created) are scoped
+ * under, same table as everything else, distinct from
+ * ENRICHMENT_HISTORY_ENTITY_TYPE above since these are RUN-level events (no
+ * single fieldKey) rather than per-field accept/edit/reject history. Defined
+ * here (a plain server-only module), not in lib/actions/research.ts, because
+ * a "use server" file may only export async Server Actions -- a plain string
+ * constant there breaks the build.
+ */
+export const RESEARCH_ENTITY_TYPE = "ProjectResearch";
+
 export type EnrichmentHistoryActionType = "ACCEPT" | "EDIT_ACCEPT" | "REVERT" | "RE_ACCEPT" | "REJECT";
 
 const ACTION_TYPE_TO_STORED: Record<EnrichmentHistoryActionType, string> = {

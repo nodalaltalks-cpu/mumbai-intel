@@ -3,6 +3,7 @@ import type { ProjectReviewContext } from "../ingestion/reviewFieldRegistry";
 import type { ProjectImportPayload } from "../ingestion/connectors/fileImport/types";
 import { classifyProjectEnrichment, mergeEnrichmentResults } from "./classifyEnrichment";
 import type { EnrichmentConfidence, EnrichmentField, SourceFactsMap, SourceMeta, SourceTier } from "./types";
+import type { ResearchIdentitySignals } from "./researchIdentityGuard";
 
 /**
  * Targeted fix (post-Phase 71B founder testing), Sections 6-10 — a
@@ -56,6 +57,18 @@ export interface ResearchFinding {
   reasoning: string;
   /** For array-shaped fields (amenities, paymentPlans, highlights, ...) -- the real underlying list, same convention as RawSourceFact.items. */
   items?: string[];
+  /**
+   * Targeted fix (Research Automation, Section 12) -- project-identity
+   * signals the provider extracted from the SAME page this finding came
+   * from (project name / developer name / RERA number as they appeared on
+   * that page). Optional here (this module's own existing tests predate
+   * this field and stay valid), but researchProjectAction/
+   * submitResearchFindingsAction -- the actual founder-facing entry points
+   * this task adds -- REQUIRE it and reject any finding missing or failing
+   * verification (see researchIdentityGuard.ts's verifyResearchEvidenceIdentity),
+   * so an unattributed finding can never reach a founder's review queue.
+   */
+  identitySignals?: ResearchIdentitySignals;
 }
 
 export interface ResearchProvider {

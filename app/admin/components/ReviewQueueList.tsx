@@ -29,9 +29,11 @@ import type { EnrichmentField } from "@/lib/enrichment/types";
 import type { EnrichmentHistoryEntry } from "@/lib/enrichment/enrichmentHistory";
 import type { EnrichmentBadgeInfo } from "@/lib/enrichment/enrichmentSummary";
 import { applyReviewSnapshotOverrides } from "@/lib/enrichment/reviewSnapshotOverrides";
+import { researchProjectAction, type ResearchRunResult } from "@/lib/actions/research";
 import ConfirmButton from "./ConfirmButton";
 import ReviewDataDetailsDialog from "./ReviewDataDetailsDialog";
 import EnrichmentDialog from "./EnrichmentDialog";
+import ResearchDialog from "./ResearchDialog";
 
 export interface ReviewRecord {
   id: string;
@@ -121,12 +123,23 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
   const enrichmentRecord = displayRecords.find((r) => r.id === enrichmentRecordId) ?? null;
   const enrichmentState = enrichmentRecordId ? enrichmentByRecordId[enrichmentRecordId] : null;
 
+  // Targeted fix (Research Automation) -- reuses the SAME `enrichmentRecordId`
+  // ("which record's dialog is open") for the Research dialog too, so every
+  // existing handleAcceptField/handleRejectField/handleUploadMedia/
+  // handleViewHistory/handleUndo below works unchanged for a research-sourced
+  // proposal -- it's the exact same acceptEnrichmentFieldAction mutation
+  // either way. `researchMode` just picks which of the two dialogs renders.
+  const [researchMode, setResearchMode] = useState(false);
+  const [researchByRecordId, setResearchByRecordId] = useState<Record<string, { loading: boolean; result: ResearchRunResult | null }>>({});
+  const researchState = researchMode && enrichmentRecordId ? researchByRecordId[enrichmentRecordId] : null;
+
   // Phase 46 Part F -- a very small filter over the already-loaded records,
   // client-side only (no new fetch/query, no data-grid infrastructure).
   const [enrichmentFilter, setEnrichmentFilter] = useState<EnrichmentFilter>("ALL");
   const visibleRecords = displayRecords.filter((r) => matchesEnrichmentFilter(r, enrichmentFilter));
 
   function runEnrichment(recordId: string) {
+    setResearchMode(false);
     setEnrichmentRecordId(recordId);
     setEnrichmentByRecordId((prev) => ({ ...prev, [recordId]: { loading: true, result: null } }));
     startTransition(async () => {
@@ -136,6 +149,29 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
       // Best-effort background sync for anything this snapshot doesn't cover
       // (e.g. a different record's row) -- the card above is already correct
       // without waiting for this to resolve.
+      router.refresh();
+    });
+  }
+
+  /**
+   * Targeted fix (Research Automation) -- calls researchProjectAction, which
+   * runs whatever automated ResearchProvider(s) are actually registered
+   * (none, in this environment -- see lib/actions/research.ts's own doc
+   * comment) through the EXACT SAME founder-authority/classification/
+   * persistence pipeline as researchProjectAction's sibling entry point,
+   * submitResearchFindingsAction (the real, tested Claude+Chrome handoff
+   * point, invoked programmatically rather than from this UI). This button
+   * never fakes a "researching..." state with no real backend: with zero
+   * providers configured, the dialog honestly reports NOT_CONFIGURED.
+   */
+  function runResearch(recordId: string) {
+    setResearchMode(true);
+    setEnrichmentRecordId(recordId);
+    setResearchByRecordId((prev) => ({ ...prev, [recordId]: { loading: true, result: null } }));
+    startTransition(async () => {
+      const result = await researchProjectAction(recordId);
+      setResearchByRecordId((prev) => ({ ...prev, [recordId]: { loading: false, result } }));
+      applySnapshot(recordId, result.snapshot);
       router.refresh();
     });
   }
@@ -433,6 +469,16 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
                   Enrich Project
                 </button>
               ) : null}
+              {record.isProject ? (
+                <button
+                  type="button"
+                  onClick={() => runResearch(record.id)}
+                  className="rounded-sm border border-border px-2 py-1 text-[11px] font-mono uppercase text-muted hover:border-accent hover:text-accent"
+                  title="Research this project's missing/needs-review/conflict fields using registered research providers"
+                >
+                  Research Project
+                </button>
+              ) : null}
             </div>
           </div>
 
@@ -494,7 +540,7 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
         />
       ) : null}
 
-      {enrichmentRecord && enrichmentState ? (
+      {!researchMode && enrichmentRecord && enrichmentState ? (
         <EnrichmentDialog
           title={enrichmentRecord.proposedTitle}
           loading={enrichmentState.loading}
@@ -510,6 +556,27 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
           onUploadMedia={handleUploadMedia}
           onAcceptEntityMatch={handleAcceptEntityMatch}
           onRejectEntityMatch={handleRejectEntityMatch}
+          onViewHistory={handleViewHistory}
+          onUndo={handleUndo}
+        />
+      ) : null}
+
+      {researchMode && enrichmentRecord && researchState ? (
+        <ResearchDialog
+          title={enrichmentRecord.proposedTitle}
+          loading={researchState.loading}
+          status={researchState.result?.status ?? null}
+          fields={researchState.result?.fields ?? null}
+          error={researchState.result?.error ?? null}
+          rejectedFindings={researchState.result?.rejectedFindings}
+          onClose={() => {
+            setEnrichmentRecordId(null);
+            setResearchMode(false);
+          }}
+          onRetry={() => runResearch(enrichmentRecord.id)}
+          onAcceptField={handleAcceptField}
+          onRejectField={handleRejectField}
+          onUploadMedia={handleUploadMedia}
           onViewHistory={handleViewHistory}
           onUndo={handleUndo}
         />
