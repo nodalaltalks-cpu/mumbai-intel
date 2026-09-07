@@ -64,9 +64,19 @@ export default function EnrichmentDialog({
       <div className="flex flex-col gap-4">
         {loading ? (
           <p className="text-xs text-muted">Enriching project...</p>
-        ) : status === "SUCCESS" && fields ? (
+        ) : fields && fields.length > 0 ? (
+          // Targeted fix (Approval Ready <-> Enrich consistency) -- a run that
+          // finds no NEW conflict-worthy difference (NO_NEW_INFO) still
+          // computes the full field list (classifyProjectEnrichment always
+          // classifies every registry field, MISSING included) -- it must
+          // stay reachable here too, exactly like a SUCCESS run, so a
+          // genuinely MISSING field (and its Edit/History controls) doesn't
+          // become invisible the moment every CONFLICT/YELLOW/GREEN_NEW
+          // proposal has already been resolved.
           <>
-            <p className="text-xs text-positive">Enrichment results ready.</p>
+            <p className={`text-xs ${status === "SUCCESS" ? "text-positive" : "text-muted"}`}>
+              {status === "SUCCESS" ? "Enrichment results ready." : STATUS_COPY.NO_NEW_INFO}
+            </p>
             {builderMatch || localityMatch ? (
               <div className="flex flex-col divide-y divide-border rounded-sm border border-border">
                 {builderMatch ? (

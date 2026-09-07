@@ -126,8 +126,13 @@ export default function EnrichmentFieldHistoryDialog({
               {entries.map((entry) => (
                 <div key={entry.id} className="border-b border-border pb-3 last:border-b-0 last:pb-0">
                   <div className="flex flex-wrap items-center justify-between gap-2">
+                    {/* Targeted fix (History -- exact timestamp + Founder Edited label) -- an
+                        accept event the founder typed a genuinely different value into
+                        (entry.after.founderEdited) reads as "Founder Edited" here, distinct
+                        from a plain "Accepted"/"Edited & Accepted" of the source's own
+                        proposal, matching the same distinction the field's own badge draws. */}
                     <Badge tone={entry.action === "REVERT" ? "muted" : entry.action === "REJECT" ? "negative" : "accent"}>
-                      {ACTION_LABEL[entry.action]}
+                      {entry.after?.founderEdited ? "Founder Edited" : ACTION_LABEL[entry.action]}
                     </Badge>
                     <span className="text-[11px] text-muted">
                       {entry.actorName ?? "System"} · {formatDateTime(entry.at)}

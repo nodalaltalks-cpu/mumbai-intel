@@ -162,6 +162,36 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
     return { ok: false, error: result.error ?? "Could not save this field." };
   }
 
+  /**
+   * Targeted fix (Approval Ready inline editing) -- the SAME
+   * acceptEnrichmentFieldAction every field-level edit already goes through
+   * (never a second mutation path), called directly against whichever record
+   * the View Data Details / Approval Ready dialog is currently open for.
+   * `founderEdited: true` with `overriddenValue: null` gives this edit the
+   * same founder-authority protection Task 2 built for Enrichment-dialog
+   * edits, on a best-effort basis: this surface has no live classified
+   * EnrichmentField to read the true external value from (that requires the
+   * expensive Enrich Project fetch), so it assumes "nothing external was
+   * known to be overridden" -- correct for the common case (most of these
+   * fields, e.g. Official Developer Website, are fields no adapter has ever
+   * reported a fact for), and safely conservative otherwise: if a source
+   * genuinely does have a differing value, the next Enrich run surfaces it
+   * once more for review rather than silently deferring to a stale guess.
+   */
+  async function handleInlineEditField(fieldKey: string, value: string): Promise<{ ok: boolean; error?: string }> {
+    if (!detailsRecordId) return { ok: false, error: "No record open." };
+    const result = await acceptEnrichmentFieldAction(detailsRecordId, fieldKey, value, undefined, {
+      founderEdited: true,
+      overriddenValue: null,
+    });
+    if (result.status === "SUCCESS") {
+      applySnapshot(detailsRecordId, result.snapshot);
+      router.refresh();
+      return { ok: true };
+    }
+    return { ok: false, error: result.error ?? "Could not save this field." };
+  }
+
   async function handleUploadMedia(
     fieldKey: string,
     file: File,
@@ -459,6 +489,7 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
           completeness={detailsRecord.completeness}
           isProject={detailsRecord.isProject}
           enrichmentOutstanding={detailsRecord.enrichmentOutstanding}
+          onEditField={detailsRecord.isProject ? handleInlineEditField : undefined}
           onClose={() => setDetailsRecordId(null)}
         />
       ) : null}

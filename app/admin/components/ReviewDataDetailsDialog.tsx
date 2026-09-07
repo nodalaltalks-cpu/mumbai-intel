@@ -5,6 +5,7 @@ import Dialog from "@/app/components/ui/Dialog";
 import Badge from "@/app/components/ui/Badge";
 import type { ReviewCompleteness, ReviewField } from "@/lib/ingestion/reviewFieldRegistry";
 import { buildEnrichmentConflicts, buildFounderReviewSummary, type FounderReviewField } from "@/lib/ingestion/founderReviewFields";
+import { isFieldManuallyEditable } from "@/lib/enrichment/applyAcceptedField";
 
 const STATUS_BADGE: Record<ReviewField["status"], { tone: "positive" | "negative" | "warning"; label: string; icon: string }> = {
   RECEIVED: { tone: "positive", label: "Received", icon: "🟢" },
@@ -77,11 +78,113 @@ function FullIngestionBreakdown({ completeness }: { completeness: ReviewComplete
   );
 }
 
-function FounderReceivedRow({ field }: { field: FounderReviewField }) {
+/**
+ * Targeted fix (Approval Ready inline editing) -- the one shared editor UI
+ * used for both a RECEIVED field the founder wants to correct and a
+ * MISSING/NEEDS_REVIEW field they want to resolve directly, without
+ * navigating to the Enrichment dialog at all. Reuses the EXACT same
+ * `onEditField` mutation the caller wires to `acceptEnrichmentFieldAction`
+ * (see ReviewQueueList.tsx's handleInlineEditField) -- no second mutation
+ * path. Deliberately a single plain text input, not the full array/enum/
+ * payment-plan editors EnrichmentProposalPanel has -- this surface is meant
+ * to stay compact (per the founder's own explicit "do not turn Approval
+ * Ready into another giant form" instruction); a field needing the richer
+ * editor is still reachable via the existing Enrich Project dialog.
+ */
+function InlineFieldEditor({
+  fieldKey,
+  onSave,
+  onCancel,
+}: {
+  fieldKey: string;
+  onSave: (fieldKey: string, value: string) => Promise<{ ok: boolean; error?: string }>;
+  onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave() {
+    if (!draft.trim()) {
+      setError("A value is required.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const result = await onSave(fieldKey, draft.trim());
+    setSaving(false);
+    if (!result.ok) setError(result.error ?? "Could not save this field.");
+    // On success the caller's own state update (applySnapshot) causes this
+    // row to re-render as resolved on the next pass -- no local "editingKey"
+    // reset needed here; the parent closes the editor by clearing editingKey.
+  }
+
   return (
-    <div className="flex items-start justify-between gap-3 px-3 py-2">
-      <span className="shrink-0 text-[11px] text-muted">{field.label}</span>
-      <span className="min-w-0 max-w-[60%] break-words text-right text-xs text-foreground">{field.value}</span>
+    <div className="mt-1 flex flex-col gap-1.5 rounded-sm border border-accent/30 bg-accent/5 p-2">
+      <textarea
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        rows={2}
+        placeholder="New value"
+        className="w-full rounded-sm border border-border bg-surface px-2 py-1 text-xs text-foreground"
+      />
+      {error ? <span className="text-[10px] text-negative">{error}</span> : null}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={saving}
+          onClick={handleSave}
+          className="rounded-sm border border-positive/40 px-2 py-0.5 text-[10px] font-mono uppercase text-positive hover:bg-positive/10 disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Save"}
+        </button>
+        <button
+          type="button"
+          disabled={saving}
+          onClick={onCancel}
+          className="rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-foreground hover:text-foreground disabled:opacity-50"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function FounderReceivedRow({
+  field,
+  editable,
+  isEditing,
+  onStartEdit,
+  onSave,
+  onCancel,
+}: {
+  field: FounderReviewField;
+  editable: boolean;
+  isEditing: boolean;
+  onStartEdit: () => void;
+  onSave: (fieldKey: string, value: string) => Promise<{ ok: boolean; error?: string }>;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1 px-3 py-2">
+      <div className="flex items-start justify-between gap-3">
+        <span className="shrink-0 text-[11px] text-muted">{field.label}</span>
+        <div className="flex min-w-0 max-w-[60%] items-start gap-2">
+          <span className="min-w-0 break-words text-right text-xs text-foreground">{field.value}</span>
+          {editable && !isEditing ? (
+            <button
+              type="button"
+              onClick={onStartEdit}
+              className="shrink-0 rounded-sm border border-border px-1.5 py-0.5 text-[9px] font-mono uppercase text-muted hover:border-accent hover:text-accent"
+            >
+              Edit
+            </button>
+          ) : null}
+        </div>
+      </div>
+      {isEditing ? <InlineFieldEditor fieldKey={field.key} onSave={onSave} onCancel={onCancel} /> : null}
     </div>
   );
 }
@@ -92,6 +195,7 @@ export default function ReviewDataDetailsDialog({
   completeness,
   isProject,
   enrichmentOutstanding,
+  onEditField,
   onClose,
 }: {
   title: string;
@@ -101,8 +205,17 @@ export default function ReviewDataDetailsDialog({
   isProject?: boolean;
   /** Phase 71B — the persisted enrichment run's fieldKey -> classification map (see lib/enrichment/enrichmentSummary.ts). Undefined/null for a non-Project record or a record enrichment has never run for. */
   enrichmentOutstanding?: Record<string, "GREEN_NEW" | "YELLOW" | "CONFLICT"> | null;
+  /**
+   * Targeted fix (Approval Ready inline editing) -- present only for Project
+   * records; reuses the SAME acceptEnrichmentFieldAction mutation every other
+   * founder edit already goes through (see ReviewQueueList.tsx's
+   * handleInlineEditField), never a second persistence path. Undefined for
+   * every non-Project record, which keeps no inline-edit affordance at all.
+   */
+  onEditField?: (fieldKey: string, value: string) => Promise<{ ok: boolean; error?: string }>;
   onClose: () => void;
 }) {
+  const [editingKey, setEditingKey] = useState<string | null>(null);
   const founderSummary = isProject ? buildFounderReviewSummary(completeness) : null;
 
   if (!founderSummary) {
@@ -188,7 +301,21 @@ export default function ReviewDataDetailsDialog({
           <p className="mb-1.5 text-[10px] font-mono uppercase tracking-wide text-muted">Received data</p>
           <div className="flex flex-col divide-y divide-border rounded-sm border border-border">
             {received.length > 0 ? (
-              received.map((f) => <FounderReceivedRow key={f.key} field={f} />)
+              received.map((f) => (
+                <FounderReceivedRow
+                  key={f.key}
+                  field={f}
+                  editable={Boolean(onEditField) && isFieldManuallyEditable(f.key) && f.key !== "possession"}
+                  isEditing={editingKey === f.key}
+                  onStartEdit={() => setEditingKey(f.key)}
+                  onSave={async (fieldKey, value) => {
+                    const result = await onEditField!(fieldKey, value);
+                    if (result.ok) setEditingKey(null);
+                    return result;
+                  }}
+                  onCancel={() => setEditingKey(null)}
+                />
+              ))
             ) : (
               <p className="px-3 py-2 text-[11px] text-muted">Nothing received yet.</p>
             )}
@@ -200,18 +327,40 @@ export default function ReviewDataDetailsDialog({
           {outstanding.length === 0 ? (
             <p className="text-[11px] text-positive">✓ Nothing outstanding</p>
           ) : (
-            <ul className="flex flex-col gap-1 rounded-sm border border-border p-3">
-              {outstanding.map((f) =>
-                f.status === "MISSING" ? (
-                  <li key={f.key} className="text-[11px] text-muted">
-                    {f.label} — Missing
+            <ul className="flex flex-col gap-1.5 rounded-sm border border-border p-3">
+              {outstanding.map((f) => {
+                const editable = Boolean(onEditField) && isFieldManuallyEditable(f.key) && f.key !== "possession";
+                const isEditing = editingKey === f.key;
+                return (
+                  <li key={f.key} className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`text-[11px] ${f.status === "MISSING" ? "text-muted" : "text-warning"}`}>
+                        {f.label} — {f.status === "MISSING" ? "Missing" : `Needs Review${f.reviewNote ? `: ${f.reviewNote}` : ""}`}
+                      </span>
+                      {editable && !isEditing ? (
+                        <button
+                          type="button"
+                          onClick={() => setEditingKey(f.key)}
+                          className="shrink-0 rounded-sm border border-border px-1.5 py-0.5 text-[9px] font-mono uppercase text-muted hover:border-accent hover:text-accent"
+                        >
+                          Edit
+                        </button>
+                      ) : null}
+                    </div>
+                    {isEditing ? (
+                      <InlineFieldEditor
+                        fieldKey={f.key}
+                        onSave={async (fieldKey, value) => {
+                          const result = await onEditField!(fieldKey, value);
+                          if (result.ok) setEditingKey(null);
+                          return result;
+                        }}
+                        onCancel={() => setEditingKey(null)}
+                      />
+                    ) : null}
                   </li>
-                ) : (
-                  <li key={f.key} className="text-[11px] text-warning">
-                    {f.label} — Needs Review{f.reviewNote ? `: ${f.reviewNote}` : ""}
-                  </li>
-                )
-              )}
+                );
+              })}
             </ul>
           )}
         </div>
