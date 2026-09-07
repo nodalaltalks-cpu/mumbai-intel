@@ -377,6 +377,15 @@ function buildResearchInstructions(project: ResearchTaskProjectContext): string 
   );
 }
 
+/** Named return shape for buildResearchPlanAction -- exported so callers (the founder-facing Research Plan/Copy Task UI) can type a piece of state around it without repeating this inline. */
+export interface ResearchPlanResult {
+  status: "SUCCESS" | "NOT_FOUND" | "ERROR" | "OUT_OF_SCOPE" | "NO_TARGET_FIELDS";
+  error?: string;
+  querySets?: ResearchQuerySet[];
+  targetFieldKeys?: string[];
+  task?: ResearchTask;
+}
+
 /**
  * Read-only -- the full structured research task (Section 2's handoff
  * contract) an external research pass (automated or interactive Claude +
@@ -385,13 +394,7 @@ function buildResearchInstructions(project: ResearchTaskProjectContext): string 
  * `targetFieldKeys` are kept at the top level too (unchanged shape) for the
  * existing callers of this action that only need the query plan.
  */
-export async function buildResearchPlanAction(stagingRecordId: string): Promise<{
-  status: "SUCCESS" | "NOT_FOUND" | "ERROR" | "OUT_OF_SCOPE" | "NO_TARGET_FIELDS";
-  error?: string;
-  querySets?: ResearchQuerySet[];
-  targetFieldKeys?: string[];
-  task?: ResearchTask;
-}> {
+export async function buildResearchPlanAction(stagingRecordId: string): Promise<ResearchPlanResult> {
   await requireMutateSession();
   const loaded = await loadStagingRecord(stagingRecordId);
   if (!loaded.ok) return { status: loaded.status === "NOT_FOUND" ? "NOT_FOUND" : "ERROR", error: loaded.error };

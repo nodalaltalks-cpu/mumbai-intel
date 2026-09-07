@@ -29,7 +29,13 @@ import type { EnrichmentField } from "@/lib/enrichment/types";
 import type { EnrichmentHistoryEntry } from "@/lib/enrichment/enrichmentHistory";
 import type { EnrichmentBadgeInfo } from "@/lib/enrichment/enrichmentSummary";
 import { applyReviewSnapshotOverrides } from "@/lib/enrichment/reviewSnapshotOverrides";
-import { researchProjectAction, submitResearchFindingsAction, type ResearchRunResult } from "@/lib/actions/research";
+import {
+  buildResearchPlanAction,
+  researchProjectAction,
+  submitResearchFindingsAction,
+  type ResearchPlanResult,
+  type ResearchRunResult,
+} from "@/lib/actions/research";
 import type { ResearchFinding } from "@/lib/enrichment/researchProvider";
 import ConfirmButton from "./ConfirmButton";
 import ReviewDataDetailsDialog from "./ReviewDataDetailsDialog";
@@ -134,6 +140,18 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
   const [researchByRecordId, setResearchByRecordId] = useState<Record<string, { loading: boolean; result: ResearchRunResult | null }>>({});
   const researchState = researchMode && enrichmentRecordId ? researchByRecordId[enrichmentRecordId] : null;
 
+  /**
+   * Targeted fix (Research Project UX) -- the read-only Research Plan
+   * (Section 2's handoff contract) that makes the interactive Claude+Chrome
+   * workflow first-class in the dialog: project identity, target fields, and
+   * generated queries, fetched via the existing buildResearchPlanAction
+   * (no new server logic). Kept as its own state slice, independent of
+   * researchByRecordId's automated-provider result, since the plan is
+   * useful whether or not an automated provider ever runs.
+   */
+  const [researchPlanByRecordId, setResearchPlanByRecordId] = useState<Record<string, { loading: boolean; plan: ResearchPlanResult | null }>>({});
+  const researchPlanState = researchMode && enrichmentRecordId ? researchPlanByRecordId[enrichmentRecordId] : null;
+
   // Phase 46 Part F -- a very small filter over the already-loaded records,
   // client-side only (no new fetch/query, no data-grid infrastructure).
   const [enrichmentFilter, setEnrichmentFilter] = useState<EnrichmentFilter>("ALL");
@@ -169,11 +187,16 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
     setResearchMode(true);
     setEnrichmentRecordId(recordId);
     setResearchByRecordId((prev) => ({ ...prev, [recordId]: { loading: true, result: null } }));
+    setResearchPlanByRecordId((prev) => ({ ...prev, [recordId]: { loading: true, plan: null } }));
     startTransition(async () => {
       const result = await researchProjectAction(recordId);
       setResearchByRecordId((prev) => ({ ...prev, [recordId]: { loading: false, result } }));
       applySnapshot(recordId, result.snapshot);
       router.refresh();
+    });
+    startTransition(async () => {
+      const plan = await buildResearchPlanAction(recordId);
+      setResearchPlanByRecordId((prev) => ({ ...prev, [recordId]: { loading: false, plan } }));
     });
   }
 
@@ -191,6 +214,13 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
     setResearchByRecordId((prev) => ({ ...prev, [recordId]: { loading: false, result } }));
     applySnapshot(recordId, result.snapshot);
     router.refresh();
+    // Refresh the Research Plan too -- a field just accepted into review should
+    // drop off "still needs research" on the very next round, without the
+    // founder having to close and reopen the dialog.
+    startTransition(async () => {
+      const plan = await buildResearchPlanAction(recordId);
+      setResearchPlanByRecordId((prev) => ({ ...prev, [recordId]: { loading: false, plan } }));
+    });
     if (result.status === "SUCCESS" || result.status === "NO_NEW_INFO") return { ok: true };
     return { ok: false, error: result.error ?? (result.rejectedFindings?.[0]?.reason || `Submission returned ${result.status}.`) };
   }
@@ -588,6 +618,8 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
           fields={researchState.result?.fields ?? null}
           error={researchState.result?.error ?? null}
           rejectedFindings={researchState.result?.rejectedFindings}
+          planLoading={researchPlanState?.loading ?? false}
+          plan={researchPlanState?.plan ?? null}
           onClose={() => {
             setEnrichmentRecordId(null);
             setResearchMode(false);
