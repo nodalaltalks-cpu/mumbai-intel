@@ -81,6 +81,7 @@ export function classifyProjectEnrichment(
             ? "No new source value found for this field; the existing value is retained as-is."
             : "No value found for this field in any inspected source.",
           currentItems,
+          externalValue: null,
         });
         continue;
       }
@@ -120,6 +121,8 @@ export function classifyProjectEnrichment(
         reason,
         proposedItems: fact.items,
         currentItems,
+        externalValue: proposedValue,
+        externalItems: fact.items,
       });
     }
   }
@@ -204,6 +207,55 @@ export function suppressPreviouslyRejectedProposals(
       proposedValue: field.currentValue,
       proposedItems: undefined,
       reason: "This exact proposal was already reviewed and declined -- the current value stands. A materially different proposed value or source will be shown again for review.",
+    };
+  });
+}
+
+/**
+ * Targeted fix (founder-edit authority) -- the CRITICAL companion bug to
+ * suppressPreviouslyRejectedProposals above: a fresh Enrich run re-classifies
+ * every field from scratch with zero memory of past founder decisions, so a
+ * field the founder deliberately EDITED to a value that disagrees with the
+ * (unchanged) external source reappears as a brand-new CONFLICT/YELLOW every
+ * single run -- the exact same "current -> proposed/conflict" swap the
+ * founder reported live. Accepting the source's exact proposal as-is never
+ * hits this (current becomes identical to the source, so it's just plain
+ * CONFIRMED going forward) -- this only applies when the founder typed
+ * something the source does NOT say, recorded via `founderEdited` on that
+ * accept's history event (see acceptEnrichmentFieldAction).
+ *
+ * The rule: if the most recent history event for a field is a founder edit
+ * (never a REJECT -- that already has its own suppression above) and the
+ * external source's value THIS run is byte-for-byte the same as what it was
+ * being overridden at edit time (`overriddenValue`/`overriddenItems`/
+ * `sourceUrl`), the founder's edit is still authoritative -- reclassify as
+ * FOUNDER_EDITED (a distinct, non-actionable status; nothing to accept or
+ * reject) rather than whatever CONFIRMED/GREEN_NEW/YELLOW/CONFLICT the raw
+ * comparison produced. If the source's value has genuinely changed since the
+ * edit, this does nothing -- the field flows through with its normal fresh
+ * classification, exactly per "a genuinely new external value must still be
+ * evaluated, never silently discarded".
+ */
+export function applyFounderEditAuthority(
+  fields: EnrichmentField[],
+  mostRecentEventByField: Map<string, { action: EnrichmentHistoryActionType; after: EnrichmentHistorySnapshot | null }>
+): EnrichmentField[] {
+  return fields.map((field) => {
+    if (field.classification === "MISSING") return field;
+    const event = mostRecentEventByField.get(field.key);
+    if (!event || event.action === "REJECT" || !event.after?.founderEdited) return field;
+
+    const sameValue = normalizeForCompare(event.after.overriddenValue ?? "") === normalizeForCompare(field.externalValue ?? "");
+    const sameItems = JSON.stringify(event.after.overriddenItems ?? null) === JSON.stringify(field.externalItems ?? null);
+    const sameSource = (event.after.sourceUrl ?? null) === (field.sourceUrl ?? null);
+    if (!sameValue || !sameItems || !sameSource) return field;
+
+    return {
+      ...field,
+      classification: "FOUNDER_EDITED" as const,
+      proposedValue: null,
+      proposedItems: undefined,
+      reason: "This value was manually edited by the founder and is authoritative. It will not be flagged as a conflict unless the external source materially changes.",
     };
   });
 }

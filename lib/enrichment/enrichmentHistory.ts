@@ -52,6 +52,19 @@ export function actionTypeToStoredAction(actionType: EnrichmentHistoryActionType
  * (targeted fix, founder-testing round) is set ONLY on a REJECT event's
  * `after` snapshot -- the founder's required explanation for declining a
  * proposed value; every other action type leaves it undefined.
+ *
+ * `founderEdited`/`overriddenValue`/`overriddenItems` (targeted fix,
+ * founder-edit authority) are set ONLY on an accept event's `after` snapshot
+ * where the founder actually typed a value different from what was being
+ * proposed -- never on a plain "Accept" of the exact proposed value, and
+ * never on a REJECT (which already has its own suppression via `reason`).
+ * `overriddenValue`/`overriddenItems` capture the external source's value at
+ * the moment of the edit (from `EnrichmentField.externalValue/externalItems`,
+ * NOT `displayValue`, which here holds the founder's NEW current value) --
+ * classifyEnrichment.ts's applyFounderEditAuthority compares a future run's
+ * fresh external value against this exact snapshot to tell "the source still
+ * says what it said when the founder overrode it" apart from "the source has
+ * genuinely changed since", which must surface for review again.
  */
 export interface EnrichmentHistorySnapshot {
   fieldKey: string;
@@ -62,6 +75,9 @@ export interface EnrichmentHistorySnapshot {
   sourceType?: string | null;
   confidence?: string | null;
   reason?: string;
+  founderEdited?: boolean;
+  overriddenValue?: string | null;
+  overriddenItems?: string[];
 }
 
 export interface EnrichmentHistoryEntry {

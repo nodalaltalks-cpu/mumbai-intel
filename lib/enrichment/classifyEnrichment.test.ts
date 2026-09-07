@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyProjectEnrichment, mergeEnrichmentResults, suppressPreviouslyRejectedProposals } from "./classifyEnrichment";
+import { applyFounderEditAuthority, classifyProjectEnrichment, mergeEnrichmentResults, suppressPreviouslyRejectedProposals } from "./classifyEnrichment";
 import { buildProjectReviewCompleteness } from "../ingestion/reviewFieldRegistry";
 import { GODREJ_SKY_SHORE_SOURCE_FACTS, GODREJ_SKY_SHORE_SOURCE_META } from "./fixtures/godrejSkyShoreSourceFacts";
 import type { ProjectImportPayload } from "../ingestion/connectors/fileImport/types";
@@ -332,6 +332,115 @@ describe("suppressPreviouslyRejectedProposals (targeted fix -- a rejected confli
     ]);
     const result = suppressPreviouslyRejectedProposals(amenitiesFields, events);
     // items differ (["Pool","Gym","Spa"] vs ["Pool","Gym"]) even though the count-string display value happens to match -- must not be suppressed.
+    const amenities = result.find((f) => f.key === "amenities")!;
+    expect(["GREEN_NEW", "YELLOW", "CONFLICT"]).toContain(amenities.classification);
+  });
+});
+
+describe("applyFounderEditAuthority (targeted fix -- CURRENT must never be swapped back to PROPOSED/CONFLICT on the next Enrich run after a founder edit)", () => {
+  const CONFLICT_FIELDS = classifyProjectEnrichment(
+    GODREJ_PAYLOAD,
+    CONTEXT,
+    { name: { value: "A Totally Different Name", confidence: "High" } },
+    { url: "https://example.com/godrej", tier: "OFFICIAL_DEVELOPER" }
+  );
+
+  it("F/G/H. an unchanged external source is suppressed to FOUNDER_EDITED -- the old external value never reappears as proposed/conflict", () => {
+    const events = new Map([
+      [
+        "name",
+        {
+          action: "EDIT_ACCEPT" as const,
+          after: {
+            fieldKey: "name",
+            displayValue: "Godrej Sky Shore -- Founder Curated Name",
+            payloadChanges: {},
+            sourceUrl: "https://example.com/godrej",
+            founderEdited: true,
+            overriddenValue: "A Totally Different Name",
+          },
+        },
+      ],
+    ]);
+    const result = applyFounderEditAuthority(CONFLICT_FIELDS, events);
+    const name = result.find((f) => f.key === "name")!;
+    expect(name.classification).toBe("FOUNDER_EDITED");
+    expect(name.proposedValue).toBeNull();
+    expect(name.currentValue).not.toBe("A Totally Different Name");
+  });
+
+  it("Q/R/S. a GENUINELY NEW external value (source changed since the edit) is NOT suppressed -- it must still be evaluated", () => {
+    const events = new Map([
+      [
+        "name",
+        {
+          action: "EDIT_ACCEPT" as const,
+          after: {
+            fieldKey: "name",
+            displayValue: "Godrej Sky Shore -- Founder Curated Name",
+            payloadChanges: {},
+            sourceUrl: "https://example.com/godrej",
+            founderEdited: true,
+            // Overrides what the source said BEFORE this edit -- a value the
+            // source no longer reports (CONFLICT_FIELDS' fresh proposal is
+            // "A Totally Different Name", not this).
+            overriddenValue: "Yet Another Older Rejected Value",
+          },
+        },
+      ],
+    ]);
+    const result = applyFounderEditAuthority(CONFLICT_FIELDS, events);
+    const name = result.find((f) => f.key === "name")!;
+    expect(name.classification).toBe("CONFLICT");
+    expect(name.proposedValue).toBe("A Totally Different Name");
+  });
+
+  it("a REJECT event never triggers FOUNDER_EDITED -- that's suppressPreviouslyRejectedProposals's own, separate rule", () => {
+    const events = new Map([
+      ["name", { action: "REJECT" as const, after: { fieldKey: "name", displayValue: "A Totally Different Name", payloadChanges: {}, founderEdited: true, overriddenValue: "A Totally Different Name" } }],
+    ]);
+    const result = applyFounderEditAuthority(CONFLICT_FIELDS, events);
+    expect(result.find((f) => f.key === "name")!.classification).toBe("CONFLICT");
+  });
+
+  it("an accept event with founderEdited unset (a plain verbatim Accept) is untouched", () => {
+    const events = new Map([
+      ["name", { action: "EDIT_ACCEPT" as const, after: { fieldKey: "name", displayValue: "A Totally Different Name", payloadChanges: {}, sourceUrl: "https://example.com/godrej" } }],
+    ]);
+    const result = applyFounderEditAuthority(CONFLICT_FIELDS, events);
+    expect(result.find((f) => f.key === "name")!.classification).toBe("CONFLICT");
+  });
+
+  it("a field with no history event at all is untouched", () => {
+    const result = applyFounderEditAuthority(CONFLICT_FIELDS, new Map());
+    expect(result.find((f) => f.key === "name")!.classification).toBe("CONFLICT");
+  });
+
+  it("array-shaped fields (externalItems) are also compared -- a materially different items list is not suppressed", () => {
+    const amenitiesFields = classifyProjectEnrichment(
+      GODREJ_PAYLOAD,
+      CONTEXT,
+      { amenities: { value: "3 selected", confidence: "High", items: ["Pool", "Gym", "Spa"] } },
+      { url: "https://example.com/godrej", tier: "OFFICIAL_DEVELOPER" }
+    );
+    const events = new Map([
+      [
+        "amenities",
+        {
+          action: "EDIT_ACCEPT" as const,
+          after: {
+            fieldKey: "amenities",
+            displayValue: "2 selected",
+            payloadChanges: {},
+            sourceUrl: "https://example.com/godrej",
+            founderEdited: true,
+            overriddenValue: "3 selected",
+            overriddenItems: ["Pool", "Gym"], // differs from the fresh ["Pool","Gym","Spa"]
+          },
+        },
+      ],
+    ]);
+    const result = applyFounderEditAuthority(amenitiesFields, events);
     const amenities = result.find((f) => f.key === "amenities")!;
     expect(["GREEN_NEW", "YELLOW", "CONFLICT"]).toContain(amenities.classification);
   });

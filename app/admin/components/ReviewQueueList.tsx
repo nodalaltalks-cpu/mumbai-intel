@@ -19,8 +19,11 @@ import {
   rejectEnrichmentFieldAction,
   rejectEntityMatchAction,
   revertEnrichmentFieldAction,
+  uploadEnrichmentBrochureAction,
+  uploadEnrichmentImageAction,
   type EnrichProjectResult,
   type ProjectReviewSnapshot,
+  type UploadEnrichmentMediaContext,
 } from "@/lib/actions/enrichment";
 import type { EnrichmentField } from "@/lib/enrichment/types";
 import type { EnrichmentHistoryEntry } from "@/lib/enrichment/enrichmentHistory";
@@ -137,13 +140,19 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
     });
   }
 
-  async function handleAcceptField(field: EnrichmentField): Promise<{ ok: boolean; error?: string }> {
+  async function handleAcceptField(
+    field: EnrichmentField,
+    editContext?: { founderEdited: true; overriddenValue: string | null; overriddenItems?: string[] }
+  ): Promise<{ ok: boolean; error?: string }> {
     if (!enrichmentRecordId) return { ok: false, error: "No record open." };
     const result = await acceptEnrichmentFieldAction(enrichmentRecordId, field.key, field.proposedValue ?? "", field.proposedItems, {
       currentDisplayValue: field.currentValue,
       sourceUrl: field.sourceUrl,
       sourceType: field.sourceType,
       confidence: field.confidence,
+      founderEdited: editContext?.founderEdited,
+      overriddenValue: editContext?.overriddenValue,
+      overriddenItems: editContext?.overriddenItems,
     });
     if (result.status === "SUCCESS") {
       applySnapshot(enrichmentRecordId, result.snapshot);
@@ -151,6 +160,24 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
       return { ok: true };
     }
     return { ok: false, error: result.error ?? "Could not save this field." };
+  }
+
+  async function handleUploadMedia(
+    fieldKey: string,
+    file: File,
+    editContext: UploadEnrichmentMediaContext
+  ): Promise<{ ok: boolean; url?: string; error?: string }> {
+    if (!enrichmentRecordId) return { ok: false, error: "No record open." };
+    const result =
+      fieldKey === "brochure"
+        ? await uploadEnrichmentBrochureAction(enrichmentRecordId, file, editContext)
+        : await uploadEnrichmentImageAction(enrichmentRecordId, "coverImage", file, editContext);
+    if (result.status === "SUCCESS") {
+      applySnapshot(enrichmentRecordId, result.snapshot);
+      router.refresh(); // best-effort background sync -- the card is already correct via applySnapshot above
+      return { ok: true, url: result.url };
+    }
+    return { ok: false, error: result.error ?? "Upload failed." };
   }
 
   async function handleRejectField(field: EnrichmentField, reason: string): Promise<{ ok: boolean; error?: string }> {
@@ -449,6 +476,7 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
           onRetry={() => runEnrichment(enrichmentRecord.id)}
           onAcceptField={handleAcceptField}
           onRejectField={handleRejectField}
+          onUploadMedia={handleUploadMedia}
           onAcceptEntityMatch={handleAcceptEntityMatch}
           onRejectEntityMatch={handleRejectEntityMatch}
           onViewHistory={handleViewHistory}

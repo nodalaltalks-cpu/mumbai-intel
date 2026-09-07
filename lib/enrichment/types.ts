@@ -9,7 +9,7 @@
  * output is an in-memory proposal for a human to review.
  */
 
-export type EnrichmentClassification = "CONFIRMED" | "GREEN_NEW" | "YELLOW" | "CONFLICT" | "MISSING";
+export type EnrichmentClassification = "CONFIRMED" | "GREEN_NEW" | "YELLOW" | "CONFLICT" | "MISSING" | "FOUNDER_EDITED";
 
 /** Source confidence tier (Phase 26/27 Part D/E) — determines confidence, never authorizes a silent overwrite. */
 export type SourceTier = "GOVERNMENT" | "OFFICIAL_DEVELOPER" | "VERIFIED_THIRD_PARTY" | "LISTING_PORTAL";
@@ -88,6 +88,19 @@ export interface EnrichmentField {
    * needs to reconstruct structured entries from it).
    */
   currentItems?: string[];
+  /**
+   * Targeted fix (founder-edit authority) -- the raw external source value
+   * for this field as of THIS run, independent of `proposedValue` (which
+   * becomes null once a field is classified FOUNDER_EDITED, so `Edit` seeds
+   * from `currentValue` instead of a stale external value). Always exactly
+   * what classifyProjectEnrichment's live fact lookup found (or null when no
+   * source reported this field at all), so applyFounderEditAuthority -- and
+   * the NEXT accept's own "what am I overriding" capture -- always compares
+   * against the true current external state, never a value an earlier
+   * override already collapsed to null.
+   */
+  externalValue?: string | null;
+  externalItems?: string[];
 }
 
 /**

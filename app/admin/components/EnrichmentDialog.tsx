@@ -27,6 +27,7 @@ export default function EnrichmentDialog({
   onRetry,
   onAcceptField,
   onRejectField,
+  onUploadMedia,
   onAcceptEntityMatch,
   onRejectEntityMatch,
   onViewHistory,
@@ -41,8 +42,17 @@ export default function EnrichmentDialog({
   error: string | null;
   onClose: () => void;
   onRetry: () => void;
-  onAcceptField: (field: EnrichmentField) => Promise<{ ok: boolean; error?: string }>;
+  onAcceptField: (
+    field: EnrichmentField,
+    editContext?: { founderEdited: true; overriddenValue: string | null; overriddenItems?: string[] }
+  ) => Promise<{ ok: boolean; error?: string }>;
   onRejectField: (field: EnrichmentField, reason: string) => Promise<{ ok: boolean; error?: string }>;
+  /** Targeted fix (Cover Image/Brochure upload) -- a real file upload, distinct from a text-value accept. */
+  onUploadMedia: (
+    fieldKey: string,
+    file: File,
+    editContext: { overriddenValue: string | null; overriddenItems?: string[]; sourceUrl: string | null }
+  ) => Promise<{ ok: boolean; url?: string; error?: string }>;
   onAcceptEntityMatch: (kind: "builder" | "locality", existingId: string) => Promise<{ ok: boolean; error?: string }>;
   /** Targeted fix (Reject option consistency) -- the entity-match card's own reason-required reject, distinct from a regular field's onRejectField. */
   onRejectEntityMatch: (kind: "builder" | "locality", reason: string, proposedName: string) => Promise<{ ok: boolean; error?: string }>;
@@ -79,6 +89,7 @@ export default function EnrichmentDialog({
               fields={fields}
               onAcceptField={onAcceptField}
               onRejectField={onRejectField}
+              onUploadMedia={onUploadMedia}
               onViewHistory={onViewHistory}
               onUndo={onUndo}
             />

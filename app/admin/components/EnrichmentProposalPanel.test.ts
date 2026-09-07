@@ -51,4 +51,34 @@ describe("EnrichmentProposalPanel -- Reject button consistency (source inspectio
   it("R. MISSING (no proposed value exists -- nothing to decline) never offers Reject", () => {
     expect(branchSource("MISSING")).not.toContain('startReject(field.key)');
   });
+
+  it("R. FOUNDER_EDITED (the founder's own curated value -- nothing to decline) never offers Reject", () => {
+    expect(branchSource("FOUNDER_EDITED")).not.toContain('startReject(field.key)');
+  });
+});
+
+/**
+ * Targeted fix (founder-edit authority) -- FOUNDER_EDITED must be visually
+ * distinct from every other classification (never mistaken for a plain
+ * source-confirmed value) and must render the same upload/edit affordances
+ * CONFIRMED already gets, never the Accept/Reject controls a genuine
+ * actionable proposal needs.
+ */
+describe("EnrichmentProposalPanel -- FOUNDER_EDITED provenance (source inspection)", () => {
+  it("has its own badge entry, distinct in tone from CONFIRMED/GREEN_NEW/YELLOW/CONFLICT/MISSING", () => {
+    const badgeMapStart = PANEL_SOURCE.indexOf("const CLASSIFICATION_BADGE");
+    const badgeMapSource = PANEL_SOURCE.slice(badgeMapStart, badgeMapStart + 800);
+    expect(badgeMapSource).toContain("FOUNDER_EDITED:");
+    expect(badgeMapSource).toContain('tone: "accent"');
+  });
+
+  it("shares the CONFIRMED branch's Edit/Save/View History controls, not a fourth duplicate block", () => {
+    expect(branchSource("CONFIRMED")).toContain('field.classification === "FOUNDER_EDITED"');
+  });
+
+  it("Cover Image / Brochure upload controls are wired into every actionable classification branch", () => {
+    const occurrences = PANEL_SOURCE.split("renderUploadButton(field)").length - 1;
+    // GREEN_NEW, YELLOW, CONFLICT, CONFIRMED/FOUNDER_EDITED, MISSING -- one call each.
+    expect(occurrences).toBeGreaterThanOrEqual(5);
+  });
 });

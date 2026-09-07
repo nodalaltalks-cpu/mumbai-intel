@@ -20,6 +20,10 @@ const CLASSIFICATION_BADGE: Record<EnrichmentClassification, { tone: BadgeTone; 
   YELLOW: { tone: "warning", label: "Needs Review", icon: "🟠" },
   CONFLICT: { tone: "negative", label: "Conflict", icon: "🔴" },
   MISSING: { tone: "muted", label: "Missing", icon: "⚪" },
+  // Targeted fix (founder-edit authority) -- deliberately distinct from every
+  // other tone above (accent, not positive/negative/warning/muted) so a
+  // manually-curated value can never be mistaken for a source-confirmed one.
+  FOUNDER_EDITED: { tone: "accent", label: "Founder Edited", icon: "🟣" },
 };
 
 type FieldSaveState = "idle" | "saving" | "saved" | "error" | "rejected";
@@ -57,13 +61,34 @@ export default function EnrichmentProposalPanel({
   fields,
   onAcceptField,
   onRejectField,
+  onUploadMedia,
   onViewHistory,
   onUndo,
 }: {
   fields: EnrichmentField[];
-  onAcceptField: (field: EnrichmentField) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * Targeted fix (founder-edit authority) -- the optional second argument is
+   * present ONLY when this accept represents a genuine founder edit (the
+   * value differs from what was actually proposed), carrying the external
+   * source's value at the moment of the edit (`field.externalValue`/
+   * `externalItems`, never `field.proposedValue`, which the field passed as
+   * the FIRST argument has already had overwritten with the edited value) --
+   * see EnrichmentHistorySnapshot's own doc comment for why this exact value
+   * must be captured now, before it can ever be collapsed to null by a
+   * future FOUNDER_EDITED override.
+   */
+  onAcceptField: (
+    field: EnrichmentField,
+    editContext?: { founderEdited: true; overriddenValue: string | null; overriddenItems?: string[] }
+  ) => Promise<{ ok: boolean; error?: string }>;
   /** Targeted fix (post-Phase 71B founder testing) -- declines a proposed value with a required reason, recorded to the same enrichment history Accept/Undo already write to. Never applies the proposed value. */
   onRejectField: (field: EnrichmentField, reason: string) => Promise<{ ok: boolean; error?: string }>;
+  /** Targeted fix (Cover Image/Brochure upload) -- a real file upload, distinct from a text-value accept; `fieldKey` is "coverImage" or "brochure". */
+  onUploadMedia: (
+    fieldKey: string,
+    file: File,
+    editContext: { overriddenValue: string | null; overriddenItems?: string[]; sourceUrl: string | null }
+  ) => Promise<{ ok: boolean; url?: string; error?: string }>;
   onViewHistory: (fieldKey: string) => Promise<EnrichmentHistoryEntry[]>;
   onUndo: (fieldKey: string, historyEventId: string) => Promise<{ ok: boolean; error?: string }>;
 }) {
@@ -148,7 +173,7 @@ export default function EnrichmentProposalPanel({
       acc[resolved ? "CONFIRMED" : f.classification] += 1;
       return acc;
     },
-    { CONFIRMED: 0, GREEN_NEW: 0, YELLOW: 0, CONFLICT: 0, MISSING: 0 } as Record<EnrichmentClassification, number>
+    { CONFIRMED: 0, GREEN_NEW: 0, YELLOW: 0, CONFLICT: 0, MISSING: 0, FOUNDER_EDITED: 0 } as Record<EnrichmentClassification, number>
   );
 
   /**
@@ -195,12 +220,54 @@ export default function EnrichmentProposalPanel({
     // onAcceptField -> acceptEnrichmentFieldAction path as an unedited one --
     // no new persistence action, no direct Prisma call from here.
     const fieldToAccept: EnrichmentField = { ...field, proposedValue: displayValue(field), proposedItems: displayItems(field) };
-    const result = await onAcceptField(fieldToAccept);
+    // Targeted fix (founder-edit authority) -- editedValue[field.key] is only
+    // ever set by Save Edit (never by a plain Accept of the source's own
+    // proposal), so this is exactly "the founder actually typed something
+    // different from what was proposed". Captured from field.externalValue
+    // (the TRUE external state this run), not field.proposedValue -- for an
+    // already-FOUNDER_EDITED field proposedValue is null, which would
+    // silently lose the real external value being overridden again.
+    const wasEdited = editedValue[field.key] !== undefined || editedItems[field.key] !== undefined;
+    const editContext = wasEdited
+      ? ({ founderEdited: true, overriddenValue: field.externalValue ?? null, overriddenItems: field.externalItems } as const)
+      : undefined;
+    const result = await onAcceptField(fieldToAccept, editContext);
     if (result.ok) {
       setSaveState((prev) => ({ ...prev, [field.key]: "saved" }));
     } else {
       setSaveState((prev) => ({ ...prev, [field.key]: "error" }));
       setSaveError((prev) => ({ ...prev, [field.key]: result.error ?? "Could not save this field." }));
+    }
+  }
+
+  /**
+   * Targeted fix (Cover Image/Brochure upload) -- an uploaded file is, by
+   * definition, always a founder-provided value (never a verbatim accept of
+   * the source's own proposal), so it always carries `founderEdited`
+   * provenance -- same contract as handleAccept's own `wasEdited` branch, just
+   * unconditional here. On success, seeds `editedValue` with the returned
+   * Cloudinary URL so the row re-renders immediately with the new value
+   * (mirroring exactly how a plain text edit already survives without
+   * closing/reopening the dialog) -- no second local-state mechanism.
+   */
+  async function handleUpload(field: EnrichmentField, file: File) {
+    setSaveState((prev) => ({ ...prev, [field.key]: "saving" }));
+    setSaveError((prev) => {
+      const next = { ...prev };
+      delete next[field.key];
+      return next;
+    });
+    const result = await onUploadMedia(field.key, file, {
+      overriddenValue: field.externalValue ?? null,
+      overriddenItems: field.externalItems,
+      sourceUrl: field.sourceUrl,
+    });
+    if (result.ok && result.url) {
+      setEditedValue((prev) => ({ ...prev, [field.key]: result.url! }));
+      setSaveState((prev) => ({ ...prev, [field.key]: "saved" }));
+    } else {
+      setSaveState((prev) => ({ ...prev, [field.key]: "error" }));
+      setSaveError((prev) => ({ ...prev, [field.key]: result.error ?? "Upload failed." }));
     }
   }
 
@@ -444,6 +511,50 @@ export default function EnrichmentProposalPanel({
     );
   }
 
+  /**
+   * Targeted fix (Cover Image optional upload / Brochure prominent upload) --
+   * ONE reusable upload control, rendered into every classification branch's
+   * action row (GREEN_NEW/YELLOW/CONFLICT/CONFIRMED-or-FOUNDER_EDITED/
+   * MISSING) for exactly two field keys: "coverImage" (a plain, same-weight
+   * control next to Edit, since it's explicitly optional) and "brochure"
+   * (deliberately bolder/higher-contrast per the founder's own instruction
+   * that it be visually more prominent than an ordinary text control).
+   */
+  function renderUploadButton(field: EnrichmentField) {
+    if (field.key !== "coverImage" && field.key !== "brochure") return null;
+    const uploading = saveState[field.key] === "saving";
+    const isBrochure = field.key === "brochure";
+    const label = uploading ? "Uploading..." : field.currentValue ? `Replace ${isBrochure ? "Brochure PDF" : "Cover Image"}` : isBrochure ? "Upload Brochure PDF" : "Upload Cover Image";
+    return (
+      <label
+        className={
+          isBrochure
+            ? "cursor-pointer rounded-sm border-2 border-accent bg-accent/10 px-2.5 py-1 text-[10px] font-mono font-bold uppercase tracking-wide text-accent hover:bg-accent/20"
+            : "cursor-pointer rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-accent hover:text-accent"
+        }
+      >
+        {label}
+        <input
+          type="file"
+          accept={isBrochure ? "application/pdf" : "image/jpeg,image/png,image/webp,image/avif"}
+          className="hidden"
+          disabled={uploading}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) handleUpload(field, file);
+          }}
+        />
+      </label>
+    );
+  }
+
+  /** Cover Image is explicitly optional (targeted fix, item 8) -- Brochure already reads as optional from its own copy elsewhere, so no equivalent note is needed there. */
+  function renderUploadOptionalNote(field: EnrichmentField) {
+    if (field.key !== "coverImage") return null;
+    return <span className="text-[9px] uppercase tracking-wide text-muted">Optional</span>;
+  }
+
   function statusLine(fieldKey: string) {
     const state = saveState[fieldKey];
     if (state === "saving") return <span className="text-[10px] text-muted">Saving...</span>;
@@ -498,6 +609,7 @@ export default function EnrichmentProposalPanel({
         <span className="text-warning">🟠 {counts.YELLOW} Needs Review</span>
         <span className="text-negative">🔴 {counts.CONFLICT} Conflict</span>
         <span className="text-muted">⚪ {counts.MISSING} Missing</span>
+        <span className="text-accent">🟣 {counts.FOUNDER_EDITED} Founder Edited</span>
       </div>
 
       <p className="rounded-sm border border-border bg-surface-raised px-3 py-2 text-[10px] text-muted">
@@ -584,6 +696,7 @@ export default function EnrichmentProposalPanel({
                           Edit
                         </button>
                       ) : null}
+                      {renderUploadButton(field)}
                       <button
                         type="button"
                         disabled={busy || done}
@@ -623,6 +736,7 @@ export default function EnrichmentProposalPanel({
                           Edit
                         </button>
                       ) : null}
+                      {renderUploadButton(field)}
                       <button
                         type="button"
                         disabled={busy || done}
@@ -663,6 +777,7 @@ export default function EnrichmentProposalPanel({
                           Edit
                         </button>
                       ) : null}
+                      {renderUploadButton(field)}
                       <button
                         type="button"
                         disabled={busy || done}
@@ -692,8 +807,14 @@ export default function EnrichmentProposalPanel({
 
                   {isRejecting ? renderRejectPrompt(field) : null}
 
-                  {!isEditing && field.classification === "CONFIRMED" ? (
-                    <div className="mt-1 flex items-center gap-2">
+                  {!isEditing && (field.classification === "CONFIRMED" || field.classification === "FOUNDER_EDITED") ? (
+                    <div className="mt-1 flex flex-col gap-1.5">
+                      {field.classification === "FOUNDER_EDITED" && field.externalValue && field.externalValue !== field.currentValue ? (
+                        <p className="rounded-sm border border-accent/30 bg-accent/5 px-2 py-1 text-[10px] text-accent">
+                          New source difference (for reference only): {field.externalValue}
+                        </p>
+                      ) : null}
+                      <div className="flex items-center gap-2">
                       {canEdit ? (
                         <button
                           type="button"
@@ -704,6 +825,8 @@ export default function EnrichmentProposalPanel({
                           Edit
                         </button>
                       ) : null}
+                      {renderUploadButton(field)}
+                      {renderUploadOptionalNote(field)}
                       {/* Targeted fix (Slug editability -- surfaced this same gap for
                           every CONFIRMED, editable field): "Save Edit" only stages the
                           new value in local state; without this button there was no way
@@ -728,6 +851,7 @@ export default function EnrichmentProposalPanel({
                       >
                         View History
                       </button>
+                      </div>
                     </div>
                   ) : null}
 
@@ -743,6 +867,8 @@ export default function EnrichmentProposalPanel({
                           Edit
                         </button>
                       ) : null}
+                      {renderUploadButton(field)}
+                      {renderUploadOptionalNote(field)}
                       {/* Only offer Save once the founder has actually typed something --
                           there's no source proposal to accept as-is for a MISSING field. */}
                       {canEdit && editedValue[field.key] !== undefined ? (

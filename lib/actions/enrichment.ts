@@ -2,7 +2,7 @@
 
 import { requireMutateSession } from "@/lib/auth/guard";
 import { prisma } from "@/lib/prisma";
-import { classifyProjectEnrichment, suppressPreviouslyRejectedProposals } from "@/lib/enrichment/classifyEnrichment";
+import { applyFounderEditAuthority, classifyProjectEnrichment, suppressPreviouslyRejectedProposals } from "@/lib/enrichment/classifyEnrichment";
 import { resolveDeveloperDomain } from "@/lib/enrichment/developerDomainRegistry";
 import { applyAcceptedField } from "@/lib/enrichment/applyAcceptedField";
 import { buildEntityMatchProposal, resolveBuilderMatch, resolveLocalityMatch, type EntityMatchProposal } from "@/lib/enrichment/resolveNamedEntity";
@@ -77,6 +77,7 @@ import { PRIMARY_CITY_SLUG } from "@/lib/queries";
 import { logAudit } from "@/lib/audit";
 import { friendlyPrismaError } from "./errors";
 import type { Prisma } from "@prisma/client";
+import { uploadDocumentFile, uploadImageFile } from "@/lib/cloudinary";
 
 export type EnrichProjectStatus = "SUCCESS" | "NO_SOURCE" | "SOURCE_UNAVAILABLE" | "NO_NEW_INFO" | "ERROR";
 
@@ -371,7 +372,7 @@ async function computeEnrichmentResult(stagingRecordId: string): Promise<EnrichP
   // outstanding proposal on every subsequent Enrich run; a materially
   // different proposal (new value/items/source) still comes through.
   const recentEventsByField = await getMostRecentEnrichmentEventsByField(stagingRecordId);
-  const fields = suppressPreviouslyRejectedProposals(classified, recentEventsByField);
+  const fields = applyFounderEditAuthority(suppressPreviouslyRejectedProposals(classified, recentEventsByField), recentEventsByField);
 
   const { builderMatch, localityMatch } = await resolveBuilderAndLocalityMatches(fields, payload);
 
@@ -586,6 +587,18 @@ export interface AcceptEnrichmentFieldContext {
   sourceUrl?: string | null;
   sourceType?: string | null;
   confidence?: string | null;
+  /**
+   * Targeted fix (founder-edit authority) -- true only when the founder
+   * actually typed a value different from what was being proposed (never on
+   * a plain "Accept" of the exact proposed value). `overriddenValue`/
+   * `overriddenItems` are the field's `externalValue`/`externalItems` at the
+   * moment of this edit -- see EnrichmentHistorySnapshot's own doc comment
+   * for why this must be `externalValue`, never `proposedValue` (which is
+   * null once a field is already FOUNDER_EDITED).
+   */
+  founderEdited?: boolean;
+  overriddenValue?: string | null;
+  overriddenItems?: string[];
 }
 
 /**
@@ -681,6 +694,9 @@ export async function acceptEnrichmentFieldAction(
     sourceUrl: context?.sourceUrl ?? null,
     sourceType: context?.sourceType ?? null,
     confidence: context?.confidence ?? null,
+    founderEdited: context?.founderEdited,
+    overriddenValue: context?.founderEdited ? (context?.overriddenValue ?? null) : undefined,
+    overriddenItems: context?.founderEdited ? context?.overriddenItems : undefined,
   };
 
   await logAudit(session.userId, actionTypeToStoredAction(actionType), ENRICHMENT_HISTORY_ENTITY_TYPE, stagingRecordId, { before, after });
@@ -1028,4 +1044,200 @@ export async function revertEnrichmentFieldAction(
 
   const snapshot = await buildProjectReviewSnapshot(payloadToWrite, record.matchedExistingId);
   return { status: "SUCCESS", snapshot };
+}
+
+export type UploadEnrichmentMediaStatus = "SUCCESS" | "NOT_FOUND" | "NOT_PENDING" | "INVALID_FILE" | "ERROR";
+
+export interface UploadEnrichmentMediaResult {
+  status: UploadEnrichmentMediaStatus;
+  error?: string;
+  url?: string;
+  /** Present on SUCCESS only -- see ProjectReviewSnapshot's own doc comment. */
+  snapshot?: ProjectReviewSnapshot;
+}
+
+export interface UploadEnrichmentMediaContext {
+  /** field.externalValue/externalItems from the LIVE dialog, captured the exact same way a plain-text edit's founder-authority override is -- an upload is, by definition, always a founder-provided value, never a verbatim accept of the source's own value. */
+  overriddenValue: string | null;
+  overriddenItems?: string[];
+  sourceUrl?: string | null;
+}
+
+/**
+ * Targeted fix (Cover Image optional upload) -- persists an uploaded image
+ * file into the existing PENDING staging record's payload, reusing:
+ *  - the SAME Cloudinary upload pipeline `addProjectImageAction`/
+ *    `uploadBrochureThumbnailAction` already use (lib/cloudinary.ts) -- no
+ *    new storage integration,
+ *  - the SAME `applyAcceptedField`/`withFieldTouched` payload-write path
+ *    every other field accept goes through,
+ *  - the SAME enrichment-history mechanism, marked `founderEdited` (an
+ *    upload is always a hand-provided value, never a verbatim source
+ *    accept) so it gets the exact same founder-authority protection on the
+ *    next Enrich run as a manually-typed edit.
+ * Never writes to the live Project/ProjectImage tables -- exactly like
+ * every other enrichment mutation, this only makes the PENDING record more
+ * complete; the existing Approve flow is still the only path into the
+ * catalog. `fieldKey` is restricted to "coverImage" (folder scoped by
+ * staging record id, since a not-yet-approved project has no slug worth
+ * trusting yet).
+ */
+export async function uploadEnrichmentImageAction(
+  stagingRecordId: string,
+  fieldKey: "coverImage",
+  file: File,
+  context: UploadEnrichmentMediaContext
+): Promise<UploadEnrichmentMediaResult> {
+  const session = await requireMutateSession();
+
+  if (!(file instanceof File) || file.size === 0) {
+    return { status: "INVALID_FILE", error: "Choose an image file to upload." };
+  }
+
+  const record = await prisma.ingestStagingRecord.findUnique({ where: { id: stagingRecordId } });
+  if (!record) {
+    return { status: "NOT_FOUND", error: "Staging record not found." };
+  }
+  if (record.entityType !== "Project") {
+    return { status: "ERROR", error: "Enrichment media upload is only available for Project staging records." };
+  }
+  if (record.status !== "PENDING") {
+    return { status: "NOT_PENDING", error: "This record is no longer pending review -- it has already been approved or rejected." };
+  }
+
+  let uploaded;
+  try {
+    // skipCompression: true -- matches CoverImageUploader's own convention
+    // for the live Project's hero image (the founder's own explicit
+    // instruction there: cover images keep their exact original bytes).
+    uploaded = await uploadImageFile(file, `mumbai-intel/staging/${stagingRecordId}/cover`, { skipCompression: true });
+  } catch (error) {
+    return { status: "ERROR", error: error instanceof Error ? error.message : "Upload failed." };
+  }
+
+  const payload = record.payload as unknown as Record<string, unknown>;
+  const applied = applyAcceptedField(payload, fieldKey, uploaded.url);
+  if (!applied.ok) {
+    return { status: "ERROR", error: applied.error };
+  }
+  const payloadToWrite = withFieldTouched(applied.payload, fieldKey);
+
+  try {
+    await prisma.ingestStagingRecord.update({
+      where: { id: stagingRecordId },
+      data: { payload: payloadToWrite as unknown as Prisma.InputJsonValue },
+    });
+  } catch (error) {
+    return { status: "ERROR", error: friendlyPrismaError(error) };
+  }
+
+  const mostRecent = await getMostRecentEnrichmentHistoryEvent(stagingRecordId, fieldKey);
+  const actionType = determineAcceptActionType(mostRecent);
+  const diffs = computePayloadDiff(payload, applied.payload);
+
+  const before: EnrichmentHistorySnapshot = mostRecent?.after
+    ? mostRecent.after
+    : { fieldKey, displayValue: null, payloadChanges: toStorableChanges(diffs.map((d) => ({ key: d.key, value: d.before }))) };
+  const after: EnrichmentHistorySnapshot = {
+    fieldKey,
+    displayValue: uploaded.url,
+    payloadChanges: toStorableChanges(diffs.map((d) => ({ key: d.key, value: d.after }))),
+    sourceUrl: context.sourceUrl ?? null,
+    founderEdited: true,
+    overriddenValue: context.overriddenValue,
+    overriddenItems: context.overriddenItems,
+  };
+
+  await logAudit(session.userId, actionTypeToStoredAction(actionType), ENRICHMENT_HISTORY_ENTITY_TYPE, stagingRecordId, { before, after });
+
+  const snapshot = await buildProjectReviewSnapshot(payloadToWrite, record.matchedExistingId);
+  return { status: "SUCCESS", url: uploaded.url, snapshot };
+}
+
+/**
+ * Targeted fix (Brochure prominent upload) -- same shape as
+ * uploadEnrichmentImageAction above, reusing `uploadDocumentFile` (the exact
+ * Cloudinary raw-PDF pipeline `uploadBrochureForProject` already uses for the
+ * live Project) rather than a second document-storage integration.
+ *
+ * No server-side PDF compression is applied: this codebase's Cloudinary
+ * integration uploads brochures as a `raw` resource (lib/cloudinary.ts's
+ * `uploadDocumentFile`), and Cloudinary's raw resource type does not support
+ * the transformation/quality pipeline `uploadImageFile` uses for images --
+ * there is no existing, verified mechanism anywhere in this codebase for
+ * safely re-encoding a PDF's contents. Rather than bolt on an unverified
+ * compression step that risks silently corrupting a founder's document, this
+ * uploads the file exactly as provided -- see this phase's final report for
+ * the full limitation writeup.
+ */
+export async function uploadEnrichmentBrochureAction(
+  stagingRecordId: string,
+  file: File,
+  context: UploadEnrichmentMediaContext
+): Promise<UploadEnrichmentMediaResult> {
+  const session = await requireMutateSession();
+  const fieldKey = "brochure";
+
+  if (!(file instanceof File) || file.size === 0) {
+    return { status: "INVALID_FILE", error: "Choose a PDF file to upload." };
+  }
+  if (file.type !== "application/pdf") {
+    return { status: "INVALID_FILE", error: "Only PDF files are allowed." };
+  }
+
+  const record = await prisma.ingestStagingRecord.findUnique({ where: { id: stagingRecordId } });
+  if (!record) {
+    return { status: "NOT_FOUND", error: "Staging record not found." };
+  }
+  if (record.entityType !== "Project") {
+    return { status: "ERROR", error: "Enrichment media upload is only available for Project staging records." };
+  }
+  if (record.status !== "PENDING") {
+    return { status: "NOT_PENDING", error: "This record is no longer pending review -- it has already been approved or rejected." };
+  }
+
+  let uploaded;
+  try {
+    uploaded = await uploadDocumentFile(file, `mumbai-intel/staging/${stagingRecordId}/brochure`);
+  } catch (error) {
+    return { status: "ERROR", error: error instanceof Error ? error.message : "Upload failed." };
+  }
+
+  const payload = record.payload as unknown as Record<string, unknown>;
+  const applied = applyAcceptedField(payload, fieldKey, uploaded.url);
+  if (!applied.ok) {
+    return { status: "ERROR", error: applied.error };
+  }
+  const payloadToWrite = withFieldTouched(applied.payload, fieldKey);
+
+  try {
+    await prisma.ingestStagingRecord.update({
+      where: { id: stagingRecordId },
+      data: { payload: payloadToWrite as unknown as Prisma.InputJsonValue },
+    });
+  } catch (error) {
+    return { status: "ERROR", error: friendlyPrismaError(error) };
+  }
+
+  const mostRecent = await getMostRecentEnrichmentHistoryEvent(stagingRecordId, fieldKey);
+  const actionType = determineAcceptActionType(mostRecent);
+  const diffs = computePayloadDiff(payload, applied.payload);
+
+  const before: EnrichmentHistorySnapshot = mostRecent?.after
+    ? mostRecent.after
+    : { fieldKey, displayValue: null, payloadChanges: toStorableChanges(diffs.map((d) => ({ key: d.key, value: d.before }))) };
+  const after: EnrichmentHistorySnapshot = {
+    fieldKey,
+    displayValue: uploaded.url,
+    payloadChanges: toStorableChanges(diffs.map((d) => ({ key: d.key, value: d.after }))),
+    sourceUrl: context.sourceUrl ?? null,
+    founderEdited: true,
+    overriddenValue: context.overriddenValue,
+    overriddenItems: context.overriddenItems,
+  };
+
+  await logAudit(session.userId, actionTypeToStoredAction(actionType), ENRICHMENT_HISTORY_ENTITY_TYPE, stagingRecordId, { before, after });
+
+  const snapshot = await buildProjectReviewSnapshot(payloadToWrite, record.matchedExistingId);
+  return { status: "SUCCESS", url: uploaded.url, snapshot };
 }

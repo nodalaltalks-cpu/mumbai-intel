@@ -37,11 +37,19 @@ vi.mock("@/lib/enrichment/adapters/adaniRealtyAdapter", () => ({
   ADANI_LINKBAY_RESIDENCES_PROJECT_URL: "https://www.adanirealty.com/residential-projects/mumbai/linkbay-residences",
 }));
 
+// Targeted fix (Cover Image/Brochure upload) -- the real Cloudinary SDK is
+// never touched in tests; only the two functions these upload actions call.
+vi.mock("@/lib/cloudinary", () => ({
+  uploadImageFile: vi.fn(),
+  uploadDocumentFile: vi.fn(),
+}));
+
 import { prisma } from "@/lib/prisma";
 import { requireMutateSession } from "@/lib/auth/guard";
 import { godrejPropertiesAdapter } from "@/lib/enrichment/adapters/godrejPropertiesAdapter";
 import { adaniRealtyAdapter } from "@/lib/enrichment/adapters/adaniRealtyAdapter";
 import { toStorableChanges } from "@/lib/enrichment/enrichmentHistory";
+import { uploadDocumentFile, uploadImageFile } from "@/lib/cloudinary";
 import {
   acceptEnrichmentFieldAction,
   acceptEntityMatchAction,
@@ -50,7 +58,12 @@ import {
   rejectEnrichmentFieldAction,
   rejectEntityMatchAction,
   revertEnrichmentFieldAction,
+  uploadEnrichmentBrochureAction,
+  uploadEnrichmentImageAction,
 } from "./enrichment";
+
+const uploadImageFileMock = vi.mocked(uploadImageFile);
+const uploadDocumentFileMock = vi.mocked(uploadDocumentFile);
 
 const stagingFindUniqueMock = vi.mocked(prisma.ingestStagingRecord.findUnique);
 const stagingUpdateMock = vi.mocked(prisma.ingestStagingRecord.update);
@@ -242,6 +255,64 @@ describe("enrichProjectAction (Phase 29 Part J/K — no writes, no approval, pro
     const nameField = result.fields!.find((f) => f.key === "name")!;
     expect(nameField.classification).toBe("CONFLICT");
     expect(nameField.proposedValue).toBe("Godrej Sky Shore Phase 2");
+  });
+
+  it("C. targeted fix (founder-edit authority) -- a field the founder EDITED, with the source repeating the EXACT SAME value it disagreed with at edit time, is FOUNDER_EDITED, not swapped back to CONFLICT", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    fetchProjectFactsMock.mockResolvedValue({ name: { value: "A Totally Different Name", confidence: "High" } });
+    auditLogFindManyMock.mockResolvedValue([
+      {
+        id: "evt-1",
+        action: "enrichment.edit_accept",
+        entityType: "ProjectEnrichmentField",
+        entityId: "stage-1",
+        before: null,
+        after: {
+          fieldKey: "name",
+          displayValue: "Godrej Sky Shore -- Founder Curated Name",
+          payloadChanges: {},
+          sourceUrl: "https://www.godrejproperties.com/mumbai/residential/godrej-skyshore",
+          founderEdited: true,
+          overriddenValue: "A Totally Different Name",
+        },
+        at: new Date("2026-08-30T10:00:00.000Z"),
+        actor: { name: "Founder", email: "founder@example.com" },
+      },
+    ] as never);
+
+    const result = await enrichProjectAction("stage-1");
+    const nameField = result.fields!.find((f) => f.key === "name")!;
+    expect(nameField.classification).toBe("FOUNDER_EDITED");
+    expect(nameField.proposedValue).toBeNull();
+  });
+
+  it("D. targeted fix (founder-edit authority) -- a GENUINELY NEW external value (source changed since the founder's edit) still surfaces for review", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    fetchProjectFactsMock.mockResolvedValue({ name: { value: "Godrej Sky Shore Phase 3 -- New Official Name", confidence: "High" } });
+    auditLogFindManyMock.mockResolvedValue([
+      {
+        id: "evt-1",
+        action: "enrichment.edit_accept",
+        entityType: "ProjectEnrichmentField",
+        entityId: "stage-1",
+        before: null,
+        after: {
+          fieldKey: "name",
+          displayValue: "Godrej Sky Shore -- Founder Curated Name",
+          payloadChanges: {},
+          sourceUrl: "https://www.godrejproperties.com/mumbai/residential/godrej-skyshore",
+          founderEdited: true,
+          overriddenValue: "A Totally Different Name", // what the source said BEFORE this edit, not the new value below
+        },
+        at: new Date("2026-08-30T10:00:00.000Z"),
+        actor: { name: "Founder", email: "founder@example.com" },
+      },
+    ] as never);
+
+    const result = await enrichProjectAction("stage-1");
+    const nameField = result.fields!.find((f) => f.key === "name")!;
+    expect(nameField.classification).toBe("CONFLICT");
+    expect(nameField.proposedValue).toBe("Godrej Sky Shore Phase 3 -- New Official Name");
   });
 
   it("8. never calls Project/Builder/Locality write methods (Phase 46: it DOES now write its own compact enrichmentSummary onto the SAME staging record -- see the dedicated enrichmentSummary describe block below)", async () => {
@@ -1068,6 +1139,78 @@ describe("rejectEnrichmentFieldAction (targeted fix, founder-testing round — A
   });
 });
 
+describe("uploadEnrichmentImageAction / uploadEnrichmentBrochureAction (targeted fix -- Cover Image/Brochure upload)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stagingUpdateMock.mockResolvedValue({} as never);
+    auditLogFindManyMock.mockResolvedValue([] as never);
+    auditLogCreateMock.mockResolvedValue({} as never);
+  });
+
+  it("G/H. uploads a cover image, persists coverImageUrl into the pending payload, and marks the history event founderEdited", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    uploadImageFileMock.mockResolvedValue({ url: "https://res.cloudinary.com/demo/image/upload/v1/cover.jpg", publicId: "cover", width: 1600, height: 900 });
+
+    const file = new File(["dummy"], "cover.jpg", { type: "image/jpeg" });
+    const result = await uploadEnrichmentImageAction("stage-1", "coverImage", file, { overriddenValue: null, sourceUrl: null });
+
+    expect(result.status).toBe("SUCCESS");
+    expect(result.url).toBe("https://res.cloudinary.com/demo/image/upload/v1/cover.jpg");
+    expect(updatedPayload().coverImageUrl).toBe("https://res.cloudinary.com/demo/image/upload/v1/cover.jpg");
+    const call = auditLogCreateMock.mock.calls[0][0] as { data: Record<string, unknown> };
+    const after = call.data.after as Record<string, unknown>;
+    expect(after.founderEdited).toBe(true);
+  });
+
+  it("rejects a non-file / empty upload without touching the payload", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    const result = await uploadEnrichmentImageAction("stage-1", "coverImage", new File([], "empty.jpg", { type: "image/jpeg" }), {
+      overriddenValue: null,
+    });
+    expect(result.status).toBe("INVALID_FILE");
+    expect(stagingUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a Cloudinary upload failure as ERROR without writing to the payload", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    uploadImageFileMock.mockRejectedValue(new Error("Unsupported image type"));
+    const file = new File(["dummy"], "cover.svg", { type: "image/svg+xml" });
+    const result = await uploadEnrichmentImageAction("stage-1", "coverImage", file, { overriddenValue: null });
+    expect(result.status).toBe("ERROR");
+    expect(result.error).toBe("Unsupported image type");
+    expect(stagingUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("a record that is no longer PENDING refuses the upload", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord({ status: "APPROVED" } as never));
+    const file = new File(["dummy"], "cover.jpg", { type: "image/jpeg" });
+    const result = await uploadEnrichmentImageAction("stage-1", "coverImage", file, { overriddenValue: null });
+    expect(result.status).toBe("NOT_PENDING");
+    expect(uploadImageFileMock).not.toHaveBeenCalled();
+  });
+
+  it("uploads a brochure PDF, persists brochureUrl into the pending payload, and marks the history event founderEdited", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    uploadDocumentFileMock.mockResolvedValue({ url: "https://res.cloudinary.com/demo/raw/upload/v1/brochure.pdf", publicId: "brochure", bytes: 1024 });
+
+    const file = new File(["%PDF-1.4"], "brochure.pdf", { type: "application/pdf" });
+    const result = await uploadEnrichmentBrochureAction("stage-1", file, { overriddenValue: null, sourceUrl: null });
+
+    expect(result.status).toBe("SUCCESS");
+    expect(updatedPayload().brochureUrl).toBe("https://res.cloudinary.com/demo/raw/upload/v1/brochure.pdf");
+    const call = auditLogCreateMock.mock.calls[0][0] as { data: Record<string, unknown> };
+    expect((call.data.after as Record<string, unknown>).founderEdited).toBe(true);
+  });
+
+  it("rejects a non-PDF file for the brochure upload", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    const file = new File(["dummy"], "brochure.docx", { type: "application/msword" });
+    const result = await uploadEnrichmentBrochureAction("stage-1", file, { overriddenValue: null });
+    expect(result.status).toBe("INVALID_FILE");
+    expect(uploadDocumentFileMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("Phase 37 — enrichment history (built entirely on the existing AuditLog model, no new table)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1152,6 +1295,36 @@ describe("Phase 37 — enrichment history (built entirely on the existing AuditL
     expect(call.data.action).toBe("enrichment.edit_accept");
     expect((call.data.before as Record<string, unknown>).displayValue).toBe("Old tagline");
     expect((call.data.after as Record<string, unknown>).displayValue).toBe("Corrected tagline");
+  });
+
+  it("I/J. targeted fix (founder-edit authority) -- a founder edit's context.founderEdited/overriddenValue is recorded on the after snapshot", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    auditLogFindManyMock.mockResolvedValue([] as never);
+
+    await acceptEnrichmentFieldAction("stage-1", "name", "Godrej Sky Shore -- Founder Curated Name", undefined, {
+      sourceUrl: "https://www.godrejproperties.com/mumbai/residential/godrej-skyshore",
+      founderEdited: true,
+      overriddenValue: "A Totally Different Name",
+    });
+
+    const call = auditLogCreateMock.mock.calls[0][0] as { data: Record<string, unknown> };
+    const after = call.data.after as Record<string, unknown>;
+    expect(after.founderEdited).toBe(true);
+    expect(after.overriddenValue).toBe("A Totally Different Name");
+  });
+
+  it("a plain (non-edited) accept never records founderEdited, even when context carries other fields", async () => {
+    stagingFindUniqueMock.mockResolvedValue(stagingRecord());
+    auditLogFindManyMock.mockResolvedValue([] as never);
+
+    await acceptEnrichmentFieldAction("stage-1", "name", "Godrej Skyshore", undefined, {
+      sourceUrl: "https://www.godrejproperties.com/mumbai/residential/godrej-skyshore",
+    });
+
+    const call = auditLogCreateMock.mock.calls[0][0] as { data: Record<string, unknown> };
+    const after = call.data.after as Record<string, unknown>;
+    expect(after.founderEdited).toBeUndefined();
+    expect(after.overriddenValue).toBeUndefined();
   });
 
   it("9. accepting again after a REVERT records RE_ACCEPT", async () => {
