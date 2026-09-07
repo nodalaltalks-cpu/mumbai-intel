@@ -24,10 +24,10 @@ describe("buildFounderReviewSummary", () => {
     expect(buildFounderReviewSummary(builderCompleteness)).toBeNull();
   });
 
-  it("only surfaces the 16 founder-relevant fields, never the technical/deprecated ones", () => {
+  it("only surfaces the 15 founder-relevant fields, never the technical/deprecated ones", () => {
     const completeness = buildProjectReviewCompleteness(LINKBAY_PAYLOAD, { localityName: "Andheri West" });
     const summary = buildFounderReviewSummary(completeness)!;
-    expect(summary.totalFields).toBe(16);
+    expect(summary.totalFields).toBe(15);
     const keys = summary.fields.map((f) => f.key);
     expect(keys).toEqual([
       "name",
@@ -42,7 +42,6 @@ describe("buildFounderReviewSummary", () => {
       "reraNumber",
       "possession",
       "description",
-      "highlights",
       "amenities",
       "coverImage",
       "brochure",
@@ -56,6 +55,16 @@ describe("buildFounderReviewSummary", () => {
     expect(keys).not.toContain("constructionPercent");
     expect(keys).not.toContain("totalUnits");
     expect(keys).not.toContain("metaTitle");
+  });
+
+  it("targeted fix (Highlights removed from Approval Ready only) -- 'highlights' never appears in the founder summary, even though the underlying registry field is fully intact", () => {
+    const completeness = buildProjectReviewCompleteness(LINKBAY_PAYLOAD, { localityName: "Andheri West" });
+    const summary = buildFounderReviewSummary(completeness)!;
+    expect(summary.fields.map((f) => f.key)).not.toContain("highlights");
+    // The underlying registry field is untouched -- still present, still counted,
+    // in buildProjectReviewCompleteness's own (unfiltered) output.
+    const registryKeys = completeness.groups.flatMap((g) => g.fields.map((f) => f.key));
+    expect(registryKeys).toContain("highlights");
   });
 
   it("marks fields the payload actually carries as RECEIVED, with the correct founder label", () => {

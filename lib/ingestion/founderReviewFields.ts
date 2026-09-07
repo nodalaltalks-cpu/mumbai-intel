@@ -28,6 +28,15 @@ import type { FieldStatus, ReviewCompleteness, ReviewField } from "./reviewField
  * reviewFieldRegistry.ts's own field definition and
  * lib/actions/enrichment.ts's resolveOfficialDeveloperWebsite), so this no
  * longer needs a resolved builderId pre-approval to show a real value.
+ *
+ * Targeted fix (Highlights removed from this summary only) -- `highlights`
+ * is deliberately EXCLUDED from FOUNDER_FIELD_LABELS below: not important
+ * enough for the Approval Ready decision, per explicit founder instruction.
+ * This is a presentation-only omission, exactly like this module's own
+ * doc comment above already promises -- the underlying `highlights` data,
+ * `buildProjectReviewCompleteness`'s own field, Enrichment's Edit/Accept/
+ * Reject/History for it, and its `totalFields`/`receivedCount`/etc. are all
+ * completely untouched; it simply never appears in this ONE filtered list.
  */
 
 export interface FounderReviewField {
@@ -73,7 +82,6 @@ const FOUNDER_FIELD_LABELS: readonly (readonly [string, string])[] = [
   ["reraNumber", "RERA Number"],
   ["possession", "Possession"],
   ["description", "Description"],
-  ["highlights", "Highlights"],
   ["amenities", "Amenities"],
   ["coverImage", "Cover Image"],
   ["brochure", "Brochure PDF"],
