@@ -46,8 +46,8 @@ describe("applyAcceptedField (Phase 32 Part E) — direct string fields", () => 
     if (!result.ok) expect(result.error).toContain("no proposed value");
   });
 
-  it("rejects a field key that cannot be safely accepted (locality/builder are foreign keys, slug is auto-derived, dataSource/sourceRef describe the staging record's own origin)", () => {
-    for (const key of ["locality", "builder", "slug", "dataSource", "sourceRef"]) {
+  it("rejects a field key that cannot be safely accepted (locality/builder are foreign keys, dataSource/sourceRef describe the staging record's own origin)", () => {
+    for (const key of ["locality", "builder", "dataSource", "sourceRef"]) {
       const result = applyAcceptedField(BASE_PAYLOAD, key, "some value");
       expect(result.ok).toBe(false);
     }
@@ -194,15 +194,43 @@ describe("applyAcceptedField — array-shaped count fields", () => {
       if (result.ok) expect(result.payload.paymentPlans).toHaveLength(32);
     });
 
-    it("is manually editable (founder can type a plan from scratch when the field is currently MISSING)", () => {
+    it("is manually editable (founder can type a plan from scratch when the field is currently MISSING), with its own structured editor kind -- not the generic flat-string array editor", () => {
       expect(isFieldManuallyEditable("paymentPlans")).toBe(true);
-      expect(getFieldEditorKind("paymentPlans", 0)).toBe("array");
+      expect(getFieldEditorKind("paymentPlans", 0)).toBe("payment-plan-list");
     });
 
     it("empty plans: an empty items list falls back to the display value rather than silently discarding the field (same convention as every other array field -- the UI's own Save Edit already refuses to save a fully-empty list before this is ever reached)", () => {
       const result = applyAcceptedField(BASE_PAYLOAD, "paymentPlans", "Plan text", []);
       expect(result.ok).toBe(true);
       if (result.ok) expect(result.payload.paymentPlans).toEqual(["Plan text"]);
+    });
+  });
+
+  describe("slug (targeted fix, Slug editability — KEPT, no longer excluded)", () => {
+    it("E. accepts a founder-typed slug, normalized through the same slugify() every other slug in this codebase uses", () => {
+      const result = applyAcceptedField(BASE_PAYLOAD, "slug", "Godrej Sky Shore Phase 2!");
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.payload.slug).toBe("godrej-sky-shore-phase-2");
+    });
+
+    it("a value that normalizes to nothing (e.g. pure punctuation) is rejected, never stored as an empty slug", () => {
+      const result = applyAcceptedField(BASE_PAYLOAD, "slug", "###");
+      expect(result.ok).toBe(false);
+    });
+
+    it("never checks live database uniqueness here -- this function stays synchronous and DB-free; ensureUniqueSlug at approval time is the sole authority", () => {
+      const result = applyAcceptedField(BASE_PAYLOAD, "slug", "some-other-projects-exact-slug");
+      expect(result.ok).toBe(true);
+    });
+
+    it("is manually editable, with the plain text editor kind (a slug is always short)", () => {
+      expect(isFieldManuallyEditable("slug")).toBe(true);
+      expect(getFieldEditorKind("slug", 5)).toBe("text");
+    });
+
+    it("validateProposedEdit accepts a normalizable slug and rejects one that normalizes to nothing", () => {
+      expect(validateProposedEdit("slug", "Linkbay Residences 2").ok).toBe(true);
+      expect(validateProposedEdit("slug", "###").ok).toBe(false);
     });
   });
 });
@@ -302,13 +330,13 @@ describe("validateProposedEdit (Phase 36 — client-safe pre-check before Save E
 
 describe("isFieldManuallyEditable (Phase 67 — gates the Edit affordance for a currently-MISSING field, not just GREEN_NEW/YELLOW/CONFLICT)", () => {
   it("editable direct-string, array, and special-cased fields all report true", () => {
-    for (const key of ["name", "reraNumber", "address", "description", "launchDate", "priceMin", "status", "category", "amenities", "highlights"]) {
+    for (const key of ["name", "reraNumber", "address", "description", "launchDate", "priceMin", "status", "category", "amenities", "highlights", "slug"]) {
       expect(isFieldManuallyEditable(key)).toBe(true);
     }
   });
 
   it("relational and staging-origin fields report false -- no Edit affordance for these regardless of classification", () => {
-    for (const key of ["locality", "builder", "slug", "dataSource", "sourceRef"]) {
+    for (const key of ["locality", "builder", "dataSource", "sourceRef"]) {
       expect(isFieldManuallyEditable(key)).toBe(false);
     }
   });

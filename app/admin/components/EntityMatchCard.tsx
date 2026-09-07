@@ -46,13 +46,13 @@ export default function EntityMatchCard({
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <div>
+        <div className="min-w-0">
           <p className="text-[9px] uppercase tracking-wide text-muted">Current</p>
-          <p className="text-foreground">{proposal.currentName ?? "—"}</p>
+          <p className="break-words text-foreground">{proposal.currentName ?? "—"}</p>
         </div>
-        <div>
+        <div className="min-w-0">
           <p className="text-[9px] uppercase tracking-wide text-muted">Official source</p>
-          <p className="text-foreground">{proposal.proposedName}</p>
+          <p className="break-words text-foreground">{proposal.proposedName}</p>
         </div>
       </div>
 

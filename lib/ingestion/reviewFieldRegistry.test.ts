@@ -117,6 +117,39 @@ describe("buildProjectReviewCompleteness — CASE 2: partial real payload (Adani
     expect(byKey.get("totalUnits")?.status).toBe("RECEIVED");
     expect(byKey.get("totalUnits")?.value).toBe("0");
   });
+
+  it("targeted fix (Payment Plan -- one clean founder field): only ONE 'paymentPlans' row exists -- the legacy paymentPlanType/paymentPlanDescription rows are gone", () => {
+    const byKey = new Map(result.groups.flatMap((g) => g.fields).map((f) => [f.key, f]));
+    expect(byKey.has("paymentPlanType")).toBe(false);
+    expect(byKey.has("paymentPlanDescription")).toBe(false);
+    expect(byKey.has("paymentPlans")).toBe(true);
+  });
+
+  it("targeted fix (Payment Plan): a legacy-only payload (paymentPlanType/paymentPlanDescription, no paymentPlans array) still shows the consolidated field as RECEIVED, never MISSING", () => {
+    const legacyPayload = {
+      ...ADANI_PAYLOAD,
+      paymentPlanType: "Construction Linked",
+      paymentPlanDescription: "10:80:10",
+    } as unknown as ProjectImportPayload;
+    const r = buildProjectReviewCompleteness(legacyPayload);
+    const byKey = new Map(r.groups.flatMap((g) => g.fields).map((f) => [f.key, f]));
+    expect(byKey.get("paymentPlans")?.status).toBe("RECEIVED");
+    expect(byKey.get("paymentPlans")?.value).toBe("1 plan(s) listed");
+  });
+
+  it("targeted fix (Slug editability): payload.slug (absent) falls back to the exact bare auto-generated-from-name slug, exactly as before -- never a decorated string (that would get re-slugified verbatim if the founder clicked Edit -> Save Edit without changing anything)", () => {
+    const byKey = new Map(result.groups.flatMap((g) => g.fields).map((f) => [f.key, f]));
+    expect(byKey.get("slug")?.status).toBe("RECEIVED");
+    expect(byKey.get("slug")?.value).toBe("adani-linkbay-residences");
+  });
+
+  it("targeted fix (Slug editability): a founder-provided payload.slug override is shown instead, immediately, as the bare value", () => {
+    const withSlugOverride = { ...ADANI_PAYLOAD, slug: "linkbay-residences-custom" };
+    const r = buildProjectReviewCompleteness(withSlugOverride);
+    const byKey = new Map(r.groups.flatMap((g) => g.fields).map((f) => [f.key, f]));
+    expect(byKey.get("slug")?.status).toBe("RECEIVED");
+    expect(byKey.get("slug")?.value).toBe("linkbay-residences-custom");
+  });
 });
 
 function every_missing_field_has_null_value(result: ReturnType<typeof buildProjectReviewCompleteness>) {

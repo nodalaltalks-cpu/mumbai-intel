@@ -7,6 +7,11 @@ import { SOURCE_TIER_LABEL } from "@/lib/enrichment/types";
 import { getFieldEditorKind, isFieldManuallyEditable, validateProposedEdit, type FieldEditorKind } from "@/lib/enrichment/applyAcceptedField";
 import type { EnrichmentHistoryEntry } from "@/lib/enrichment/enrichmentHistory";
 import { CATEGORY_LABEL, POSSESSION_MONTH_LABEL, STATUS_LABEL } from "@/lib/project-meta";
+import {
+  formatPaymentPlanEntries,
+  parsePaymentPlanEntries,
+  type PaymentPlanEntry,
+} from "@/lib/ingestion/paymentPlanFormat";
 import EnrichmentFieldHistoryDialog from "./EnrichmentFieldHistoryDialog";
 
 const CLASSIFICATION_BADGE: Record<EnrichmentClassification, { tone: BadgeTone; label: string; icon: string }> = {
@@ -82,6 +87,13 @@ export default function EnrichmentProposalPanel({
   const [editKind, setEditKind] = useState<FieldEditorKind | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [editDraftItems, setEditDraftItems] = useState<string[]>([]);
+  // Targeted fix (Payment Plan -- one clean founder field) -- structured
+  // name+description pairs for the "paymentPlans" field's own editor kind.
+  // Kept separate from editDraftItems (plain strings) since the shape
+  // differs; converted back to the SAME string[] shape only at Save Edit,
+  // via formatPaymentPlanEntries -- the underlying payload/write path never
+  // changes.
+  const [paymentPlanDraft, setPaymentPlanDraft] = useState<PaymentPlanEntry[]>([]);
   const [editDraftError, setEditDraftError] = useState<string | null>(null);
 
   // Phase 37 -- which field's history dialog is open (null when closed),
@@ -155,6 +167,28 @@ export default function EnrichmentProposalPanel({
     return editedItems[field.key] ?? field.proposedItems;
   }
 
+  /**
+   * Targeted fix (Payment Plan -- one clean founder field) -- "see the
+   * resulting list immediately": once saved, the founder sees each plan's
+   * actual name + description rather than a bare "N plan(s) listed" count.
+   * Read-only display only; the editor above (renderEditor's
+   * "payment-plan-list" branch) is what actually mutates this.
+   */
+  function renderPaymentPlanSummary(items: string[] | undefined) {
+    const entries = parsePaymentPlanEntries(items);
+    if (entries.length === 0) return <p className="text-foreground">—</p>;
+    return (
+      <ul className="flex flex-col gap-1">
+        {entries.map((plan, i) => (
+          <li key={i} className="break-words text-foreground">
+            <span className="font-semibold">{plan.type || `Plan ${i + 1}`}</span>
+            {plan.description ? <span className="text-muted"> — {plan.description}</span> : null}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
   async function handleAccept(field: EnrichmentField) {
     setSaveState((prev) => ({ ...prev, [field.key]: "saving" }));
     // A locally-edited value/items, if any, rides through the SAME
@@ -204,7 +238,19 @@ export default function EnrichmentProposalPanel({
   function startEdit(field: EnrichmentField) {
     const kind = getFieldEditorKind(field.key, (displayValue(field) ?? "").length);
     setEditKind(kind);
-    if (kind === "array") {
+    if (kind === "payment-plan-list") {
+      // Targeted fix (Payment Plan editor -- real data-loss bug found in
+      // live verification): a CONFIRMED-by-omission field (no fresh source
+      // fact this run) has no proposedItems at all, only a currentValue
+      // count string ("2 plan(s) listed") -- seeding from displayItems()
+      // alone would silently show a blank editor and DISCARD the founder's
+      // real existing plans on save. field.currentItems (the real
+      // underlying list) is the correct fallback whenever there's no fresh
+      // proposal to edit instead.
+      const items = displayItems(field) ?? field.currentItems;
+      const entries = parsePaymentPlanEntries(items);
+      setPaymentPlanDraft(entries.length > 0 ? entries : [{ type: "", description: "" }]);
+    } else if (kind === "array") {
       const items = displayItems(field);
       setEditDraftItems(items && items.length > 0 ? [...items] : [displayValue(field) ?? ""]);
     } else {
@@ -221,7 +267,15 @@ export default function EnrichmentProposalPanel({
   }
 
   function saveEdit(field: EnrichmentField) {
-    if (editKind === "array") {
+    if (editKind === "payment-plan-list") {
+      const cleaned = formatPaymentPlanEntries(paymentPlanDraft);
+      if (cleaned.length === 0) {
+        setEditDraftError("At least one payment plan (a name or a description) is required.");
+        return;
+      }
+      setEditedItems((prev) => ({ ...prev, [field.key]: cleaned }));
+      setEditedValue((prev) => ({ ...prev, [field.key]: cleaned.join(", ") }));
+    } else if (editKind === "array") {
       const cleaned = editDraftItems.map((i) => i.trim()).filter(Boolean);
       if (cleaned.length === 0) {
         setEditDraftError("This field can't be saved empty.");
@@ -243,6 +297,51 @@ export default function EnrichmentProposalPanel({
   }
 
   function renderEditor() {
+    if (editKind === "payment-plan-list") {
+      return (
+        <div className="flex flex-col gap-2">
+          {paymentPlanDraft.map((plan, i) => (
+            <div key={i} className="flex flex-col gap-1 rounded-sm border border-border p-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] uppercase tracking-wide text-muted">Plan {i + 1}</span>
+                <button
+                  type="button"
+                  onClick={() => setPaymentPlanDraft((prev) => prev.filter((_, idx) => idx !== i))}
+                  className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-negative hover:text-negative"
+                >
+                  Remove
+                </button>
+              </div>
+              <input
+                type="text"
+                value={plan.type}
+                placeholder="Plan name (e.g. Construction Linked Plan)"
+                onChange={(e) => setPaymentPlanDraft((prev) => prev.map((p, idx) => (idx === i ? { ...p, type: e.target.value } : p)))}
+                className="w-full rounded-sm border border-border bg-surface px-2 py-1 text-xs text-foreground"
+              />
+              <span className="text-[9px] uppercase tracking-wide text-muted">Description</span>
+              <textarea
+                value={plan.description}
+                placeholder="e.g. Booking: 10% / Agreement: 80% / Possession: 10%"
+                rows={2}
+                onChange={(e) =>
+                  setPaymentPlanDraft((prev) => prev.map((p, idx) => (idx === i ? { ...p, description: e.target.value } : p)))
+                }
+                className="w-full rounded-sm border border-border bg-surface px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setPaymentPlanDraft((prev) => [...prev, { type: "", description: "" }])}
+            className="w-fit rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-accent hover:text-accent"
+          >
+            + Add Payment Plan
+          </button>
+        </div>
+      );
+    }
+
     if (editKind === "array") {
       return (
         <div className="flex flex-col gap-1.5">
@@ -431,11 +530,11 @@ export default function EnrichmentProposalPanel({
                     </Badge>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-[9px] uppercase tracking-wide text-muted">Current</p>
-                      <p className="text-foreground">{field.currentValue ?? "—"}</p>
+                      <p className="break-words text-foreground">{field.currentValue ?? "—"}</p>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-[9px] uppercase tracking-wide text-muted">Proposed</p>
                       {isEditing ? (
                         <div className="mt-1 flex flex-col gap-1">
@@ -458,13 +557,15 @@ export default function EnrichmentProposalPanel({
                             </button>
                           </div>
                         </div>
+                      ) : field.key === "paymentPlans" ? (
+                        renderPaymentPlanSummary(displayItems(field) ?? field.currentItems)
                       ) : (
-                        <p className="text-foreground">{displayValue(field) ?? "—"}</p>
+                        <p className="break-words text-foreground">{displayValue(field) ?? "—"}</p>
                       )}
                     </div>
                   </div>
                   {field.sourceUrl ? (
-                    <p className="text-[10px] text-muted">
+                    <p className="break-words text-[10px] text-muted">
                       Source: {field.sourceType ? SOURCE_TIER_LABEL[field.sourceType] : "Unknown"} · {field.sourceUrl}
                       {field.confidence ? ` · Confidence: ${field.confidence}` : ""}
                     </p>
@@ -601,6 +702,22 @@ export default function EnrichmentProposalPanel({
                           className="rounded-sm border border-border px-2 py-0.5 text-[10px] font-mono uppercase text-muted hover:border-accent hover:text-accent disabled:opacity-50"
                         >
                           Edit
+                        </button>
+                      ) : null}
+                      {/* Targeted fix (Slug editability -- surfaced this same gap for
+                          every CONFIRMED, editable field): "Save Edit" only stages the
+                          new value in local state; without this button there was no way
+                          to actually persist a CONFIRMED field's edit (unlike GREEN_NEW/
+                          YELLOW/CONFLICT, which already have an Accept button, and MISSING,
+                          which already has its own equivalent Save button below). */}
+                      {canEdit && editedValue[field.key] !== undefined ? (
+                        <button
+                          type="button"
+                          disabled={busy || done}
+                          onClick={() => handleAccept(field)}
+                          className="rounded-sm border border-positive/40 px-2 py-0.5 text-[10px] font-mono uppercase text-positive hover:bg-positive/10 disabled:opacity-50"
+                        >
+                          Save
                         </button>
                       ) : null}
                       {statusLine(field.key)}

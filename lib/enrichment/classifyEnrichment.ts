@@ -1,4 +1,5 @@
 import { buildProjectReviewCompleteness, type ProjectReviewContext } from "../ingestion/reviewFieldRegistry";
+import { mergeLegacyPaymentPlans } from "../ingestion/paymentPlanFormat";
 import type { ProjectImportPayload } from "../ingestion/connectors/fileImport/types";
 import { SOURCE_TIER_RANK, type EnrichmentField, type SourceFactsMap, type SourceMeta } from "./types";
 
@@ -46,10 +47,18 @@ export function classifyProjectEnrichment(
 ): EnrichmentField[] {
   const completeness = buildProjectReviewCompleteness(currentPayload, context);
   const results: EnrichmentField[] = [];
+  // Targeted fix (Payment Plan editor) -- the ONE field whose editor needs
+  // to reconstruct real structured entries from the CURRENT value, not just
+  // its "N plan(s) listed" count string. Computed once via the exact same
+  // merge function the registry itself uses, so this can never disagree
+  // with what buildProjectReviewCompleteness already decided is current.
+  const raw = currentPayload as unknown as Record<string, unknown>;
+  const currentPaymentPlanItems = mergeLegacyPaymentPlans(raw.paymentPlans, raw.paymentPlanType, raw.paymentPlanDescription);
 
   for (const group of completeness.groups) {
     for (const field of group.fields) {
       const currentValue = field.status === "MISSING" ? null : field.value;
+      const currentItems = field.key === "paymentPlans" ? currentPaymentPlanItems : undefined;
       const fact = sourceFacts[field.key];
 
       if (!fact) {
@@ -70,6 +79,7 @@ export function classifyProjectEnrichment(
           reason: currentValue
             ? "No new source value found for this field; the existing value is retained as-is."
             : "No value found for this field in any inspected source.",
+          currentItems,
         });
         continue;
       }
@@ -108,6 +118,7 @@ export function classifyProjectEnrichment(
         classification,
         reason,
         proposedItems: fact.items,
+        currentItems,
       });
     }
   }

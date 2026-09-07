@@ -57,7 +57,7 @@ export interface EnrichmentConflict {
  */
 const FOUNDER_FIELD_LABELS: readonly (readonly [string, string])[] = [
   ["name", "Project Name"],
-  ["builder", "Developer"],
+  ["developerGroup", "Developer"],
   ["locality", "Locality"],
   ["microMarket", "Micro-market"],
   ["status", "Status"],

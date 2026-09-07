@@ -31,7 +31,7 @@ describe("buildFounderReviewSummary", () => {
     const keys = summary.fields.map((f) => f.key);
     expect(keys).toEqual([
       "name",
-      "builder",
+      "developerGroup",
       "locality",
       "microMarket",
       "status",
@@ -71,11 +71,23 @@ describe("buildFounderReviewSummary", () => {
     const completeness = buildProjectReviewCompleteness(LINKBAY_PAYLOAD, { localityName: "Andheri West" });
     const summary = buildFounderReviewSummary(completeness)!;
     const byKey = new Map(summary.fields.map((f) => [f.key, f]));
-    expect(byKey.get("builder")).toMatchObject({ status: "MISSING", value: null });
+    expect(byKey.get("developerGroup")).toMatchObject({ status: "MISSING", value: null });
     expect(byKey.get("address")).toMatchObject({ status: "MISSING", value: null });
     expect(byKey.get("microMarket")).toMatchObject({ status: "MISSING", value: null });
     expect(byKey.get("possession")).toMatchObject({ status: "MISSING", value: null });
     expect(summary.missingCount).toBe(byKey.size - summary.receivedCount - summary.needsReviewCount);
+  });
+
+  it("targeted fix (Developer false-Missing regression) -- a populated developerGroup is RECEIVED, never MISSING, under its founder-facing 'Developer' label", () => {
+    const completeness = buildProjectReviewCompleteness(
+      { ...LINKBAY_PAYLOAD, developerGroup: "Adani Realty" },
+      { localityName: "Andheri West" }
+    );
+    const summary = buildFounderReviewSummary(completeness)!;
+    const developer = summary.fields.find((f) => f.key === "developerGroup")!;
+    expect(developer.label).toBe("Developer");
+    expect(developer.status).toBe("RECEIVED");
+    expect(developer.value).toBe("Adani Realty");
   });
 
   it("merges possessionMonth+possessionYear into one Possession field, RECEIVED only when both halves are", () => {

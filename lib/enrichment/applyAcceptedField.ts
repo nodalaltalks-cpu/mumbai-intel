@@ -1,4 +1,5 @@
 import { CATEGORY_LABEL, POSSESSION_MONTH_LABEL, STATUS_LABEL } from "@/lib/project-meta";
+import { slugify } from "@/lib/slug";
 
 export type ApplyAcceptedFieldResult = { ok: true; payload: Record<string, unknown> } | { ok: false; error: string };
 
@@ -22,7 +23,6 @@ export type ApplyAcceptedFieldResult = { ok: true; payload: Record<string, unkno
  *    narrower exception: it's accepted as a raw name string straight into
  *    `microMarketId` (a pre-existing, deliberately looser convention for
  *    this one lower-stakes field, not a real foreign-key resolution).
- *  - `slug` is always auto-derived at approval time, never a real field.
  *  - `dataSource`/`sourceRef` describe the STAGING record's own origin
  *    (e.g. MagicBricks), not something an official source cross-checks or a
  *    founder types by hand.
@@ -33,6 +33,14 @@ export type ApplyAcceptedFieldResult = { ok: true; payload: Record<string, unkno
  * AUTO_ACCEPTs either -- description is Tier C, launchDate is Tier B, both
  * always HUMAN_REVIEW regardless -- this only unblocks the founder's own
  * manual accept/edit).
+ *
+ * `slug` (Targeted fix, Slug editability) is likewise founder-editable now:
+ * it still auto-derives from `name` by default (unchanged), but a founder
+ * can override it, normalized through the SAME slugify() every other slug
+ * in this codebase uses. The REAL uniqueness enforcement stays exactly
+ * where it always was -- ensureUniqueSlug's DB-backed collision-retry loop
+ * at approval time (lib/actions/ingestion.ts) -- this function never
+ * touches the database and never weakens that check.
  */
 export function applyAcceptedField(
   currentPayload: Record<string, unknown>,
@@ -77,6 +85,22 @@ export function applyAcceptedField(
     const iso = parseIsoDate(value);
     if (iso === null) return { ok: false, error: `"${value}" is not a valid date (expected YYYY-MM-DD).` };
     return { ok: true, payload: { ...currentPayload, launchDateIso: iso } };
+  }
+
+  // Targeted fix (Slug editability) -- always normalized through the SAME
+  // slugify() every other slug in this codebase goes through (Builder edits,
+  // approval-time Project creation), so a founder-typed value can never
+  // land in payload.slug in a shape ensureUniqueSlug's own DB-uniqueness
+  // loop (lib/actions/ingestion.ts's applyProjectApproval) wasn't built to
+  // expect. Uniqueness itself is NOT re-checked here on purpose -- this
+  // function is synchronous and never touches the database (see this file's
+  // own doc comment); the existing ensureUniqueSlug collision-retry loop is
+  // the one and only place that's authoritative, and it runs unconditionally
+  // at approval time regardless of what's staged here.
+  if (fieldKey === "slug") {
+    const normalized = slugify(value);
+    if (!normalized) return { ok: false, error: `"${value}" does not contain any valid slug characters.` };
+    return { ok: true, payload: { ...currentPayload, slug: normalized } };
   }
 
   if (fieldKey === "constructionPercent") {
@@ -164,6 +188,10 @@ export function validateProposedEdit(fieldKey: string, value: string): ValidateE
     return parseIsoDate(trimmed) !== null ? { ok: true } : { ok: false, error: `"${trimmed}" is not a valid date (expected YYYY-MM-DD).` };
   }
 
+  if (fieldKey === "slug") {
+    return slugify(trimmed) ? { ok: true } : { ok: false, error: `"${trimmed}" does not contain any valid slug characters.` };
+  }
+
   if (fieldKey === "constructionPercent") {
     return parsePercent(trimmed) !== null ? { ok: true } : { ok: false, error: `"${trimmed}" is not a valid percentage (e.g. "45%").` };
   }
@@ -188,8 +216,6 @@ const DIRECT_STRING_FIELDS: Record<string, string> = {
   googleMapsUrl: "googleMapsUrl",
   reraNumber: "reraNumber",
   reraCertificateUrl: "reraCertificateUrl",
-  paymentPlanType: "paymentPlanType",
-  paymentPlanDescription: "paymentPlanDescription",
   actualPossession: "actualPossession",
   coverImage: "coverImageUrl",
   videoUrl: "videoUrl",
@@ -223,6 +249,11 @@ const SPECIAL_CASED_FIELDS: ReadonlySet<string> = new Set([
   "constructionPercent",
   "landAreaAcres",
   "launchDate",
+  // Targeted fix (Slug editability) -- slug is no longer excluded: KEEP the
+  // field (it's used for stable public URLs), but it needs its own
+  // slugify()-normalizing branch above rather than a plain passthrough, so
+  // it lives here rather than in DIRECT_STRING_FIELDS.
+  "slug",
 ]);
 
 /**
@@ -232,14 +263,14 @@ const SPECIAL_CASED_FIELDS: ReadonlySet<string> = new Set([
  * value to edit-then-accept, but the founder can still type one from
  * scratch) -- reuses the exact same three lookups applyAcceptedField's own
  * dispatch already keys on, so this can never drift from what Accept would
- * actually do. Excludes locality/builder/slug/dataSource/sourceRef -- see
- * this file's own top doc comment for why each is unsupported.
+ * actually do. Excludes locality/builder/dataSource/sourceRef -- see this
+ * file's own top doc comment for why each is unsupported.
  */
 export function isFieldManuallyEditable(fieldKey: string): boolean {
   return Object.hasOwn(DIRECT_STRING_FIELDS, fieldKey) || Object.hasOwn(ARRAY_WRAP_FIELDS, fieldKey) || SPECIAL_CASED_FIELDS.has(fieldKey);
 }
 
-export type FieldEditorKind = "array" | "enum-status" | "enum-category" | "month" | "date" | "text" | "textarea";
+export type FieldEditorKind = "array" | "payment-plan-list" | "enum-status" | "enum-category" | "month" | "date" | "text" | "textarea";
 
 /**
  * Phase 36 -- tells EnrichmentProposalPanel which editing control a field
@@ -252,6 +283,11 @@ export type FieldEditorKind = "array" | "enum-status" | "enum-category" | "month
  * validation rule.
  */
 export function getFieldEditorKind(fieldKey: string, currentValueLength: number): FieldEditorKind {
+  // Targeted fix (Payment Plan -- one clean founder field): paymentPlans
+  // needs its own structured name+description list editor, not the generic
+  // flat-string array editor every other ARRAY_WRAP_FIELDS entry uses --
+  // checked BEFORE that generic branch.
+  if (fieldKey === "paymentPlans") return "payment-plan-list";
   if (Object.hasOwn(ARRAY_WRAP_FIELDS, fieldKey)) return "array";
   if (fieldKey === "status") return "enum-status";
   if (fieldKey === "category") return "enum-category";

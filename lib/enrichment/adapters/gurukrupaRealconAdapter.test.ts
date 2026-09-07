@@ -228,7 +228,7 @@ describe("extractGurukrupaEkamFacts (Phase 40 — fourth developer, first discov
     expect(byKey("status").classification).toBe("CONFIRMED"); // "Under Construction" matches the existing staged value
     expect(byKey("googleMapsUrl").classification).toBe("GREEN_NEW"); // was blank, real value found
     expect(byKey("locality").classification).toBe("CONFLICT"); // staged "Andheri West" vs the page's own plainer "Andheri" -- never silently overwritten
-    expect(result).toHaveLength(40);
+    expect(result).toHaveLength(38);
   });
 
   it("19. never leaks Godrej fixture content into a Gurukrupa extraction run", () => {

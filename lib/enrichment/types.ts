@@ -77,6 +77,17 @@ export interface EnrichmentField {
   reason: string;
   /** Pass-through of RawSourceFact.items (Phase 32) -- the real list behind a count-displayed field, when the source provided one. */
   proposedItems?: string[];
+  /**
+   * Targeted fix (Payment Plan editor) -- the real underlying array behind
+   * a count-displayed CURRENT value (e.g. "2 plan(s) listed"), for the ONE
+   * field key (paymentPlans) whose editor needs to seed from the actual
+   * current list rather than just its count string. Only populated for that
+   * key; every other array field still has no way to recover its real
+   * current items (the same pre-existing limitation as before this fix --
+   * deliberately not generalized further, since no other field's editor
+   * needs to reconstruct structured entries from it).
+   */
+  currentItems?: string[];
 }
 
 /**

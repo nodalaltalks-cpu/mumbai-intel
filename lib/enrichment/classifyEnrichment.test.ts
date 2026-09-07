@@ -94,14 +94,45 @@ describe("classifyProjectEnrichment — Part M rules (generic, not project-speci
     }
   });
 
-  it("15. reuses the existing 40-field registry exactly -- same field count, same keys, no second registry", () => {
+  it("15. reuses the existing 38-field registry exactly -- same field count, same keys, no second registry", () => {
     const completeness = buildProjectReviewCompleteness(GODREJ_PAYLOAD, CONTEXT);
     const result = classifyProjectEnrichment(GODREJ_PAYLOAD, CONTEXT, {}, { url: "https://example.com", tier: "OFFICIAL_DEVELOPER" });
-    expect(result).toHaveLength(40);
+    expect(result).toHaveLength(38);
     expect(result).toHaveLength(completeness.totalFields);
     const registryKeys = completeness.groups.flatMap((g) => g.fields.map((f) => f.key)).sort();
     const enrichmentKeys = result.map((f) => f.key).sort();
     expect(enrichmentKeys).toEqual(registryKeys);
+  });
+
+  it("16. targeted fix (Payment Plan editor data-loss bug found in live verification): paymentPlans carries currentItems -- the REAL current plan list, not just its 'N plan(s) listed' count string, so a founder opening Edit on an already-populated field never sees a blank editor that would discard the existing plans on save", () => {
+    const payload = {
+      ...GODREJ_PAYLOAD,
+      paymentPlans: ["Construction Linked Plan: 10:80:10", "Down Payment Plan: 5% discount"],
+    } as unknown as ProjectImportPayload;
+    const result = classifyProjectEnrichment(payload, CONTEXT, {}, { url: "https://example.com", tier: "OFFICIAL_DEVELOPER" });
+    const field = byKey(result, "paymentPlans")!;
+    expect(field.classification).toBe("CONFIRMED");
+    expect(field.currentValue).toBe("2 plan(s) listed"); // the display string, unchanged
+    expect(field.currentItems).toEqual(["Construction Linked Plan: 10:80:10", "Down Payment Plan: 5% discount"]); // the real list, newly available
+  });
+
+  it("17. paymentPlans' currentItems falls back to the legacy paymentPlanType/paymentPlanDescription pair, folded into one entry, exactly matching the registry's own consolidation", () => {
+    const payload = {
+      ...GODREJ_PAYLOAD,
+      paymentPlanType: "Construction Linked",
+      paymentPlanDescription: "10:80:10",
+    } as unknown as ProjectImportPayload;
+    const result = classifyProjectEnrichment(payload, CONTEXT, {}, { url: "https://example.com", tier: "OFFICIAL_DEVELOPER" });
+    const field = byKey(result, "paymentPlans")!;
+    expect(field.currentItems).toEqual(["Construction Linked: 10:80:10"]);
+  });
+
+  it("18. no other field key ever gets a currentItems value -- this is scoped to paymentPlans only, not a general current-items mechanism", () => {
+    const result = classifyProjectEnrichment(GODREJ_PAYLOAD, CONTEXT, {}, { url: "https://example.com", tier: "OFFICIAL_DEVELOPER" });
+    for (const field of result) {
+      if (field.key === "paymentPlans") continue;
+      expect(field.currentItems).toBeUndefined();
+    }
   });
 });
 
@@ -196,7 +227,7 @@ describe("Godrej Sky Shore acceptance test (Phase 28 Part L — the 10 named cas
     expect(byKey(result, "amenities")!.classification).toBe("YELLOW");
   });
 
-  it("total field count is still exactly 40 for the full Godrej run", () => {
-    expect(result).toHaveLength(40);
+  it("total field count is still exactly 38 for the full Godrej run", () => {
+    expect(result).toHaveLength(38);
   });
 });

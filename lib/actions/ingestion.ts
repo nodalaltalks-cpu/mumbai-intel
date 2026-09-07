@@ -206,7 +206,15 @@ async function applyProjectApproval(record: { targetId: string | null; payload: 
   }
   const city = await prisma.city.findUnique({ where: { slug: PRIMARY_CITY_SLUG }, select: { id: true } });
   if (!city) throw new Error(`Primary city "${PRIMARY_CITY_SLUG}" is not seeded`);
-  const slug = await ensureUniqueSlug(payload.name, async (candidate) => {
+  // Targeted fix (Slug editability) -- a founder-provided override
+  // (payload.slug, set via the Enrichment dialog's Edit action) takes
+  // priority over the name-derived default; ensureUniqueSlug's own
+  // collision-retry loop still runs unconditionally either way, so a
+  // founder-typed slug that happens to collide with an existing project is
+  // safely auto-suffixed, never rejected outright and never overwriting the
+  // other project's slug. Absent (the normal case) preserves the exact
+  // existing auto-generated-from-name behavior.
+  const slug = await ensureUniqueSlug(payload.slug || payload.name, async (candidate) => {
     const existing = await prisma.project.findUnique({ where: { slug: candidate } });
     return Boolean(existing);
   });

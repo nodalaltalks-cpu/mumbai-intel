@@ -1,5 +1,6 @@
 import { slugify } from "@/lib/slug";
 import { formatDate, formatPaise } from "@/lib/format";
+import { mergeLegacyPaymentPlans } from "./paymentPlanFormat";
 import {
   CATEGORY_LABEL,
   POSSESSION_MONTH_LABEL,
@@ -120,18 +121,23 @@ export function buildProjectReviewCompleteness(payload: ProjectImportPayload, co
     matched && payload.reraNumber && matched.reraNumber && matched.reraNumber !== payload.reraNumber
       ? `Possible duplicate match has a different RERA number: "${matched.reraNumber}"`
       : undefined;
+  const effectivePaymentPlans = mergeLegacyPaymentPlans(raw.paymentPlans, raw.paymentPlanType, raw.paymentPlanDescription);
 
   const general: ReviewFieldGroup = {
     key: "general",
     label: "General",
     fields: [
       field("name", "Name", payload.name, payload.name || null, nameReview),
-      field(
-        "slug",
-        "Slug",
-        payload.name,
-        payload.name ? `${slugify(payload.name)} (auto-generated preview, finalized at approval)` : null
-      ),
+      // Targeted fix (Slug editability) -- payload.slug is a founder-typed
+      // override (set only via the Enrichment dialog's Edit action, see
+      // applyAcceptedField.ts); absent means "not edited yet", so this keeps
+      // showing the exact same auto-generated-from-name preview it always
+      // has. The value shown here is the BARE slug candidate on purpose
+      // (never a decorated "(auto-generated preview...)" string) -- this
+      // exact value is what seeds the founder's Edit textarea, and a
+      // decorative suffix baked into it would get slugified along with the
+      // real value the moment they clicked Save without changing anything.
+      field("slug", "Slug", payload.slug || payload.name, payload.slug || (payload.name ? slugify(payload.name) : null)),
       field("developerGroup", "Developer", payload.developerGroup, payload.developerGroup ?? null),
       field("status", "Status", payload.status, payload.status ? STATUS_LABEL[payload.status] : null, statusReview),
       field("category", "Category", payload.category, payload.category ? CATEGORY_LABEL[payload.category] : null),
@@ -167,31 +173,19 @@ export function buildProjectReviewCompleteness(payload: ProjectImportPayload, co
         raw.reraCertificateUrl,
         typeof raw.reraCertificateUrl === "string" ? raw.reraCertificateUrl : null
       ),
-      field(
-        "paymentPlanType",
-        "Payment plan type",
-        raw.paymentPlanType,
-        typeof raw.paymentPlanType === "string" ? raw.paymentPlanType : null
-      ),
-      field(
-        "paymentPlanDescription",
-        "Payment plan description",
-        raw.paymentPlanDescription,
-        typeof raw.paymentPlanDescription === "string" ? raw.paymentPlanDescription : null
-      ),
-      // Targeted fix (post-Phase 71B founder testing) -- real projects can
-      // offer multiple alternative payment plans (e.g. Construction Linked
-      // AND Down Payment), which paymentPlanType/paymentPlanDescription above
-      // (a single type + single free-text description) can't represent.
-      // Deliberately additive: those two fields are untouched for backward
-      // compatibility with every existing staging record; this is a NEW,
-      // separate array-shaped field (same convention as highlights/amenities
-      // below), each entry a self-contained "Type: description" string.
+      // Targeted fix (Payment Plan -- one clean founder field): the legacy
+      // paymentPlanType/paymentPlanDescription columns and the newer
+      // paymentPlans array used to show up as THREE separate, competing
+      // rows here. mergeLegacyPaymentPlans folds them into ONE effective
+      // list (the array when it has real entries, else the legacy pair as
+      // one synthesized entry) -- never a second display of the same data,
+      // and the legacy columns themselves are never touched/deleted, just
+      // no longer given their own row.
       field(
         "paymentPlans",
-        "Payment plans",
-        raw.paymentPlans,
-        Array.isArray(raw.paymentPlans) ? `${raw.paymentPlans.length} plan(s) listed` : null
+        "Payment plan",
+        effectivePaymentPlans,
+        effectivePaymentPlans.length > 0 ? `${effectivePaymentPlans.length} plan(s) listed` : null
       ),
     ],
   };

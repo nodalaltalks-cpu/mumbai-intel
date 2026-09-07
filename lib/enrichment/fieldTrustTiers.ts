@@ -67,8 +67,6 @@ const TIER_B_FIELDS: readonly string[] = [
   "landAreaAcres",
   "totalUnits",
   "totalTowers",
-  "paymentPlanType",
-  "paymentPlanDescription",
   "dataSource",
   "sourceRef",
 ];

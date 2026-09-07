@@ -135,19 +135,19 @@ export default function EnrichmentFieldHistoryDialog({
                   </div>
                   {entry.action === "REJECT" ? (
                     <>
-                      <p className="mt-1.5 text-[11px] text-muted">
+                      <p className="mt-1.5 break-words text-[11px] text-muted">
                         Declined proposed value: <span className="text-foreground">{displayText(entry.after)}</span>
                       </p>
-                      {entry.after?.reason ? <p className="mt-0.5 text-[11px] text-foreground">Reason: {entry.after.reason}</p> : null}
+                      {entry.after?.reason ? <p className="mt-0.5 break-words text-[11px] text-foreground">Reason: {entry.after.reason}</p> : null}
                     </>
                   ) : (
-                    <p className="mt-1.5 text-[11px] text-muted">
+                    <p className="mt-1.5 break-words text-[11px] text-muted">
                       <span className="text-foreground">{displayText(entry.before)}</span>
                       <span className="mx-1">→</span>
                       <span className="text-foreground">{displayText(entry.after)}</span>
                     </p>
                   )}
-                  {entry.after?.sourceUrl ? <p className="mt-0.5 text-[10px] text-muted">Source: {entry.after.sourceUrl}</p> : null}
+                  {entry.after?.sourceUrl ? <p className="mt-0.5 break-words text-[10px] text-muted">Source: {entry.after.sourceUrl}</p> : null}
                 </div>
               ))}
             </div>

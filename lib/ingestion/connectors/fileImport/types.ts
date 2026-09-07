@@ -9,6 +9,8 @@ import type { Confidence, DataSource, ProjectStatus, PropertyCategory } from "@/
  */
 export interface ProjectImportPayload {
   name: string;
+  /** Founder-editable override (Targeted fix, Slug editability) -- set only via the Enrichment dialog's Edit action on the "slug" field. Absent means "use the auto-generated preview from `name`", exactly as before this field existed; present means the approval path (lib/actions/ingestion.ts's applyProjectApproval) uses THIS as ensureUniqueSlug's base instead of `name`. Never written by any adapter/importer -- founder-only. */
+  slug?: string;
   reraNumber?: string;
   address?: string;
   status: ProjectStatus;
