@@ -1,0 +1,7 @@
+{
+  "actorSpecification": 1,
+  "name": "ndt-apify-test-actor",
+  "title": "NDT Apify Integration Test Actor",
+  "description": "Integration-test only: pushes one hardcoded dummy Project record to verify the Apify -> NoDalalTalks ingestion bridge (/api/ingest/apify). Does not scrape any real website or portal.",
+  "version": "1.0"
+}

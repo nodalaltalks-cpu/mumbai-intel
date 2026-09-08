@@ -1,0 +1,14 @@
+{
+  "name": "ndt-apify-test-actor",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Integration-test-only Apify Actor: outputs exactly one hardcoded dummy Project record to verify the Apify -> NoDalalTalks ingestion bridge. Performs no scraping and makes no network requests.",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js"
+  },
+  "dependencies": {
+    "apify": "^3.7.2"
+  }
+}
