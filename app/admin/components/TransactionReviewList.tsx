@@ -11,6 +11,7 @@ import {
 import { formatDate } from "@/lib/format";
 import type { ReviewCompleteness } from "@/lib/ingestion/transactionFieldRegistry";
 import ConfirmButton from "./ConfirmButton";
+import TrashConfirmButton from "./TrashConfirmButton";
 import TransactionDataDetailsDialog from "./TransactionDataDetailsDialog";
 
 export interface TransactionReviewRecord {
@@ -149,7 +150,12 @@ export default function TransactionReviewList({ records }: { records: Transactio
                 confirmLabel="Approve?"
                 className="border-positive/40 text-positive hover:border-positive hover:text-positive"
               />
-              <ConfirmButton action={rejectStagingRecordAction.bind(null, record.id)} label="Reject" confirmLabel="Reject?" />
+              <TrashConfirmButton
+                action={rejectStagingRecordAction.bind(null, record.id)}
+                itemName={record.proposedTitle}
+                itemIdentity={record.proposedLines[0] ?? null}
+                label="Reject"
+              />
             </div>
           </div>
 

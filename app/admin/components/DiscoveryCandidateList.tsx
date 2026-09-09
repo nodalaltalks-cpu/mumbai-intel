@@ -3,6 +3,7 @@
 import { Fragment, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Badge, { type BadgeTone } from "@/app/components/ui/Badge";
+import Dialog from "@/app/components/ui/Dialog";
 import StickyHorizontalScrollbar from "./StickyHorizontalScrollbar";
 import { formatDate } from "@/lib/format";
 import type { DiscoveryFounderAction } from "@/lib/ingestion/discovery/statusTransitions";
@@ -204,6 +205,14 @@ export default function DiscoveryCandidateList({
 
   const [savingWebsiteId, setSavingWebsiteId] = useState<string | null>(null);
   const [websiteErrors, setWebsiteErrors] = useState<Record<string, string>>({});
+
+  // Data Sync Control Center fix, Problem 2 -- Exclude had NO confirmation at
+  // all before this (unlike Include/Review, which only warn when CHANGING an
+  // already-made decision -- see handleAction's own window.confirm below,
+  // left untouched). This adds the requested themed confirmation without
+  // altering handleAction itself: confirming just calls the exact same
+  // handleAction(row, "EXCLUDE") the button always called.
+  const [excludeConfirmRow, setExcludeConfirmRow] = useState<DiscoveryCandidateRow | null>(null);
 
   async function handleAction(row: DiscoveryCandidateRow, action: DiscoveryFounderAction) {
     const currentDecision = decisionForStatus(localStatus[row.id] ?? row.status).label;
@@ -445,7 +454,7 @@ export default function DiscoveryCandidateList({
                           type="button"
                           disabled={busy || isEditing}
                           title={isEditing ? "Save or cancel your edits first." : undefined}
-                          onClick={() => handleAction(row, "EXCLUDE")}
+                          onClick={() => setExcludeConfirmRow(row)}
                           className="rounded-sm border border-negative/40 px-2 py-0.5 text-[10px] font-mono uppercase text-negative hover:bg-negative/10 disabled:opacity-50"
                         >
                           ✕ Exclude
@@ -602,6 +611,41 @@ export default function DiscoveryCandidateList({
       </table>
     </div>
     <StickyHorizontalScrollbar targetRef={tableScrollRef} watch={rows.map((r) => r.id).join(",")} />
+
+    {excludeConfirmRow ? (
+      <Dialog title="Move to Trash?" onClose={() => setExcludeConfirmRow(null)}>
+        <div className="flex flex-col gap-3 text-xs">
+          <div>
+            <p className="font-mono text-sm font-semibold text-foreground">{excludeConfirmRow.payload.projectName}</p>
+            <p className="mt-0.5 text-muted">{excludeConfirmRow.payload.developerName}</p>
+          </div>
+          <p className="text-warning">This will remove it from the active Data Sync workflow. You can restore it from Trash.</p>
+          {errors[excludeConfirmRow.id] ? <p className="text-negative">{errors[excludeConfirmRow.id]}</p> : null}
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              disabled={busyId === excludeConfirmRow.id}
+              onClick={() => setExcludeConfirmRow(null)}
+              className="rounded-sm border border-border px-3 py-1.5 text-[11px] font-mono uppercase tracking-wide text-muted hover:border-foreground hover:text-foreground disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={busyId === excludeConfirmRow.id}
+              onClick={async () => {
+                const row = excludeConfirmRow;
+                await handleAction(row, "EXCLUDE");
+                setExcludeConfirmRow(null);
+              }}
+              className="rounded-sm border border-negative/50 bg-negative/10 px-3 py-1.5 text-[11px] font-mono uppercase tracking-wide text-negative hover:bg-negative/20 disabled:opacity-50"
+            >
+              {busyId === excludeConfirmRow.id ? "Moving..." : "Move to Trash"}
+            </button>
+          </div>
+        </div>
+      </Dialog>
+    ) : null}
     </>
   );
 }

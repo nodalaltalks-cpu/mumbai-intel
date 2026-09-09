@@ -74,6 +74,7 @@ const NAV_SECTIONS: { label: string; links: { label: string; href: string }[] }[
       { label: "Import Data", href: "/admin/data-sync/import" },
       { label: "Project Review", href: "/admin/data-sync/review" },
       { label: "Founder Exceptions", href: "/admin/data-sync/founder-exceptions" },
+      { label: "Research Activity", href: "/admin/data-sync/research-activity" },
       { label: "Discovery", href: "/admin/data-sync/discovery" },
       { label: "Discovery Coverage", href: "/admin/data-sync/coverage" },
       { label: "Transaction Review", href: "/admin/data-sync/transaction-review" },

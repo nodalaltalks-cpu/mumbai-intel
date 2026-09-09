@@ -46,6 +46,7 @@ import {
   type StatusFilter,
 } from "@/lib/enrichment/reviewQueueFilters";
 import ConfirmButton from "./ConfirmButton";
+import TrashConfirmButton from "./TrashConfirmButton";
 import ReviewDataDetailsDialog from "./ReviewDataDetailsDialog";
 import EnrichmentDialog from "./EnrichmentDialog";
 import ResearchDialog from "./ResearchDialog";
@@ -650,7 +651,12 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
                 confirmLabel="Approve?"
                 className="border-positive/40 text-positive hover:border-positive hover:text-positive"
               />
-              <ConfirmButton action={rejectStagingRecordAction.bind(null, record.id)} label="Reject" confirmLabel="Reject?" />
+              <TrashConfirmButton
+                action={rejectStagingRecordAction.bind(null, record.id)}
+                itemName={record.proposedTitle}
+                itemIdentity={record.proposedLines[0] ?? null}
+                label="Reject"
+              />
               {record.isProject ? (
                 <button
                   type="button"

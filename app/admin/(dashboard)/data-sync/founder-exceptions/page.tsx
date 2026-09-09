@@ -39,6 +39,13 @@ export default async function FounderExceptionsPage({
         <p className="mt-2 font-mono text-xs text-muted">
           {openProjectCount} project{openProjectCount === 1 ? "" : "s"} · {openCount} open field{openCount === 1 ? "" : "s"}
         </p>
+        <p className="mt-2 text-xs text-muted">
+          Looking for what the research agent found and changed, not what still needs you?{" "}
+          <a href="/admin/data-sync/research-activity" className="text-accent hover:underline">
+            View Research Activity
+          </a>{" "}
+          — a genuinely accepted or already-resolved research finding is never listed here as an exception.
+        </p>
       </div>
 
       <div className="flex items-center gap-2">
