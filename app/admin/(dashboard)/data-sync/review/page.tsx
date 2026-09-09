@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { getPendingStagingRecords } from "@/lib/admin-queries";
 import { prisma } from "@/lib/prisma";
 import { formatDate, formatPaise, formatPriceBand } from "@/lib/format";
@@ -14,6 +15,7 @@ import {
 import { computeApprovalReadiness } from "@/lib/ingestion/projectApprovalReadiness";
 import { deriveEnrichmentBadge, readEnrichmentSummary } from "@/lib/enrichment/enrichmentSummary";
 import { resolveSavedDeveloperWebsite, type BuilderForWebsiteLookup } from "@/lib/enrichment/developerWebsite";
+import { getResearchActivityForStagingIds } from "@/lib/enrichment/researchAttribution";
 import ReviewQueueList, { type ReviewRecord } from "@/app/admin/components/ReviewQueueList";
 import EmptyState from "@/app/components/ui/EmptyState";
 
@@ -103,6 +105,12 @@ export default async function DataSyncReviewPage() {
     ? await prisma.project.findMany({ where: { id: { in: transactionProjectIds } }, select: { id: true, name: true } })
     : [];
   const transactionProjectNameById = new Map(transactionProjects.map((p) => [p.id, p.name]));
+
+  // Search + Agent Change Visibility, Part 1/3 — batched (one AuditLog query
+  // for every Project staging record on this page, never N+1) read-only
+  // research-attribution lookup. See lib/enrichment/researchAttribution.ts's
+  // own doc comment for exactly what evidence this reuses.
+  const researchActivityById = await getResearchActivityForStagingIds(projectRecords.map((r) => r.id));
 
   const reviewRecords: ReviewRecord[] = records.map((record) => {
     const isProject = record.entityType === "Project";
@@ -238,6 +246,32 @@ export default async function DataSyncReviewPage() {
     // enrichment logic, no live re-fetch.
     const enrichmentOutstanding = isProject ? (readEnrichmentSummary(record.payload)?.outstanding ?? null) : null;
 
+    // Search + Agent Change Visibility, Part 1/2/3 -- Project-only. Reads
+    // straight off values this same map() iteration has already resolved
+    // (builder/locality name lookups above), never a new query.
+    const developerName = projectPayload
+      ? (projectPayload.builderId ? builderNameById.get(projectPayload.builderId) : null) ?? projectPayload.developerGroup ?? null
+      : null;
+    const localityName = projectPayload ? (localityNameById.get(projectPayload.localityId) ?? null) : null;
+    const reraNumber = projectPayload?.reraNumber ?? null;
+    const address = projectPayload?.address ?? null;
+    // microMarketId isn't a typed ProjectImportPayload field (only ever
+    // written dynamically by an accepted enrichment field, see
+    // lib/actions/research.ts's own `raw.microMarketId` read) -- read the
+    // same defensive way here, purely for search text, never assumed present.
+    const microMarketName =
+      projectPayload && typeof (record.payload as unknown as Record<string, unknown>).microMarketId === "string"
+        ? ((record.payload as unknown as Record<string, unknown>).microMarketId as string)
+        : null;
+    const searchableText = projectPayload
+      ? [proposedTitle, developerName, localityName, microMarketName, reraNumber, address]
+          .filter((v): v is string => Boolean(v))
+          .join("   ")
+          .toLowerCase()
+          .replace(/\s+/g, " ")
+      : null;
+    const researchActivity = isProject ? (researchActivityById.get(record.id) ?? null) : null;
+
     return {
       id: record.id,
       createdAt: record.createdAt.toISOString(),
@@ -254,6 +288,11 @@ export default async function DataSyncReviewPage() {
       readiness,
       enrichmentBadge,
       enrichmentOutstanding,
+      developerName,
+      localityName,
+      reraNumber,
+      searchableText,
+      researchActivity,
     };
   });
 
@@ -269,7 +308,12 @@ export default async function DataSyncReviewPage() {
       {reviewRecords.length === 0 ? (
         <EmptyState title="Nothing to review" message="All imported/synced records were either new or already matched exactly." />
       ) : (
-        <ReviewQueueList records={reviewRecords} />
+        // Search + Agent Change Visibility, Part 9 -- ReviewQueueList reads
+        // the URL (useSearchParams) to seed its search/filter state, which
+        // Next.js requires a Suspense boundary around.
+        <Suspense fallback={null}>
+          <ReviewQueueList records={reviewRecords} />
+        </Suspense>
       )}
     </div>
   );

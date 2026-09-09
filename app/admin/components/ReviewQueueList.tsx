@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   approveStagingRecordAction,
   bulkApproveStagingRecordsAction,
@@ -37,10 +37,19 @@ import {
   type ResearchRunResult,
 } from "@/lib/actions/research";
 import type { ResearchFinding } from "@/lib/enrichment/researchProvider";
+import type { ProjectResearchActivity } from "@/lib/enrichment/researchAttribution";
+import {
+  matchesAllFilters,
+  normalizeSearchQuery,
+  type OriginFilter,
+  type ResearchStatusFilter,
+  type StatusFilter,
+} from "@/lib/enrichment/reviewQueueFilters";
 import ConfirmButton from "./ConfirmButton";
 import ReviewDataDetailsDialog from "./ReviewDataDetailsDialog";
 import EnrichmentDialog from "./EnrichmentDialog";
 import ResearchDialog from "./ResearchDialog";
+import ResearchChangesDialog from "./ResearchChangesDialog";
 
 export interface ReviewRecord {
   id: string;
@@ -63,17 +72,14 @@ export interface ReviewRecord {
   enrichmentBadge: EnrichmentBadgeInfo | null;
   /** Phase 71B — the same persisted run's fieldKey -> classification map (badge above only has counts), so the Review Queue's details dialog can name which field(s) are actually in CONFLICT. Null for every non-Project record or when enrichment has never run. */
   enrichmentOutstanding: Record<string, "GREEN_NEW" | "YELLOW" | "CONFLICT"> | null;
-}
-
-type EnrichmentFilter = "ALL" | "PENDING" | "CONFLICTS" | "NOT_ENRICHED";
-
-function matchesEnrichmentFilter(record: ReviewRecord, filter: EnrichmentFilter): boolean {
-  if (filter === "ALL") return true;
-  const badge = record.enrichmentBadge;
-  if (!badge) return false;
-  if (filter === "PENDING") return badge.status === "READY" && badge.proposedCount > 0;
-  if (filter === "CONFLICTS") return badge.conflictCount > 0;
-  return badge.status === "NOT_RUN"; // NOT_ENRICHED
+  /** Search + Agent Change Visibility, Part 1/2 — Project-only search/filter metadata, all derived server-side from data this page already fetched (no new query). Null for every non-Project record. */
+  developerName: string | null;
+  localityName: string | null;
+  reraNumber: string | null;
+  /** Pre-normalized (lowercase, collapsed whitespace) name+developer+locality+micro-market+RERA+address, for a simple case/spacing-insensitive `includes()` search. Null for every non-Project record (search is Project-only, matching Part 1's scope). */
+  searchableText: string | null;
+  /** Read-only correlation over EXISTING AuditLog rows (lib/enrichment/researchAttribution.ts) — never fabricated, never set merely because "Research Project" was clicked. Null for every non-Project record. */
+  researchActivity: ProjectResearchActivity | null;
 }
 
 /** Phase 46 Part E -- the compact per-row summary. Reuses this codebase's existing plain colored-text convention (see the 🟢/🔴/🟠 completeness line just below it) rather than introducing a new visual pattern. */
@@ -90,6 +96,34 @@ function EnrichmentBadgeLine({ badge }: { badge: EnrichmentBadgeInfo }) {
       <span className="text-accent">● {badge.proposedCount} proposed</span>
       {badge.conflictCount > 0 ? <span className="text-negative">● {badge.conflictCount} conflict{badge.conflictCount === 1 ? "" : "s"}</span> : null}
     </span>
+  );
+}
+
+/**
+ * Search + Agent Change Visibility, Part 5 -- the compact per-card research
+ * indicator. Rendered ONLY when `activity.hasResearch` is true (real,
+ * persisted proposal_created evidence exists -- see
+ * lib/enrichment/researchAttribution.ts); clicking it opens the read-only
+ * "Research Changes" view (Part 6), never a second review system.
+ */
+function ResearchBadgeLine({ activity, onOpen }: { activity: ProjectResearchActivity; onOpen: () => void }) {
+  if (!activity.hasResearch) return null;
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="mt-1 flex flex-wrap items-center gap-2 text-[11px] hover:underline"
+      title="View Research Changes"
+    >
+      <span className="text-accent">🤖 {activity.providerLabel}</span>
+      <span className="text-muted">
+        {activity.passedVerification} finding{activity.passedVerification === 1 ? "" : "s"}
+      </span>
+      {activity.accepted > 0 ? <span className="text-positive">{activity.accepted} accepted</span> : null}
+      {activity.founderEdited > 0 ? <span className="text-positive">{activity.founderEdited} edited</span> : null}
+      {activity.conflicts > 0 ? <span className="text-warning">{activity.conflicts} conflict{activity.conflicts === 1 ? "" : "s"}</span> : null}
+      {activity.rejected > 0 ? <span className="text-negative">{activity.rejected} rejected</span> : null}
+    </button>
   );
 }
 
@@ -152,10 +186,60 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
   const [researchPlanByRecordId, setResearchPlanByRecordId] = useState<Record<string, { loading: boolean; plan: ResearchPlanResult | null }>>({});
   const researchPlanState = researchMode && enrichmentRecordId ? researchPlanByRecordId[enrichmentRecordId] : null;
 
-  // Phase 46 Part F -- a very small filter over the already-loaded records,
-  // client-side only (no new fetch/query, no data-grid infrastructure).
-  const [enrichmentFilter, setEnrichmentFilter] = useState<EnrichmentFilter>("ALL");
-  const visibleRecords = displayRecords.filter((r) => matchesEnrichmentFilter(r, enrichmentFilter));
+  // Search + Agent Change Visibility, Part 1/2/8/9 -- still a pure client-side
+  // filter over the SAME already-loaded `records` array Phase 46 Part F's
+  // enrichmentFilter already used (no new fetch/query, no data-grid/search-
+  // engine infrastructure -- this page's entire pending queue was already
+  // fully loaded into the browser before this task; see getPendingStagingRecords).
+  // Initial values are seeded from the URL (Part 9) so a refresh/bookmark/
+  // shared link reproduces the exact same filtered view.
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const [searchInput, setSearchInput] = useState(() => searchParams.get("search") ?? "");
+  const [searchQuery, setSearchQuery] = useState(() => normalizeSearchQuery(searchParams.get("search") ?? ""));
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => (searchParams.get("status") as StatusFilter) || "ALL");
+  const [researchFilter, setResearchFilter] = useState<ResearchStatusFilter>(() => (searchParams.get("research") as ResearchStatusFilter) || "ALL");
+  const [originFilter, setOriginFilter] = useState<OriginFilter>(() => (searchParams.get("origin") as OriginFilter) || "ALL");
+  const [localityFilter, setLocalityFilter] = useState(() => searchParams.get("locality") ?? "");
+  const [developerFilter, setDeveloperFilter] = useState(() => searchParams.get("developer") ?? "");
+  const [researchChangesRecordId, setResearchChangesRecordId] = useState<string | null>(null);
+
+  // Debounced (Part 8): typing updates `searchInput` immediately for a
+  // responsive text box, but the actual filter pass + URL sync waits 250ms
+  // after the last keystroke.
+  useEffect(() => {
+    const handle = setTimeout(() => setSearchQuery(normalizeSearchQuery(searchInput)), 250);
+    return () => clearTimeout(handle);
+  }, [searchInput]);
+
+  useEffect(() => {
+    const qs = new URLSearchParams();
+    if (searchQuery) qs.set("search", searchQuery);
+    if (statusFilter !== "ALL") qs.set("status", statusFilter);
+    if (researchFilter !== "ALL") qs.set("research", researchFilter);
+    if (originFilter !== "ALL") qs.set("origin", originFilter);
+    if (localityFilter) qs.set("locality", localityFilter);
+    if (developerFilter) qs.set("developer", developerFilter);
+    const qsString = qs.toString();
+    router.replace(qsString ? `${pathname}?${qsString}` : pathname, { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, statusFilter, researchFilter, originFilter, localityFilter, developerFilter]);
+
+  const localityOptions = useMemo(
+    () => Array.from(new Set(records.map((r) => r.localityName).filter((v): v is string => Boolean(v)))).sort(),
+    [records]
+  );
+  const developerOptions = useMemo(
+    () => Array.from(new Set(records.map((r) => r.developerName).filter((v): v is string => Boolean(v)))).sort(),
+    [records]
+  );
+
+  const visibleRecords = displayRecords.filter((r) =>
+    matchesAllFilters(r, { search: searchQuery, status: statusFilter, research: researchFilter, origin: originFilter, locality: localityFilter, developer: developerFilter })
+  );
+  const isFiltered = Boolean(searchQuery || statusFilter !== "ALL" || researchFilter !== "ALL" || originFilter !== "ALL" || localityFilter || developerFilter);
+  const researchChangesRecord = displayRecords.find((r) => r.id === researchChangesRecordId) ?? null;
 
   function runEnrichment(recordId: string) {
     setResearchMode(false);
@@ -424,31 +508,88 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
         ) : null}
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        {(
-          [
-            ["ALL", "All"],
-            ["PENDING", "Enrichment pending"],
-            ["CONFLICTS", "Conflicts"],
-            ["NOT_ENRICHED", "Not enriched"],
-          ] as [EnrichmentFilter, string][]
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => setEnrichmentFilter(value)}
-            className={`rounded-sm border px-2 py-1 text-[11px] font-mono uppercase tracking-wide ${
-              enrichmentFilter === value ? "border-accent bg-accent/10 text-accent" : "border-border text-muted hover:border-accent hover:text-accent"
-            }`}
+      <div className="flex flex-col gap-2">
+        <input
+          type="search"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Search projects, RERA, developer, locality..."
+          className="w-full max-w-md rounded-sm border border-border bg-surface px-3 py-1.5 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+        />
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+            className="rounded-sm border border-border bg-surface px-2 py-1 text-[11px] font-mono uppercase tracking-wide text-muted hover:border-accent"
           >
-            {label}
-          </button>
-        ))}
-        {enrichmentFilter !== "ALL" ? (
-          <span className="text-[11px] text-muted">
-            {visibleRecords.length} of {records.length}
-          </span>
-        ) : null}
+            <option value="ALL">Status: All</option>
+            <option value="PENDING">Enrichment pending</option>
+            <option value="CONFLICTS">Conflicts</option>
+            <option value="NOT_ENRICHED">Not enriched</option>
+            <option value="APPROVAL_READY">Approval ready</option>
+          </select>
+
+          <select
+            value={researchFilter}
+            onChange={(e) => setResearchFilter(e.target.value as ResearchStatusFilter)}
+            className="rounded-sm border border-border bg-surface px-2 py-1 text-[11px] font-mono uppercase tracking-wide text-muted hover:border-accent"
+          >
+            <option value="ALL">Research: All</option>
+            <option value="RESEARCHED">Researched by agent</option>
+            <option value="NOT_RESEARCHED">Not researched</option>
+            <option value="HAS_CHANGES">Research has changes</option>
+            <option value="HAS_CONFLICTS">Research has conflicts</option>
+          </select>
+
+          <select
+            value={originFilter}
+            onChange={(e) => setOriginFilter(e.target.value as OriginFilter)}
+            className="rounded-sm border border-border bg-surface px-2 py-1 text-[11px] font-mono uppercase tracking-wide text-muted hover:border-accent"
+          >
+            <option value="ALL">Origin: All</option>
+            <option value="ORIGINAL_INGESTION">Original ingestion</option>
+            <option value="AUTOMATIC_ENRICHMENT">Automatic enrichment</option>
+            <option value="RESEARCH">Claude/browser research</option>
+            <option value="FOUNDER_EDITED">Founder edited</option>
+          </select>
+
+          {localityOptions.length > 0 ? (
+            <select
+              value={localityFilter}
+              onChange={(e) => setLocalityFilter(e.target.value)}
+              className="rounded-sm border border-border bg-surface px-2 py-1 text-[11px] font-mono uppercase tracking-wide text-muted hover:border-accent"
+            >
+              <option value="">Locality: All</option>
+              {localityOptions.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          ) : null}
+
+          {developerOptions.length > 0 ? (
+            <select
+              value={developerFilter}
+              onChange={(e) => setDeveloperFilter(e.target.value)}
+              className="rounded-sm border border-border bg-surface px-2 py-1 text-[11px] font-mono uppercase tracking-wide text-muted hover:border-accent"
+            >
+              <option value="">Developer: All</option>
+              {developerOptions.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          ) : null}
+
+          {isFiltered ? (
+            <span className="text-[11px] text-muted">
+              {visibleRecords.length} of {records.length}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       {visibleRecords.length === 0 ? (
@@ -481,6 +622,7 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
                       <EnrichmentBadgeLine badge={record.enrichmentBadge} />
                     </div>
                   ) : null}
+                  {record.researchActivity ? <ResearchBadgeLine activity={record.researchActivity} onOpen={() => setResearchChangesRecordId(record.id)} /> : null}
                 </div>
 
                 {record.matchTitle ? (
@@ -631,6 +773,15 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
           onUploadMedia={handleUploadMedia}
           onViewHistory={handleViewHistory}
           onUndo={handleUndo}
+        />
+      ) : null}
+
+      {researchChangesRecord?.researchActivity ? (
+        <ResearchChangesDialog
+          title={researchChangesRecord.proposedTitle}
+          activity={researchChangesRecord.researchActivity}
+          completeness={researchChangesRecord.completeness}
+          onClose={() => setResearchChangesRecordId(null)}
         />
       ) : null}
     </div>
