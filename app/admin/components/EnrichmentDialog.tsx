@@ -44,7 +44,8 @@ export default function EnrichmentDialog({
   onRetry: () => void;
   onAcceptField: (
     field: EnrichmentField,
-    editContext?: { founderEdited: true; overriddenValue: string | null; overriddenItems?: string[] }
+    editContext?: { founderEdited: true; overriddenValue: string | null; overriddenItems?: string[] },
+    siblingPossessionValue?: string | null
   ) => Promise<{ ok: boolean; error?: string }>;
   onRejectField: (field: EnrichmentField, reason: string) => Promise<{ ok: boolean; error?: string }>;
   /** Targeted fix (Cover Image/Brochure upload) -- a real file upload, distinct from a text-value accept. */

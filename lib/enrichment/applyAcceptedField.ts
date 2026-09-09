@@ -46,7 +46,17 @@ export function applyAcceptedField(
   currentPayload: Record<string, unknown>,
   fieldKey: string,
   proposedValue: string | null,
-  proposedItems?: string[]
+  proposedItems?: string[],
+  /**
+   * Bug fix (possession accept deadlock) -- the OTHER possession field's own
+   * proposed value from the SAME research/classification pass, when the
+   * caller has one available. Used ONLY as a fallback to complete a brand
+   * new possessionDateIso when there is no existing one to borrow from (see
+   * applyPossessionField below) -- never fabricated, never a founder's
+   * unsaved local edit, just the sibling field's own real proposed value.
+   * Irrelevant for every other fieldKey.
+   */
+  siblingPossessionValue?: string | null
 ): ApplyAcceptedFieldResult {
   if (!proposedValue || !proposedValue.trim()) {
     return { ok: false, error: "This field has no proposed value to accept." };
@@ -54,7 +64,7 @@ export function applyAcceptedField(
   const value = proposedValue.trim();
 
   if (fieldKey === "possessionMonth" || fieldKey === "possessionYear") {
-    return applyPossessionField(currentPayload, fieldKey, value);
+    return applyPossessionField(currentPayload, fieldKey, value, siblingPossessionValue ?? undefined);
   }
 
   if (fieldKey === "status") {
@@ -343,19 +353,39 @@ function parseAcres(display: string): number | null {
  * reviewFieldRegistry.ts derives both from the single `possessionDateIso`
  * column. Accepting one alone needs the OTHER half from whatever
  * possessionDateIso already exists on the staging payload; if neither the
- * accepted value nor the existing payload can supply that other half, this
- * fails rather than fabricating a date. Accepting both fields in sequence
- * (two separate calls) works correctly: the second call reads the payload
- * this function just updated with the first.
+ * accepted value, the existing payload, NOR a sibling proposed value (see
+ * below) can supply that other half, this fails rather than fabricating a
+ * date.
+ *
+ * Bug fix (possession accept deadlock): when BOTH possessionMonth and
+ * possessionYear are blank on the staging payload (a brand new project with
+ * no possession data at all -- the common case for a freshly-discovered
+ * Pre-Launch/Announced project), the old logic required an existing
+ * possessionDateIso to source the "other half" from, which made it
+ * impossible to ever accept EITHER field first: accepting month demanded an
+ * existing year, accepting year demanded an existing month, and neither
+ * could ever be the one that establishes the date. `siblingPossessionValue`
+ * breaks that deadlock: when the caller has the OTHER field's own proposed
+ * value on hand (both researched together in the same pass), that real
+ * value is used to complete the date instead of requiring pre-existing
+ * data. It is validated exactly the same way the field's own value would be
+ * -- an invalid/missing sibling falls straight through to the original
+ * "no existing/already-accepted" error, never guessed at.
+ *
+ * Accepting both fields in sequence (two separate calls) still works
+ * correctly either way: the second call reads the payload the first call
+ * already wrote, which by then has a valid possessionDateIso to borrow from.
  */
 function applyPossessionField(
   currentPayload: Record<string, unknown>,
   fieldKey: "possessionMonth" | "possessionYear",
-  value: string
+  value: string,
+  siblingPossessionValue?: string
 ): ApplyAcceptedFieldResult {
   const existingIso = typeof currentPayload.possessionDateIso === "string" ? currentPayload.possessionDateIso : undefined;
   const existingDate = existingIso ? new Date(existingIso) : null;
   const hasExisting = existingDate !== null && !Number.isNaN(existingDate.getTime());
+  const sibling = siblingPossessionValue?.trim();
 
   let month: number;
   let year: number;
@@ -364,16 +394,30 @@ function applyPossessionField(
     const monthIndex = POSSESSION_MONTH_LABEL.findIndex((label) => label.toLowerCase() === value.toLowerCase());
     if (monthIndex < 1) return { ok: false, error: `"${value}" is not a recognized month.` };
     month = monthIndex;
-    if (!hasExisting) return { ok: false, error: "Cannot set the possession month without an existing or already-accepted possession year." };
-    year = existingDate!.getUTCFullYear();
+    if (hasExisting) {
+      year = existingDate!.getUTCFullYear();
+    } else {
+      const siblingYear = sibling ? Number(sibling) : NaN;
+      if (!sibling || !Number.isInteger(siblingYear) || siblingYear < 1900 || siblingYear > 2100) {
+        return { ok: false, error: "Cannot set the possession month without an existing or already-accepted possession year." };
+      }
+      year = siblingYear;
+    }
   } else {
     const parsedYear = Number(value);
     if (!Number.isInteger(parsedYear) || parsedYear < 1900 || parsedYear > 2100) {
       return { ok: false, error: `"${value}" is not a valid year.` };
     }
     year = parsedYear;
-    if (!hasExisting) return { ok: false, error: "Cannot set the possession year without an existing or already-accepted possession month." };
-    month = existingDate!.getUTCMonth() + 1;
+    if (hasExisting) {
+      month = existingDate!.getUTCMonth() + 1;
+    } else {
+      const siblingMonthIndex = sibling ? POSSESSION_MONTH_LABEL.findIndex((label) => label.toLowerCase() === sibling.toLowerCase()) : -1;
+      if (siblingMonthIndex < 1) {
+        return { ok: false, error: "Cannot set the possession year without an existing or already-accepted possession month." };
+      }
+      month = siblingMonthIndex;
+    }
   }
 
   const iso = new Date(Date.UTC(year, month - 1, 1)).toISOString();

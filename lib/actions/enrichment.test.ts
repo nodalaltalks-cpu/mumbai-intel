@@ -1015,6 +1015,63 @@ describe("acceptEnrichmentFieldAction (Phase 32 — persists ONE accepted field 
     expect(result.status).toBe("INVALID_FIELD");
     expect(result.snapshot).toBeUndefined();
   });
+
+  describe("21. bug fix (possession accept deadlock) -- context.siblingPossessionValue lets a brand-new possession date be accepted", () => {
+    const { possessionDateIso: _drop, ...BLANK_POSSESSION_PAYLOAD } = GODREJ_PAYLOAD;
+    void _drop;
+
+    it("both possessionMonth and possessionYear blank -> accepting month with siblingPossessionValue (the researched year) succeeds", async () => {
+      stagingFindUniqueMock.mockResolvedValue(stagingRecord({ payload: BLANK_POSSESSION_PAYLOAD }));
+      const result = await acceptEnrichmentFieldAction("stage-1", "possessionMonth", "December", undefined, {
+        siblingPossessionValue: "2028",
+      });
+      expect(result.status).toBe("SUCCESS");
+      expect(updatedPayload().possessionDateIso).toBe(new Date(Date.UTC(2028, 11, 1)).toISOString());
+    });
+
+    it("both blank -> accepting year with siblingPossessionValue (the researched month) succeeds", async () => {
+      stagingFindUniqueMock.mockResolvedValue(stagingRecord({ payload: BLANK_POSSESSION_PAYLOAD }));
+      const result = await acceptEnrichmentFieldAction("stage-1", "possessionYear", "2028", undefined, {
+        siblingPossessionValue: "December",
+      });
+      expect(result.status).toBe("SUCCESS");
+      expect(updatedPayload().possessionDateIso).toBe(new Date(Date.UTC(2028, 11, 1)).toISOString());
+    });
+
+    it("without siblingPossessionValue, the pre-existing deadlock behavior is unchanged (still fails, never guesses)", async () => {
+      stagingFindUniqueMock.mockResolvedValue(stagingRecord({ payload: BLANK_POSSESSION_PAYLOAD }));
+      const result = await acceptEnrichmentFieldAction("stage-1", "possessionMonth", "December");
+      expect(result.status).toBe("INVALID_VALUE");
+      expect(stagingUpdateMock).not.toHaveBeenCalled();
+    });
+
+    it("an existing possession date still takes priority over a stray siblingPossessionValue", async () => {
+      stagingFindUniqueMock.mockResolvedValue(stagingRecord()); // GODREJ_PAYLOAD already has possessionDateIso: 2031-12-01
+      const result = await acceptEnrichmentFieldAction("stage-1", "possessionMonth", "February", undefined, {
+        siblingPossessionValue: "1999",
+      });
+      expect(result.status).toBe("SUCCESS");
+      expect(updatedPayload().possessionDateIso).toBe(new Date(Date.UTC(2031, 1, 1)).toISOString());
+    });
+
+    it("the accepted history event records the complete resulting possession value, and the record stays PENDING (no approval side-effect)", async () => {
+      stagingFindUniqueMock.mockResolvedValue(stagingRecord({ payload: BLANK_POSSESSION_PAYLOAD }));
+      const result = await acceptEnrichmentFieldAction("stage-1", "possessionMonth", "December", undefined, {
+        siblingPossessionValue: "2028",
+        sourceUrl: "https://housing.com/example",
+        sourceType: "VERIFIED_THIRD_PARTY",
+        confidence: "HIGH",
+      });
+      expect(result.status).toBe("SUCCESS");
+      expect(auditLogCreateMock).toHaveBeenCalledTimes(1);
+      const auditCall = auditLogCreateMock.mock.calls[0][0] as { data: { after: unknown } };
+      expect(auditCall.data.after).toMatchObject({ fieldKey: "possessionMonth", displayValue: "December" });
+      // Never approves/publishes -- acceptEnrichmentFieldAction only ever writes IngestStagingRecord.payload.
+      expect(stagingUpdateMock).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: "stage-1" } })
+      );
+    });
+  });
 });
 
 describe("rejectEnrichmentFieldAction (targeted fix, founder-testing round — Accept/Edit/REJECT model, never applies the value)", () => {

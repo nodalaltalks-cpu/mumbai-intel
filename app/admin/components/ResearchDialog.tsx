@@ -439,7 +439,8 @@ export default function ResearchDialog({
   onSubmitFindings: (findings: ResearchFinding[]) => Promise<{ ok: boolean; error?: string }>;
   onAcceptField: (
     field: EnrichmentField,
-    editContext?: { founderEdited: true; overriddenValue: string | null; overriddenItems?: string[] }
+    editContext?: { founderEdited: true; overriddenValue: string | null; overriddenItems?: string[] },
+    siblingPossessionValue?: string | null
   ) => Promise<{ ok: boolean; error?: string }>;
   onRejectField: (field: EnrichmentField, reason: string) => Promise<{ ok: boolean; error?: string }>;
   onUploadMedia: (

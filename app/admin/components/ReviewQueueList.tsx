@@ -312,7 +312,8 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
 
   async function handleAcceptField(
     field: EnrichmentField,
-    editContext?: { founderEdited: true; overriddenValue: string | null; overriddenItems?: string[] }
+    editContext?: { founderEdited: true; overriddenValue: string | null; overriddenItems?: string[] },
+    siblingPossessionValue?: string | null
   ): Promise<{ ok: boolean; error?: string }> {
     if (!enrichmentRecordId) return { ok: false, error: "No record open." };
     const result = await acceptEnrichmentFieldAction(enrichmentRecordId, field.key, field.proposedValue ?? "", field.proposedItems, {
@@ -323,6 +324,7 @@ export default function ReviewQueueList({ records }: { records: ReviewRecord[] }
       founderEdited: editContext?.founderEdited,
       overriddenValue: editContext?.overriddenValue,
       overriddenItems: editContext?.overriddenItems,
+      siblingPossessionValue,
     });
     if (result.status === "SUCCESS") {
       applySnapshot(enrichmentRecordId, result.snapshot);

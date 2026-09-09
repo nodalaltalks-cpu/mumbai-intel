@@ -609,6 +609,16 @@ export interface AcceptEnrichmentFieldContext {
   founderEdited?: boolean;
   overriddenValue?: string | null;
   overriddenItems?: string[];
+  /**
+   * Bug fix (possession accept deadlock) -- when fieldKey is
+   * "possessionMonth" or "possessionYear", the OTHER possession field's own
+   * proposed value from this same classification pass, if the caller has
+   * one. Passed straight through to applyAcceptedField so a brand new
+   * possession date (both month and year blank until now) can be accepted
+   * without requiring one of the two to already exist first. Ignored for
+   * every other fieldKey.
+   */
+  siblingPossessionValue?: string | null;
 }
 
 /**
@@ -666,7 +676,7 @@ export async function acceptEnrichmentFieldAction(
     return { status: "INVALID_FIELD", error: `"${fieldKey}" is not a recognized Project field.` };
   }
 
-  const applied = applyAcceptedField(payload, fieldKey, proposedValue, proposedItems);
+  const applied = applyAcceptedField(payload, fieldKey, proposedValue, proposedItems, context?.siblingPossessionValue);
   if (!applied.ok) {
     return { status: "INVALID_VALUE", error: applied.error };
   }

@@ -79,7 +79,15 @@ export default function EnrichmentProposalPanel({
    */
   onAcceptField: (
     field: EnrichmentField,
-    editContext?: { founderEdited: true; overriddenValue: string | null; overriddenItems?: string[] }
+    editContext?: { founderEdited: true; overriddenValue: string | null; overriddenItems?: string[] },
+    /**
+     * Bug fix (possession accept deadlock) -- when field.key is
+     * "possessionMonth" or "possessionYear", the sibling possession field's
+     * own proposed value from this SAME `fields` list, so a brand new
+     * possession date (both halves blank until now) can be accepted without
+     * requiring one half to already exist first. See handleAccept below.
+     */
+    siblingPossessionValue?: string | null
   ) => Promise<{ ok: boolean; error?: string }>;
   /** Targeted fix (post-Phase 71B founder testing) -- declines a proposed value with a required reason, recorded to the same enrichment history Accept/Undo already write to. Never applies the proposed value. */
   onRejectField: (field: EnrichmentField, reason: string) => Promise<{ ok: boolean; error?: string }>;
@@ -214,6 +222,24 @@ export default function EnrichmentProposalPanel({
     );
   }
 
+  /**
+   * Bug fix (possession accept deadlock) -- the OTHER possession field's own
+   * proposed/edited display value from this same `fields` list, so Accept on
+   * either half can complete a brand new possession date without needing
+   * the other half to already exist. Returns undefined for every field key
+   * other than possessionMonth/possessionYear, and undefined when the
+   * sibling has no real value of its own (e.g. still MISSING) -- never
+   * fabricated.
+   */
+  function siblingPossessionValue(field: EnrichmentField): string | undefined {
+    const siblingKey = field.key === "possessionMonth" ? "possessionYear" : field.key === "possessionYear" ? "possessionMonth" : null;
+    if (!siblingKey) return undefined;
+    const sibling = fields.find((f) => f.key === siblingKey);
+    if (!sibling) return undefined;
+    const value = displayValue(sibling);
+    return value ?? undefined;
+  }
+
   async function handleAccept(field: EnrichmentField) {
     setSaveState((prev) => ({ ...prev, [field.key]: "saving" }));
     // A locally-edited value/items, if any, rides through the SAME
@@ -231,7 +257,7 @@ export default function EnrichmentProposalPanel({
     const editContext = wasEdited
       ? ({ founderEdited: true, overriddenValue: field.externalValue ?? null, overriddenItems: field.externalItems } as const)
       : undefined;
-    const result = await onAcceptField(fieldToAccept, editContext);
+    const result = await onAcceptField(fieldToAccept, editContext, siblingPossessionValue(field));
     if (result.ok) {
       setSaveState((prev) => ({ ...prev, [field.key]: "saved" }));
     } else {

@@ -286,6 +286,57 @@ describe("applyAcceptedField — possession month/year (derived from a single po
   });
 });
 
+describe("applyAcceptedField — possession accept deadlock fix (siblingPossessionValue)", () => {
+  const { possessionDateIso: _drop, ...BLANK_POSSESSION_PAYLOAD } = BASE_PAYLOAD;
+  void _drop;
+
+  it("1. both possessionMonth and possessionYear blank -> accepting month with the sibling's researched year succeeds", () => {
+    const result = applyAcceptedField(BLANK_POSSESSION_PAYLOAD, "possessionMonth", "December", undefined, "2028");
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.payload.possessionDateIso).toBe(new Date(Date.UTC(2028, 11, 1)).toISOString());
+  });
+
+  it("1b. same deadlock, accepting year first with the sibling's researched month succeeds", () => {
+    const result = applyAcceptedField(BLANK_POSSESSION_PAYLOAD, "possessionYear", "2028", undefined, "December");
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.payload.possessionDateIso).toBe(new Date(Date.UTC(2028, 11, 1)).toISOString());
+  });
+
+  it("2. accepting month (with sibling year) then accepting year on the resulting payload both persist the same December 2028 date", () => {
+    const afterMonth = applyAcceptedField(BLANK_POSSESSION_PAYLOAD, "possessionMonth", "December", undefined, "2028");
+    expect(afterMonth.ok).toBe(true);
+    if (!afterMonth.ok) return;
+    expect(afterMonth.payload.possessionDateIso).toBe(new Date(Date.UTC(2028, 11, 1)).toISOString());
+    const afterYear = applyAcceptedField(afterMonth.payload, "possessionYear", "2028");
+    expect(afterYear.ok).toBe(true);
+    if (afterYear.ok) expect(afterYear.payload.possessionDateIso).toBe(new Date(Date.UTC(2028, 11, 1)).toISOString());
+  });
+
+  it("4. an existing possession date still wins over a sibling value -- an out-of-date sibling never overrides real existing data", () => {
+    const result = applyAcceptedField(BASE_PAYLOAD, "possessionMonth", "February", undefined, "1999");
+    expect(result.ok).toBe(true);
+    // BASE_PAYLOAD's existing possessionDateIso is 2031-12-01 -- the existing year (2031) must be kept, not the sibling's 1999.
+    if (result.ok) expect(result.payload.possessionDateIso).toBe(new Date(Date.UTC(2031, 1, 1)).toISOString());
+  });
+
+  it("4b. an unsupported/blank sibling still fails exactly as before -- partial-only research is not silently accepted", () => {
+    expect(applyAcceptedField(BLANK_POSSESSION_PAYLOAD, "possessionMonth", "December").ok).toBe(false);
+    expect(applyAcceptedField(BLANK_POSSESSION_PAYLOAD, "possessionMonth", "December", undefined, "").ok).toBe(false);
+    expect(applyAcceptedField(BLANK_POSSESSION_PAYLOAD, "possessionYear", "2028").ok).toBe(false);
+    expect(applyAcceptedField(BLANK_POSSESSION_PAYLOAD, "possessionYear", "2028", undefined, "").ok).toBe(false);
+  });
+
+  it("6. an invalid sibling value (bad month name / out-of-range year) is rejected, never guessed at", () => {
+    expect(applyAcceptedField(BLANK_POSSESSION_PAYLOAD, "possessionMonth", "December", undefined, "Smarch").ok).toBe(false);
+    expect(applyAcceptedField(BLANK_POSSESSION_PAYLOAD, "possessionYear", "2028", undefined, "1500").ok).toBe(false);
+  });
+
+  it("the field's own value is still validated even when a sibling is present", () => {
+    expect(applyAcceptedField(BLANK_POSSESSION_PAYLOAD, "possessionMonth", "Smarch", undefined, "2028").ok).toBe(false);
+    expect(applyAcceptedField(BLANK_POSSESSION_PAYLOAD, "possessionYear", "1500", undefined, "December").ok).toBe(false);
+  });
+});
+
 describe("validateProposedEdit (Phase 36 — client-safe pre-check before Save Edit, reuses applyAcceptedField's own parsers)", () => {
   it("9. rejects an invalid numeric value", () => {
     expect(validateProposedEdit("totalUnits", "quite a lot").ok).toBe(false);
